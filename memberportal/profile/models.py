@@ -20,7 +20,6 @@ from services.emails import send_single_email, send_email_to_admin
 from services import sms
 from django_prometheus.models import ExportModelOperationsMixin
 
-
 logger = logging.getLogger("profile")
 
 utc = pytz.UTC
