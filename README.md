@@ -1,3 +1,7 @@
+***This is [Makers of Swedens](http://makersofsweden.se) fork of [MemberMatters](https://github.com/membermatters/MemberMatters), created to handle community updates and maintenance***
+
+Docker images are published to  [makersofsweden-membermatters-fork](https://hub.docker.com/r/kriffe/makersofsweden-membermatters-fork)
+
 # MemberMatters
 
 MemberMatters is an open source membership, billing and access control solution for makerspaces and community groups.
