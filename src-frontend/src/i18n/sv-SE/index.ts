@@ -455,6 +455,8 @@ export default {
     makeMemberSuccessDescription:
       'Denna person har gjorts till medlem och fått välkomstinformation. För att se profil, ändra filter till "alla" medlemmar.',
     sendWelcomeEmailSuccess: 'Välkomstmail skickat.',
+    ensureStripeCustomer: 'Säkerställ Stripe-kund',
+    ensureStripeCustomerSuccess: 'Stripe-kund har verifierats/skapats.',
 
     access: 'Åtkomst',
     accessDescription: 'Klicka på en ikon för att ändra åtkomst.',

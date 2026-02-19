@@ -8,6 +8,7 @@ from constance.backends.database.models import Constance as ConstanceSetting
 from django.db.models import F, Sum, Value, CharField, Count, Max
 from django.db.models.functions import Concat
 from django.db.utils import OperationalError
+from django.shortcuts import get_object_or_404
 from rest_framework import permissions
 from rest_framework import status
 from rest_framework.response import Response
@@ -552,6 +553,78 @@ class MemberSendSms(APIView):
         )
 
         return Response()
+
+
+class MemberEnsureStripeCustomer(StripeAPIView):
+    """
+    post: This method ensures that a Stripe customer exists for the specified member.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = get_object_or_404(User, id=member_id)
+        profile = member.profile
+        customer_exists = True
+
+        if profile.stripe_customer_id:
+            try:
+                customer = stripe.Customer.retrieve(profile.stripe_customer_id)
+                if customer.get("deleted") or not customer:
+                    customer_exists = False
+            except stripe.error.InvalidRequestError as error:
+                if error.http_status == 404:
+                    profile.stripe_customer_id = None
+                    profile.save()
+                    customer_exists = False
+        else:
+            customer_exists = False
+
+        if customer_exists:
+            member.log_event(
+                f"Stripe customer already exists (Stripe ID: {profile.stripe_customer_id}).",
+                "stripe",
+            )
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Customer already exists with Stripe ID: {profile.stripe_customer_id}",
+                }
+            )
+
+        try:
+            member.log_event("Attempting to create stripe customer.", "stripe")
+            customer = stripe.Customer.create(
+                email=member.email,
+                name=profile.get_full_name(),
+                phone=profile.phone,
+            )
+
+            profile.stripe_customer_id = customer.id
+            profile.save()
+
+            member.log_event(
+                f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
+                "stripe",
+            )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Created Stripe customer with ID: {customer.id}",
+                }
+            )
+
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            member.log_event(
+                "Error while creating stripe customer.",
+                "stripe",
+            )
+            return Response(
+                {"success": False, "message": "Failed to create Stripe customer. Please try again later."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
 
 class MemberProfile(APIView):
