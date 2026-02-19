@@ -456,6 +456,9 @@ export default {
     makeMemberSuccessDescription:
       'This person was made into a member and sent welcome information. To see their profile, change the filter to "all" members.',
     sendWelcomeEmailSuccess: 'Successfully sent the welcome email.',
+    ensureStripeCustomer: 'Ensure Stripe customer',
+    ensureStripeCustomerSuccess:
+      'Stripe customer has been verified/created successfully.',
 
     access: 'Access',
     accessDescription: 'Tap an icon to change access.',
