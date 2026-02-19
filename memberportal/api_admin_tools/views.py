@@ -622,7 +622,10 @@ class MemberEnsureStripeCustomer(StripeAPIView):
                 "stripe",
             )
             return Response(
-                {"success": False, "message": "Failed to create Stripe customer. Please try again later."},
+                {
+                    "success": False,
+                    "message": "Failed to create Stripe customer. Please try again later.",
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
