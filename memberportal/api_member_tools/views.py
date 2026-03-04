@@ -78,6 +78,7 @@ class Lastseen(APIView):
         if config.ENABLE_LAST_SEEN_PAGE:
             return [permissions.IsAuthenticated()]
         return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
+
     queryset = Profile.objects.filter(state="active").order_by("-last_seen")
 
     def get(self, request):
