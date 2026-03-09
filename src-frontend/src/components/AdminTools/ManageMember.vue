@@ -112,6 +112,21 @@
                     <q-item-label>{{ $t('adminTools.sendSms') }}</q-item-label>
                   </q-item-section>
                 </q-item>
+
+                <!-- Ensure Stripe customer exists -->
+                <q-item
+                  v-if="features.enableStripe"
+                  v-close-popup
+                  clickable
+                  :disable="ensureStripeLoading"
+                  @click="ensureStripeCustomer"
+                >
+                  <q-item-section>
+                    <q-item-label
+                      >{{ $t('adminTools.ensureStripeCustomer') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
               </q-list>
             </q-btn-dropdown>
           </div>
@@ -1396,6 +1411,7 @@ export default defineComponent({
     return {
       stateLoading: false,
       welcomeLoading: false,
+      ensureStripeLoading: false,
       tab: 'profile',
       access: {},
       profileForm: {
@@ -1505,6 +1521,28 @@ export default defineComponent({
         })
         .finally(() => {
           this.welcomeLoading = false;
+        });
+    },
+    ensureStripeCustomer() {
+      this.ensureStripeLoading = true;
+      this.$axios
+        .post(`/api/admin/members/${this.member.id}/ensurestripecustomer/`)
+        .then((res) => {
+          this.$q.dialog({
+            title: this.$t('actionSuccess'),
+            message:
+              res.data?.message ||
+              this.$t('adminTools.ensureStripeCustomerSuccess'),
+          });
+        })
+        .catch(() => {
+          this.$q.dialog({
+            title: this.$t('error.error'),
+            message: this.$t('error.requestFailed'),
+          });
+        })
+        .finally(() => {
+          this.ensureStripeLoading = false;
         });
     },
     getMemberBilling() {

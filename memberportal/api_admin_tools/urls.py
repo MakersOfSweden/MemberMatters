@@ -31,6 +31,11 @@ urlpatterns = [
         name="MemberSendSms",
     ),
     path(
+        "api/admin/members/<int:member_id>/ensurestripecustomer/",
+        views.MemberEnsureStripeCustomer.as_view(),
+        name="MemberEnsureStripeCustomer",
+    ),
+    path(
         "api/admin/members/<int:member_id>/profile/",
         views.MemberProfile.as_view(),
         name="MemberProfile",
