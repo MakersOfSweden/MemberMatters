@@ -34,6 +34,7 @@ class GetConfig(APIView):
     permission_classes = (permissions.AllowAny,)
 
     def get(self, request):
+        user_is_admin = request.user.is_authenticated and request.user.is_admin
         features = {
             "memberbucks_topup_options": json.loads(
                 config.STRIPE_MEMBERBUCKS_TOPUP_OPTIONS
@@ -62,7 +63,7 @@ class GetConfig(APIView):
                 "footer": config.SMS_FOOTER,
             },
             "enableStatsPage": config.ENABLE_STATS_PAGE,
-            "enableLastSeenPage": config.ENABLE_LAST_SEEN_PAGE or request.user.is_admin,
+            "enableLastSeenPage": config.ENABLE_LAST_SEEN_PAGE or user_is_admin,
             "enableReportIssue": config.ENABLE_REPORT_ISSUE,
         }
 

@@ -85,7 +85,7 @@ export default {
     linkVisible() {
       return !(
         this.featureEnabledFlag.length &&
-        this.features[this.featureEnabledFlag] === false
+        !this.features[this.featureEnabledFlag]
       );
     },
     visibleLinks() {
@@ -103,7 +103,7 @@ export default {
         // all other feature flags
         if (
           link.featureEnabledFlag &&
-          this.features[link.featureEnabledFlag] === false
+          !this.features[link.featureEnabledFlag]
         ) {
           return false;
         }

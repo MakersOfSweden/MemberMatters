@@ -16,7 +16,7 @@ export default boot(({ router, store }) => {
       to.name !== 'membershipPlan' &&
       to.name !== 'webcams' &&
       to.name !== 'billing' &&
-      store.getters['config/features']?.enableMembershipPayments &&
+      store.getters['config/features']?.enableMembershipPayments === true &&
       to.meta.admin !== true
     ) {
       Dialog.create({
