@@ -36,7 +36,7 @@ export default defineComponent({
     };
   },
   computed: {
-    ...mapGetters('config', ['siteName', 'keys', 'features', 'theme']),
+    ...mapGetters('config', ['siteName', 'keys', 'features', 'theme', 'images']),
     ...mapGetters('profile', ['loggedIn']),
     ...mapGetters('auth', ['refreshToken']),
   },
@@ -134,6 +134,13 @@ export default defineComponent({
             setCssVar('primary', this.theme?.themePrimary || '#278ab0');
             setCssVar('secondary', this.theme?.themeToolbar || '#0461b1');
             setCssVar('accent', this.theme?.themeAccent || '#189ab4');
+
+            if (this.images?.siteFavicon) {
+              document.querySelectorAll('link[rel="icon"]').forEach((link) => {
+                link.href = this.images.siteFavicon;
+              });
+            }
+
             resolve();
           })
           .catch((e) => {
