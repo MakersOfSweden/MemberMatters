@@ -691,5 +691,6 @@ export default {
     renewalDate: 'Renewal date',
     viewMembership: 'View Membership',
     viewAccount: 'View Account',
+    becomeMember: 'Become a Member',
   },
 };

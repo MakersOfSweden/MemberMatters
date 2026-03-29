@@ -85,7 +85,11 @@
         </div>
         <q-chip
           :color="
-            profile.subscriptionStatus === 'active' ? 'positive' : 'orange'
+            profile.subscriptionStatus === 'active'
+              ? 'positive'
+              : profile.subscriptionStatus === 'cancelling'
+              ? 'orange'
+              : 'grey-7'
           "
           text-color="white"
           dense
@@ -124,6 +128,13 @@
         color="primary"
         :label="ctaLabel"
         @click="$router.push({ name: ctaRoute })"
+      />
+      <q-btn
+        v-if="profile.memberStatus === 'accountonly'"
+        flat
+        color="positive"
+        :label="$t('membershipStatusCard.becomeMember')"
+        @click="$router.push({ name: 'membershipPlan' })"
       />
     </q-card-actions>
   </q-card>

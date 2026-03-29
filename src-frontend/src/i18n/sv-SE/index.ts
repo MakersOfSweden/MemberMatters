@@ -689,5 +689,6 @@ export default {
     renewalDate: 'Förnyelsedatum',
     viewMembership: 'Visa medlemskap',
     viewAccount: 'Visa konto',
+    becomeMember: 'Bli medlem',
   },
 };
