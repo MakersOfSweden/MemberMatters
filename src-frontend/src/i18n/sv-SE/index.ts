@@ -686,6 +686,7 @@ export default {
     accountOnlyTitle: 'Endast konto — inte en aktiv medlem.',
     accountOnlyDescription:
       'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
+    renewalDate: 'Förnyelsedatum',
     viewMembership: 'Visa medlemskap',
     viewAccount: 'Visa konto',
   },

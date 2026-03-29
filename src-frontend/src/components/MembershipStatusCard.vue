@@ -77,6 +77,12 @@
       <!-- active -->
       <template v-else-if="profile.memberStatus === 'active'">
         <p class="q-mb-sm">{{ $t('membershipStatusCard.activeDescription') }}</p>
+        <div
+          v-if="formattedRenewalDate && profile.subscriptionStatus !== 'cancelling'"
+          class="q-mb-sm text-caption"
+        >
+          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }}
+        </div>
         <q-chip
           :color="
             profile.subscriptionStatus === 'active' ? 'positive' : 'orange'
@@ -132,6 +138,7 @@ export default {
   data() {
     return {
       requiredSteps: [],
+      currentPeriodEnd: null,
     };
   },
   mounted() {
@@ -144,6 +151,16 @@ export default {
         .catch(() => {
           this.requiredSteps = [];
         });
+    }
+    if (
+      this.profile.memberStatus === 'active' &&
+      this.features.enableMembershipPayments
+    ) {
+      this.$axios.get('/api/billing/myplan/').then((response) => {
+        if (response.data.success) {
+          this.currentPeriodEnd = response.data.subscription.currentPeriodEnd;
+        }
+      }).catch(() => {});
     }
   },
   computed: {
@@ -189,6 +206,10 @@ export default {
     subscriptionLabel() {
       const key = `membershipStatusCard.subscriptionChip.${this.profile.subscriptionStatus}`;
       return this.$te(key) ? this.$t(key) : this.profile.subscriptionStatus;
+    },
+    formattedRenewalDate() {
+      if (!this.currentPeriodEnd) return null;
+      return new Date(this.currentPeriodEnd * 1000).toLocaleString();
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob' || this.profile.memberStatus === 'active') {

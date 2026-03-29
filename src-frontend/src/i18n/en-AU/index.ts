@@ -688,6 +688,7 @@ export default {
     accountOnlyTitle: 'Account only — not an active member.',
     accountOnlyDescription:
       'You have an account but have not been granted full membership access.',
+    renewalDate: 'Renewal date',
     viewMembership: 'View Membership',
     viewAccount: 'View Account',
   },
