@@ -48,6 +48,8 @@ class GetConfig(APIView):
             "enableMemberBucks": config.ENABLE_MEMBERBUCKS,
             "signup": {
                 "inductionLink": config.INDUCTION_ENROL_LINK,
+                "enableInduction": config.MOODLE_INDUCTION_ENABLED
+                or config.CANVAS_INDUCTION_ENABLED,
                 "requireAccessCard": config.REQUIRE_ACCESS_CARD,
                 "memberCanEnterAccessCard": config.MEMBER_CAN_ENTER_ACCESS_CARD,
                 "postInductionUrl": config.POST_INDUCTION_URL,
@@ -65,6 +67,7 @@ class GetConfig(APIView):
             "enableStatsPage": config.ENABLE_STATS_PAGE,
             "enableLastSeenPage": config.ENABLE_LAST_SEEN_PAGE or user_is_admin,
             "enableReportIssue": config.ENABLE_REPORT_ISSUE,
+            "enableMembershipStatusCard": config.ENABLE_MEMBERSHIP_STATUS_CARD,
         }
 
         keys = {"stripePublishableKey": config.STRIPE_PUBLISHABLE_KEY}

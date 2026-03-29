@@ -69,6 +69,7 @@ export default {
     },
     hasVisibleCards() {
       return (
+        this.features.enableMembershipStatusCard ||
         this.features.enableSiteSignIn ||
         this.features.enableReportIssue
       );
