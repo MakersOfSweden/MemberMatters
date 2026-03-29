@@ -160,7 +160,9 @@ export default {
         if (response.data.success) {
           this.currentPeriodEnd = response.data.subscription.currentPeriodEnd;
         }
-      }).catch(() => {});
+      }).catch((e) => {
+        console.log(e);
+      });
     }
   },
   computed: {
