@@ -122,21 +122,23 @@
       </template>
     </q-card-section>
 
-    <q-card-actions>
-      <q-btn
-        flat
-        color="primary"
-        :label="ctaLabel"
-        @click="$router.push({ name: ctaRoute })"
-      />
-      <q-btn
-        v-if="profile.memberStatus === 'accountonly'"
-        flat
-        color="positive"
-        :label="$t('membershipStatusCard.becomeMember')"
-        @click="$router.push({ name: 'membershipPlan' })"
-      />
-    </q-card-actions>
+    <q-card-section>
+      <div class="row">
+        <q-space />
+        <q-btn
+          v-if="profile.memberStatus === 'accountonly'"
+          color="positive"
+          :label="$t('membershipStatusCard.becomeMember')"
+          class="q-mr-sm"
+          @click="$router.push({ name: 'membershipPlan' })"
+        />
+        <q-btn
+          color="primary-btn"
+          :label="ctaLabel"
+          @click="$router.push({ name: ctaRoute })"
+        />
+      </div>
+    </q-card-section>
   </q-card>
 </template>
 
