@@ -120,6 +120,11 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    # ==== Membership Status Card ====
+    "ENABLE_MEMBERSHIP_STATUS_CARD": (
+        True,
+        "Enable the membership status quick card on the dashboard.",
+    ),
     # ==== Report Issue Services ====
     "ENABLE_REPORT_ISSUE": (
         True,
@@ -423,6 +428,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
             (
                 "ENABLE_WEBCAMS",
                 "ENABLE_PROXY_VOTING",
+                "ENABLE_MEMBERSHIP_STATUS_CARD",
                 "ENABLE_REPORT_ISSUE",
                 "ENABLE_STRIPE",
                 "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS",

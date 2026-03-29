@@ -35,6 +35,10 @@
       </div>
     </template>
 
+    <div v-if="enableMembershipStatusCard" class="q-pa-md col-12 col-sm-4">
+      <membership-status-card />
+    </div>
+
     <div v-if="enableMembersOnSite" class="q-pa-md col-12 col-sm-4">
       <members-onsite-card />
     </div>
@@ -48,12 +52,13 @@
 <script>
 import MembersOnsiteCard from '@components/MembersOnsiteCard.vue';
 import ReportIssueCard from '@components/ReportIssueCard.vue';
+import MembershipStatusCard from '@components/MembershipStatusCard.vue';
 import { mapGetters, mapMutations, mapActions } from 'vuex';
 import icons from '@icons';
 
 export default {
   name: 'QuickActions',
-  components: { ReportIssueCard, MembersOnsiteCard },
+  components: { ReportIssueCard, MembersOnsiteCard, MembershipStatusCard },
   mounted() {
     this.getSiteSignedIn();
   },
@@ -123,6 +128,9 @@ export default {
     },
     enableReportIssue() {
       return this.features.enableReportIssue;
+    },
+    enableMembershipStatusCard() {
+      return this.features.enableMembershipStatusCard;
     },
     icons() {
       return icons;
