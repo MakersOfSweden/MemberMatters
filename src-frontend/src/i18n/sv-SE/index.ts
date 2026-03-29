@@ -658,4 +658,35 @@ export default {
       'Det uppstod ett problem vid verifiering av din email-adress. Vi har skickat ett nytt mail med en ny länk så vänligen prova igen.',
     success: 'Din epost är verifierad. Du kommer bli inloggad strax.',
   },
+  membershipStatusCard: {
+    title: 'Medlemskapsstatus',
+    stateBadge: {
+      noob: 'Kräver installation',
+      active: 'Aktiv',
+      inactive: 'Inaktiv',
+      accountonly: 'Endast konto',
+    },
+    payment: 'Betalning',
+    paymentComplete: 'Abonnemang aktivt',
+    paymentRequired: 'Betalning för medlemskap krävs',
+    inductionComplete: 'Introduktion genomförd',
+    inductionRequired: 'Online-introduktion krävs',
+    accessCardComplete: 'Nyckelkort registrerat',
+    accessCardRequired: 'Registrering av nyckelkort krävs',
+    setupInProgress: 'Installation pågår.',
+    activeDescription: 'Du är en aktiv medlem.',
+    subscriptionChip: {
+      active: 'Abonnemang aktivt',
+      cancelling: 'Abonnemang avslutas',
+      inactive: 'Inget aktivt abonnemang',
+    },
+    cancellingWarning:
+      'Ditt abonnemang avslutas. Åtkomst upphör vid nästa förnyelsedatum.',
+    inactiveDescription: 'Ditt medlemskap är inaktivt.',
+    accountOnlyTitle: 'Endast konto — inte en aktiv medlem.',
+    accountOnlyDescription:
+      'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
+    viewMembership: 'Visa medlemskap',
+    viewAccount: 'Visa konto',
+  },
 };

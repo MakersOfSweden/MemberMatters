@@ -3,7 +3,7 @@
     <q-card-section>
       <div class="row items-center q-mb-sm">
         <q-icon :name="icons.membership" size="sm" class="q-mr-sm" />
-        <h6 class="q-ma-none">Membership Status</h6>
+        <h6 class="q-ma-none">{{ $t('membershipStatusCard.title') }}</h6>
         <q-space />
         <q-chip
           :color="stateBadgeColor"
@@ -25,11 +25,11 @@
                 />
               </q-item-section>
               <q-item-section>
-                <q-item-label>Payment</q-item-label>
+                <q-item-label>{{ $t('membershipStatusCard.payment') }}</q-item-label>
                 <q-item-label caption>{{
                   paymentComplete
-                    ? 'Subscription active'
-                    : 'Membership payment required'
+                    ? $t('membershipStatusCard.paymentComplete')
+                    : $t('membershipStatusCard.paymentRequired')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
@@ -42,11 +42,11 @@
                 />
               </q-item-section>
               <q-item-section>
-                <q-item-label>Induction</q-item-label>
+                <q-item-label>{{ $t('signup.induction') }}</q-item-label>
                 <q-item-label caption>{{
                   inductionComplete
-                    ? 'Induction completed'
-                    : 'Online induction required'
+                    ? $t('membershipStatusCard.inductionComplete')
+                    : $t('membershipStatusCard.inductionRequired')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
@@ -59,22 +59,24 @@
                 />
               </q-item-section>
               <q-item-section>
-                <q-item-label>Access Card</q-item-label>
+                <q-item-label>{{ $t('signup.accessCard') }}</q-item-label>
                 <q-item-label caption>{{
                   accessCardComplete
-                    ? 'Access card registered'
-                    : 'Access card registration required'
+                    ? $t('membershipStatusCard.accessCardComplete')
+                    : $t('membershipStatusCard.accessCardRequired')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
           </q-list>
         </template>
-        <p v-else class="q-mb-none text-grey-7">Setup in progress.</p>
+        <p v-else class="q-mb-none text-grey-7">
+          {{ $t('membershipStatusCard.setupInProgress') }}
+        </p>
       </template>
 
       <!-- active -->
       <template v-else-if="profile.memberStatus === 'active'">
-        <p class="q-mb-sm">You are an active member.</p>
+        <p class="q-mb-sm">{{ $t('membershipStatusCard.activeDescription') }}</p>
         <q-chip
           :color="
             profile.subscriptionStatus === 'active' ? 'positive' : 'orange'
@@ -92,21 +94,20 @@
           <template v-slot:avatar>
             <q-icon :name="icons.warning" />
           </template>
-          Your subscription is cancelling. Access will end at the next renewal
-          date.
+          {{ $t('membershipStatusCard.cancellingWarning') }}
         </q-banner>
       </template>
 
       <!-- inactive -->
       <template v-else-if="profile.memberStatus === 'inactive'">
-        <p class="q-mb-none">Your membership is inactive.</p>
+        <p class="q-mb-none">{{ $t('membershipStatusCard.inactiveDescription') }}</p>
       </template>
 
       <!-- accountonly -->
       <template v-else-if="profile.memberStatus === 'accountonly'">
-        <p class="q-mb-xs">Account only — not an active member.</p>
+        <p class="q-mb-xs">{{ $t('membershipStatusCard.accountOnlyTitle') }}</p>
         <p class="q-mb-none text-grey-7 text-caption">
-          You have an account but have not been granted full membership access.
+          {{ $t('membershipStatusCard.accountOnlyDescription') }}
         </p>
       </template>
     </q-card-section>
@@ -182,27 +183,18 @@ export default {
       return colors[this.profile.memberStatus] || 'grey-7';
     },
     stateBadgeLabel() {
-      const labels = {
-        noob: 'Needs Setup',
-        active: 'Active',
-        inactive: 'Inactive',
-        accountonly: 'Account Only',
-      };
-      return labels[this.profile.memberStatus] || this.profile.memberStatus;
+      const key = `membershipStatusCard.stateBadge.${this.profile.memberStatus}`;
+      return this.$te(key) ? this.$t(key) : this.profile.memberStatus;
     },
     subscriptionLabel() {
-      const labels = {
-        active: 'Subscription active',
-        cancelling: 'Subscription cancelling',
-        inactive: 'No active subscription',
-      };
-      return labels[this.profile.subscriptionStatus] || this.profile.subscriptionStatus;
+      const key = `membershipStatusCard.subscriptionChip.${this.profile.subscriptionStatus}`;
+      return this.$te(key) ? this.$t(key) : this.profile.subscriptionStatus;
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob' || this.profile.memberStatus === 'active') {
-        return 'View Membership';
+        return this.$t('membershipStatusCard.viewMembership');
       }
-      return 'View Account';
+      return this.$t('membershipStatusCard.viewAccount');
     },
     ctaRoute() {
       if (this.profile.memberStatus === 'noob' || this.profile.memberStatus === 'active') {

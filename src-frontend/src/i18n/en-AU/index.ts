@@ -660,4 +660,35 @@ export default {
       'There was a problem verifying your email address. We just sent you another link so please try again.',
     success: 'Your email was verified. You will be logged in shortly.',
   },
+  membershipStatusCard: {
+    title: 'Membership Status',
+    stateBadge: {
+      noob: 'Needs Setup',
+      active: 'Active',
+      inactive: 'Inactive',
+      accountonly: 'Account Only',
+    },
+    payment: 'Payment',
+    paymentComplete: 'Subscription active',
+    paymentRequired: 'Membership payment required',
+    inductionComplete: 'Induction completed',
+    inductionRequired: 'Online induction required',
+    accessCardComplete: 'Access card registered',
+    accessCardRequired: 'Access card registration required',
+    setupInProgress: 'Setup in progress.',
+    activeDescription: 'You are an active member.',
+    subscriptionChip: {
+      active: 'Subscription active',
+      cancelling: 'Subscription cancelling',
+      inactive: 'No active subscription',
+    },
+    cancellingWarning:
+      'Your subscription is cancelling. Access will end at the next renewal date.',
+    inactiveDescription: 'Your membership is inactive.',
+    accountOnlyTitle: 'Account only — not an active member.',
+    accountOnlyDescription:
+      'You have an account but have not been granted full membership access.',
+    viewMembership: 'View Membership',
+    viewAccount: 'View Account',
+  },
 };
