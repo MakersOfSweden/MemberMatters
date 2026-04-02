@@ -668,6 +668,12 @@ export default {
       inactive: 'Inactive',
       accountonly: 'Account Only',
     },
+    stateBanner: {
+      noob: 'Your membership setup is not complete',
+      active: 'You are an active member',
+      inactive: 'Your membership is currently inactive',
+      accountonly: 'Account only — no active membership',
+    },
     payment: 'Payment',
     paymentComplete: 'Subscription active',
     paymentRequired: 'Membership payment required',
@@ -689,6 +695,8 @@ export default {
     accountOnlyDescription:
       'You have an account but have not been granted full membership access.',
     renewalDate: 'Renewal date',
+    completeSetup: 'Complete Setup',
+    activateMembership: 'Activate Membership',
     viewMembership: 'View Membership',
     viewAccount: 'View Account',
     becomeMember: 'Become a Member',

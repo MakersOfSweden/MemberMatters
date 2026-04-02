@@ -666,6 +666,12 @@ export default {
       inactive: 'Inaktiv',
       accountonly: 'Endast konto',
     },
+    stateBanner: {
+      noob: 'Din medlemskapsregistrering är inte slutförd',
+      active: 'Du är en aktiv medlem',
+      inactive: 'Ditt medlemskap är för närvarande inaktivt',
+      accountonly: 'Endast konto — inget aktivt medlemskap',
+    },
     payment: 'Betalning',
     paymentComplete: 'Abonnemang aktivt',
     paymentRequired: 'Betalning för medlemskap krävs',
@@ -687,6 +693,8 @@ export default {
     accountOnlyDescription:
       'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
     renewalDate: 'Förnyelsedatum',
+    completeSetup: 'Slutför registrering',
+    activateMembership: 'Aktivera medlemskap',
     viewMembership: 'Visa medlemskap',
     viewAccount: 'Visa konto',
     becomeMember: 'Bli medlem',
