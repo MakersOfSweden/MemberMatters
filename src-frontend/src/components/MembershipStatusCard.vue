@@ -82,7 +82,7 @@
           v-if="formattedRenewalDate && profile.subscriptionStatus !== 'cancelling'"
           class="q-mb-sm text-caption"
         >
-          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }}
+          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }} ({{ $t('membershipStatusCard.inDays', { days: daysUntilRenewal }) }})
         </div>
         <q-chip
           v-if="features.enableMembershipPayments && profile.subscriptionStatus"
@@ -147,6 +147,7 @@
 <script>
 import { mapGetters } from 'vuex';
 import icons from '@icons';
+import dayjs from 'dayjs';
 
 export default {
   name: 'MembershipStatusCard',
@@ -234,7 +235,11 @@ export default {
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;
-      return new Date(this.currentPeriodEnd * 1000).toLocaleString();
+      return new Date(this.currentPeriodEnd * 1000).toLocaleDateString();
+    },
+    daysUntilRenewal() {
+      if (!this.currentPeriodEnd) return null;
+      return dayjs(this.currentPeriodEnd * 1000).diff(dayjs(), 'day');
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob') {
