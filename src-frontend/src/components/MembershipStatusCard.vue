@@ -156,29 +156,35 @@ export default {
       currentPeriodEnd: null,
     };
   },
-  mounted() {
-    if (this.profile.memberStatus === 'noob') {
-      this.$axios
-        .get('/api/billing/can-signup/')
-        .then((response) => {
-          this.requiredSteps = response.data.requiredSteps || [];
-        })
-        .catch((e) => {
-          console.log(e);
-        });
-    }
-    if (
-      this.profile.memberStatus === 'active' &&
-      this.features.enableMembershipPayments
-    ) {
-      this.$axios.get('/api/billing/myplan/').then((response) => {
-        if (response.data.success) {
-          this.currentPeriodEnd = response.data.subscription.currentPeriodEnd;
+  watch: {
+    'profile.memberStatus': {
+      immediate: true,
+      handler(status) {
+        if (status === 'noob') {
+          this.$axios
+            .get('/api/billing/can-signup/')
+            .then((response) => {
+              this.requiredSteps = response.data.requiredSteps || [];
+            })
+            .catch((e) => {
+              console.log(e);
+            });
         }
-      }).catch((e) => {
-        console.log(e);
-      });
-    }
+        if (status === 'active' && this.features.enableMembershipPayments) {
+          this.$axios
+            .get('/api/billing/myplan/')
+            .then((response) => {
+              if (response.data.success) {
+                this.currentPeriodEnd =
+                  response.data.subscription.currentPeriodEnd;
+              }
+            })
+            .catch((e) => {
+              console.log(e);
+            });
+        }
+      },
+    },
   },
   computed: {
     ...mapGetters('profile', ['profile']),
