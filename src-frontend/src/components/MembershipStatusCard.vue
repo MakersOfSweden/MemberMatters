@@ -109,6 +109,7 @@
           {{ $t('membershipStatusCard.cancellingWarning') }}
           <span v-if="formattedCancelAt">
             {{ $t('membershipStatusCard.membershipExpires', { date: formattedCancelAt }) }}
+            ({{ $t('membershipStatusCard.inDays', { days: daysUntilExpiration }) }})
           </span>
         </q-banner>
       </template>
@@ -249,6 +250,10 @@ export default {
     formattedCancelAt() {
       if (!this.cancelAt) return null;
       return new Date(this.cancelAt * 1000).toLocaleDateString();
+    },
+    daysUntilExpiration() {
+      if (!this.cancelAt) return null;
+      return dayjs(this.cancelAt * 1000).diff(dayjs(), 'day');
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob') {
