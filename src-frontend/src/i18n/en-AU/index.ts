@@ -688,6 +688,7 @@ export default {
       cancelling: 'Subscription cancelling',
       inactive: 'No active subscription',
     },
+    membershipExpires: 'Membership expires on {date}.',
     cancellingWarning:
       'Your subscription is cancelling. Access will end at the next renewal date.',
     inactiveDescription: 'Your membership is inactive.',

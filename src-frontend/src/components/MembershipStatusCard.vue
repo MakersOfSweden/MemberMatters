@@ -107,6 +107,9 @@
             <q-icon :name="icons.warning" />
           </template>
           {{ $t('membershipStatusCard.cancellingWarning') }}
+          <span v-if="formattedCancelAt">
+            {{ $t('membershipStatusCard.membershipExpires', { date: formattedCancelAt }) }}
+          </span>
         </q-banner>
       </template>
 
@@ -155,6 +158,7 @@ export default {
     return {
       requiredSteps: null,
       currentPeriodEnd: null,
+      cancelAt: null,
     };
   },
   watch: {
@@ -178,6 +182,7 @@ export default {
               if (response.data.success) {
                 this.currentPeriodEnd =
                   response.data.subscription.currentPeriodEnd;
+                this.cancelAt = response.data.subscription.cancelAt;
               }
             })
             .catch((e) => {
@@ -240,6 +245,10 @@ export default {
     daysUntilRenewal() {
       if (!this.currentPeriodEnd) return null;
       return dayjs(this.currentPeriodEnd * 1000).diff(dayjs(), 'day');
+    },
+    formattedCancelAt() {
+      if (!this.cancelAt) return null;
+      return new Date(this.cancelAt * 1000).toLocaleDateString();
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob') {

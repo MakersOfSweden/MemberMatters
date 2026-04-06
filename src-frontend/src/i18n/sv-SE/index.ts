@@ -686,6 +686,7 @@ export default {
       cancelling: 'Abonnemang avslutas',
       inactive: 'Inget aktivt abonnemang',
     },
+    membershipExpires: 'Medlemskapet upphör den {date}.',
     cancellingWarning:
       'Ditt abonnemang avslutas. Åtkomst upphör vid nästa förnyelsedatum.',
     inactiveDescription: 'Ditt medlemskap är inaktivt.',
