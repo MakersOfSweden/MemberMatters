@@ -13,10 +13,10 @@ class Migration(migrations.Migration):
             name="interval",
             field=models.CharField(
                 choices=[
-                    ("Month", "month"),
-                    ("Week", "week"),
-                    ("Day", "day"),
-                    ("Year", "year"),
+                    ("day", "Day"),
+                    ("week", "Week"),
+                    ("month", "Month"),
+                    ("year", "Year"),
                 ],
                 max_length=10,
             ),
