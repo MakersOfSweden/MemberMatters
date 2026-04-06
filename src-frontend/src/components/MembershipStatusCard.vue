@@ -82,7 +82,7 @@
           v-if="formattedRenewalDate && profile.subscriptionStatus !== 'cancelling'"
           class="q-mb-sm text-caption"
         >
-          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }}
+          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }} ({{ $t('membershipStatusCard.inDays', { days: daysUntilRenewal }) }})
         </div>
         <q-chip
           v-if="features.enableMembershipPayments && profile.subscriptionStatus"
@@ -107,6 +107,10 @@
             <q-icon :name="icons.warning" />
           </template>
           {{ $t('membershipStatusCard.cancellingWarning') }}
+          <span v-if="formattedCancelAt">
+            {{ $t('membershipStatusCard.membershipExpires', { date: formattedCancelAt }) }}
+            ({{ $t('membershipStatusCard.inDays', { days: daysUntilExpiration }) }})
+          </span>
         </q-banner>
       </template>
 
@@ -147,6 +151,7 @@
 <script>
 import { mapGetters } from 'vuex';
 import icons from '@icons';
+import dayjs from 'dayjs';
 
 export default {
   name: 'MembershipStatusCard',
@@ -154,31 +159,39 @@ export default {
     return {
       requiredSteps: null,
       currentPeriodEnd: null,
+      cancelAt: null,
     };
   },
-  mounted() {
-    if (this.profile.memberStatus === 'noob') {
-      this.$axios
-        .get('/api/billing/can-signup/')
-        .then((response) => {
-          this.requiredSteps = response.data.requiredSteps || [];
-        })
-        .catch((e) => {
-          console.log(e);
-        });
-    }
-    if (
-      this.profile.memberStatus === 'active' &&
-      this.features.enableMembershipPayments
-    ) {
-      this.$axios.get('/api/billing/myplan/').then((response) => {
-        if (response.data.success) {
-          this.currentPeriodEnd = response.data.subscription.currentPeriodEnd;
+  watch: {
+    'profile.memberStatus': {
+      immediate: true,
+      handler(status) {
+        if (status === 'noob') {
+          this.$axios
+            .get('/api/billing/can-signup/')
+            .then((response) => {
+              this.requiredSteps = response.data.requiredSteps || [];
+            })
+            .catch((e) => {
+              console.log(e);
+            });
         }
-      }).catch((e) => {
-        console.log(e);
-      });
-    }
+        if (status === 'active' && this.features.enableMembershipPayments) {
+          this.$axios
+            .get('/api/billing/myplan/')
+            .then((response) => {
+              if (response.data.success) {
+                this.currentPeriodEnd =
+                  response.data.subscription.currentPeriodEnd;
+                this.cancelAt = response.data.subscription.cancelAt;
+              }
+            })
+            .catch((e) => {
+              console.log(e);
+            });
+        }
+      },
+    },
   },
   computed: {
     ...mapGetters('profile', ['profile']),
@@ -228,7 +241,19 @@ export default {
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;
-      return new Date(this.currentPeriodEnd * 1000).toLocaleString();
+      return new Date(this.currentPeriodEnd * 1000).toLocaleDateString();
+    },
+    daysUntilRenewal() {
+      if (!this.currentPeriodEnd) return null;
+      return dayjs(this.currentPeriodEnd * 1000).diff(dayjs(), 'day');
+    },
+    formattedCancelAt() {
+      if (!this.cancelAt) return null;
+      return new Date(this.cancelAt * 1000).toLocaleDateString();
+    },
+    daysUntilExpiration() {
+      if (!this.cancelAt) return null;
+      return dayjs(this.cancelAt * 1000).diff(dayjs(), 'day');
     },
     ctaLabel() {
       if (this.profile.memberStatus === 'noob') {

@@ -686,6 +686,7 @@ export default {
       cancelling: 'Abonnemang avslutas',
       inactive: 'Inget aktivt abonnemang',
     },
+    membershipExpires: 'Medlemskapet upphör den {date}.',
     cancellingWarning:
       'Ditt abonnemang avslutas. Åtkomst upphör vid nästa förnyelsedatum.',
     inactiveDescription: 'Ditt medlemskap är inaktivt.',
@@ -693,6 +694,7 @@ export default {
     accountOnlyDescription:
       'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
     renewalDate: 'Förnyelsedatum',
+    inDays: 'om {days} dagar',
     completeSetup: 'Slutför registrering',
     activateMembership: 'Aktivera medlemskap',
     viewMembership: 'Visa medlemskap',
