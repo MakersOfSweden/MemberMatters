@@ -531,6 +531,7 @@ export default {
     recurringDescription: 'Bill for this plan every:',
     remove: 'Remove this Membership Payment Plan',
     add: 'Add a new Membership Payment Plan',
+    edit: 'Edit Payment Plan',
     success: 'Successfully added a new Membership Payment Plan.',
     fail: 'Failed to add a new Membership Payment Plan.',
     select: 'Payment Plan',

@@ -760,6 +760,7 @@ class ManageMembershipTierPlan(StripeAPIView):
         return {
             "id": plan.id,
             "name": plan.name,
+            "description": plan.description,
             "stripeId": plan.stripe_id,
             "memberTier": plan.member_tier.id,
             "visible": plan.visible,
@@ -818,6 +819,7 @@ class ManageMembershipTierPlan(StripeAPIView):
 
         plan = PaymentPlan.objects.create(
             name=body["name"],
+            description=body.get("description", ""),
             stripe_id=stripe_plan.id,
             member_tier_id=body["memberTier"],
             visible=body["visible"],
@@ -835,6 +837,7 @@ class ManageMembershipTierPlan(StripeAPIView):
         plan = PaymentPlan.objects.get(pk=plan_id)
 
         plan.name = body["name"]
+        plan.description = body.get("description", "")
         plan.visible = body["visible"]
         plan.cost = body["cost"]
         plan.save()
