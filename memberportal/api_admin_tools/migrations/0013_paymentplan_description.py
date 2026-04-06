@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("api_admin_tools", "0011_alter_paymentplan_interval"),
+        ("api_admin_tools", "0012_alter_paymentplan_interval_year"),
     ]
 
     operations = [
