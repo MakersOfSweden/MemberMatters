@@ -158,6 +158,14 @@
               />
               <q-input
                 class="col-sm-6 col-xs-12"
+                v-model="planForm.description"
+                outlined
+                :debounce="debounceLength"
+                :label="$t('paymentPlans.description')"
+                :disable="form.success"
+              />
+              <q-input
+                class="col-sm-6 col-xs-12"
                 v-model="planForm.currency"
                 outlined
                 :debounce="debounceLength"
@@ -262,6 +270,79 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+    <q-dialog v-model="editPlanDialog" persistent>
+      <q-card style="min-width: 400px">
+        <q-card-section class="row items-center">
+          <span class="q-ml-sm">{{ $t('paymentPlans.edit') }}</span>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-form @submit="submitEditPlanForm()" v-if="editPlan">
+            <div class="row q-col-gutter-sm">
+              <q-input
+                class="col-12"
+                v-model="editPlan.name"
+                outlined
+                :debounce="debounceLength"
+                :label="$t('form.name')"
+                :rules="[
+                  (val) =>
+                    validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                ]"
+              />
+              <q-input
+                class="col-12"
+                v-model="editPlan.description"
+                outlined
+                :debounce="debounceLength"
+                :label="$t('paymentPlans.description')"
+              />
+              <q-checkbox
+                class="col-12"
+                v-model="editPlan.visible"
+                :label="$t('form.visibleToMembers')"
+              />
+            </div>
+
+            <q-banner
+              v-if="editPlanForm.success"
+              class="bg-positive text-white q-my-md"
+            >
+              {{ $t('form.saved') }}
+            </q-banner>
+            <q-banner
+              v-if="editPlanForm.error"
+              class="bg-negative text-white q-my-md"
+            >
+              {{ $t('form.error') }}
+            </q-banner>
+
+            <q-card-actions class="text-primary">
+              <q-btn
+                color="negative"
+                :label="$t('button.remove')"
+                :disable="editPlanForm.loading"
+                @click="removePlan()"
+              />
+              <q-space />
+              <q-btn
+                v-close-popup
+                flat
+                :label="$t('button.cancel')"
+                :disable="editPlanForm.loading"
+              />
+              <q-btn
+                color="primary"
+                :label="$t('button.submit')"
+                :loading="editPlanForm.loading"
+                :disable="editPlanForm.loading"
+                type="submit"
+              />
+            </q-card-actions>
+          </q-form>
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
@@ -302,6 +383,7 @@ export default defineComponent({
         error: false,
         success: false,
         name: '',
+        description: '',
         memberTier: '',
         stripeId: '',
         visible: true,
@@ -312,6 +394,13 @@ export default defineComponent({
         interval: 'month',
       },
       addPlanDialog: false,
+      editPlanDialog: false,
+      editPlan: null,
+      editPlanForm: {
+        loading: false,
+        error: false,
+        success: false,
+      },
       filter: '',
       pagination: {
         sortBy: 'name',
@@ -426,8 +515,49 @@ export default defineComponent({
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     managePlan(evt: InputEvent, row: any) {
-      // TODO: make a MM UI to manage payment plans
-      // this.$router.push({ name: 'managePlan', params: { planId: row.id } });
+      this.editPlan = { ...row };
+      this.editPlanForm = { loading: false, error: false, success: false };
+      this.editPlanDialog = true;
+    },
+    submitEditPlanForm() {
+      this.editPlanForm.loading = true;
+      this.editPlanForm.error = false;
+      this.editPlanForm.success = false;
+      api
+        .put(`/api/admin/plans/${this.editPlan.id}/`, this.editPlan)
+        .then(() => {
+          this.getPlans();
+          this.editPlanForm.success = true;
+          this.editPlanForm.error = false;
+        })
+        .catch(() => {
+          this.editPlanForm.error = true;
+          this.editPlanForm.success = false;
+        })
+        .finally(() => (this.editPlanForm.loading = false));
+    },
+    removePlan() {
+      this.$q
+        .dialog({
+          title: this.$tc('confirmAction'),
+          message: this.$tc('confirmRemove'),
+          cancel: true,
+          persistent: true,
+        })
+        .onOk(() => {
+          api
+            .delete(`/api/admin/plans/${this.editPlan.id}/`)
+            .then(() => {
+              this.editPlanDialog = false;
+              this.getPlans();
+            })
+            .catch(() => {
+              this.$q.dialog({
+                title: this.$tc('error.error'),
+                message: this.$tc('error.requestFailed'),
+              });
+            });
+        });
     },
     resetForm() {
       this.form = {
@@ -446,6 +576,7 @@ export default defineComponent({
         error: false,
         success: false,
         name: '',
+        description: '',
         memberTier: this.$route.params.planId.toString(),
         stripeId: '',
         visible: true,

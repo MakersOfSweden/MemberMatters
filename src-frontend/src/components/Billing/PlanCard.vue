@@ -4,6 +4,9 @@
       <div class="my-card column">
         <q-card-section>
           <div class="text-h6">{{ plan.name }}</div>
+          <div v-if="plan.description" class="text-caption">
+            {{ plan.description }}
+          </div>
           <div class="text-subtitle2">
             {{
               $t('paymentPlans.intervalDescription', {

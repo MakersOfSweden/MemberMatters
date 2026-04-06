@@ -44,6 +44,9 @@ class PaymentPlan(ExportModelOperationsMixin("payment-plan"), models.Model):
 
     id = models.AutoField(primary_key=True)
     name = models.CharField("Name", max_length=50)
+    description = models.CharField(
+        "Description", max_length=250, blank=True, default=""
+    )
     stripe_id = models.CharField("Stripe Id", max_length=100, unique=True)
     member_tier = models.ForeignKey(
         MemberTier, on_delete=models.CASCADE, related_name="plans"
@@ -65,6 +68,7 @@ class PaymentPlan(ExportModelOperationsMixin("payment-plan"), models.Model):
         return {
             "id": self.id,
             "name": self.name,
+            "description": self.description,
             "currency": self.currency,
             "cost": self.cost,
             "intervalAmount": self.interval_count,
