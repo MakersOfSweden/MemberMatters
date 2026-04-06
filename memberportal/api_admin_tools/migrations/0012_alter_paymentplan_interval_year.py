@@ -12,7 +12,12 @@ class Migration(migrations.Migration):
             model_name="paymentplan",
             name="interval",
             field=models.CharField(
-                choices=[("Month", "month"), ("Week", "week"), ("Day", "day"), ("Year", "year")],
+                choices=[
+                    ("Month", "month"),
+                    ("Week", "week"),
+                    ("Day", "day"),
+                    ("Year", "year"),
+                ],
                 max_length=10,
             ),
         ),

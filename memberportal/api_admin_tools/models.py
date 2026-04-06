@@ -35,7 +35,12 @@ class MemberTier(ExportModelOperationsMixin("kiosk"), models.Model):
 class PaymentPlan(ExportModelOperationsMixin("payment-plan"), models.Model):
     """A Membership Plan that specifies how a member is billed for a member tier."""
 
-    BILLING_PERIODS = [("Month", "month"), ("Week", "week"), ("Day", "day"), ("Year", "year")]
+    BILLING_PERIODS = [
+        ("Month", "month"),
+        ("Week", "week"),
+        ("Day", "day"),
+        ("Year", "year"),
+    ]
 
     id = models.AutoField(primary_key=True)
     name = models.CharField("Name", max_length=50)
