@@ -115,11 +115,6 @@
               </q-item-section>
               <q-item-section>
                 <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
-                <q-slide-transition>
-                  <q-item-label v-if="selectedBillingMethod === 'card'" caption class="q-mt-xs">
-                    {{ $t('billing.cardDescription') }}
-                  </q-item-label>
-                </q-slide-transition>
               </q-item-section>
               <q-item-section side>
                 <q-radio v-model="selectedBillingMethod" val="card" color="primary" />
@@ -138,17 +133,19 @@
               </q-item-section>
               <q-item-section>
                 <q-item-label>{{ $t('billing.payByInvoice') }}</q-item-label>
-                <q-slide-transition>
-                  <q-item-label v-if="selectedBillingMethod === 'invoice'" caption class="q-mt-xs">
-                    {{ $t('billing.invoiceDescription') }}
-                  </q-item-label>
-                </q-slide-transition>
               </q-item-section>
               <q-item-section side>
                 <q-radio v-model="selectedBillingMethod" val="invoice" color="primary" />
               </q-item-section>
             </q-item>
           </q-list>
+
+          <div class="text-caption text-grey-7 q-mt-sm q-px-sm">
+            {{ selectedBillingMethod === 'card' ? $t('billing.cardDescription') : $t('billing.invoiceDescription') }}
+          </div>
+          <div v-if="selectedBillingMethod === 'invoice' && features.invoiceBillingNote" class="text-caption text-grey-7 q-mt-xs q-px-sm">
+            {{ features.invoiceBillingNote }}
+          </div>
         </div>
 
         <member-bucks-manage-billing
@@ -421,5 +418,9 @@ export default defineComponent({
 
 .billing-method-active {
   background-color: rgba(var(--q-primary-rgb, 39, 138, 176), 0.08);
+
+  .q-item__label {
+    color: inherit;
+  }
 }
 </style>

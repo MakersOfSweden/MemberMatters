@@ -714,10 +714,10 @@ export default {
     selectMethod: 'Hur vill du betala?',
     payByCard: 'Automatisk betalning med kort',
     cardDescription:
-      'Ditt kort debiteras automatiskt varje faktureringsperiod.',
+      'Ange dina kortuppgifter så dras din medlemsavgift automatiskt varje faktureringsperiod. Ingen manuell åtgärd krävs — ditt medlemskap förblir aktivt så länge ditt kort är giltigt.',
     payByInvoice: 'Manuell betalning med faktura',
     invoiceDescription:
-      'Du får en faktura via e-post att betala manuellt. Ditt medlemskap aktiveras när betalningen är mottagen.',
+      'Du får en faktura via e-post varje faktureringsperiod som du betalar manuellt. Ditt medlemskap aktiveras när betalningen är mottagen och förnyas varje period så länge fakturan betalas i tid.',
     invoiceAmount: 'Fakturabelopp: {amount}',
     awaitingInvoicePayment:
       'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',

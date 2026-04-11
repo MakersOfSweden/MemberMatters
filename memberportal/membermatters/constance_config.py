@@ -127,11 +127,17 @@ CONSTANCE_CONFIG = {
         "instead of paying by card. Membership activation is deferred until the invoice is paid.",
     ),
     "INVOICE_DAYS_UNTIL_DUE": (
-        14,
+        31,
         "Number of days before a Stripe membership invoice is due. "
         "To automatically cancel subscriptions after non-payment, configure "
         "'Cancel subscriptions after failed payment' in your Stripe Dashboard under "
         "Billing → Settings → Subscriptions and emails.",
+    ),
+    "INVOICE_BILLING_NOTE": (
+        "Supported payment methods are: ",
+        "Optional note displayed to members when they select invoice billing during signup. "
+        "Use this for additional payment instructions, bank details, or other information. "
+        "Leave empty to hide.",
     ),
     # ==== Membership Status Card ====
     "ENABLE_MEMBERSHIP_STATUS_CARD": (
@@ -517,6 +523,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "MEMBERBUCKS_CURRENCY",
                 "ENABLE_INVOICE_BILLING",
                 "INVOICE_DAYS_UNTIL_DUE",
+                "INVOICE_BILLING_NOTE",
             ),
         ),
         (

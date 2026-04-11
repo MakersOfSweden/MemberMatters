@@ -69,6 +69,7 @@ class GetConfig(APIView):
             "enableReportIssue": config.ENABLE_REPORT_ISSUE,
             "enableMembershipStatusCard": config.ENABLE_MEMBERSHIP_STATUS_CARD,
             "enableInvoiceBilling": config.ENABLE_INVOICE_BILLING,
+            "invoiceBillingNote": config.INVOICE_BILLING_NOTE if config.ENABLE_INVOICE_BILLING else "",
         }
 
         keys = {"stripePublishableKey": config.STRIPE_PUBLISHABLE_KEY}
