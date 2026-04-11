@@ -584,9 +584,14 @@ class SubscriptionInfo(StripeAPIView):
         else:
             s = stripe.Subscription.retrieve(
                 request.user.profile.stripe_subscription_id,
+                expand=["latest_invoice"],
             )
 
             if s:
+                invoice_url = None
+                if s.latest_invoice and hasattr(s.latest_invoice, "hosted_invoice_url"):
+                    invoice_url = s.latest_invoice.hosted_invoice_url
+
                 subscription = {
                     "billingCycleAnchor": s.billing_cycle_anchor,
                     "currentPeriodEnd": s.current_period_end,
@@ -594,6 +599,7 @@ class SubscriptionInfo(StripeAPIView):
                     "cancelAtPeriodEnd": s.cancel_at_period_end,
                     "startDate": s.start_date,
                     "collectionMethod": s.collection_method,
+                    "invoiceUrl": invoice_url,
                     "membershipTier": request.user.profile.membership_plan.member_tier.get_object(),
                     "membershipPlan": request.user.profile.membership_plan.get_object(),
                 }

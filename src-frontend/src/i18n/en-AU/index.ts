@@ -722,6 +722,7 @@ export default {
     invoiceDescription:
       'You will receive an invoice by email each billing cycle that you pay manually. Your membership will be activated once payment is received, and renewed each cycle as long as the invoice is paid on time.',
     invoiceAmount: 'Invoice amount: {amount}',
+    viewInvoice: 'View Invoice',
     awaitingInvoicePayment:
       'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
   },

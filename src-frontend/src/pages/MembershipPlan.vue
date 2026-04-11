@@ -20,6 +20,25 @@
       <template v-else>
         <selected-tier :plan="currentPlan" :tier="currentTier" />
 
+        <q-banner v-if="subscriptionStatus === 'pending'" class="bg-orange text-white q-mb-md" inline-actions rounded>
+          <template v-slot:avatar>
+            <q-icon name="mdi-alert" />
+          </template>
+          {{ $t('billing.awaitingInvoicePayment') }}
+          <template v-slot:action>
+            <q-btn
+              v-if="subscriptionInfo?.invoiceUrl"
+              flat
+              no-caps
+              text-color="white"
+              :label="$tc('billing.viewInvoice')"
+              :href="subscriptionInfo.invoiceUrl"
+              target="_blank"
+              icon="mdi-open-in-new"
+            />
+          </template>
+        </q-banner>
+
         <div v-if="cancelSuccess" class="row q-mb-md">
           <q-banner class="bg-success text-white">
             <div class="text-h5">{{ $tc('actionSuccess') }}</div>
@@ -69,10 +88,6 @@
             </q-list>
           </q-card>
         </div>
-
-        <q-banner v-if="subscriptionStatus === 'pending'" class="bg-info text-white q-mb-md">
-          {{ $t('billing.awaitingInvoicePayment') }}
-        </q-banner>
 
         <q-btn
           v-if="subscriptionStatus === 'active' || subscriptionStatus === 'pending'"

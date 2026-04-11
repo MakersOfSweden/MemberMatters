@@ -719,6 +719,7 @@ export default {
     invoiceDescription:
       'Du får en faktura via e-post varje faktureringsperiod som du betalar manuellt. Ditt medlemskap aktiveras när betalningen är mottagen och förnyas varje period så länge fakturan betalas i tid.',
     invoiceAmount: 'Fakturabelopp: {amount}',
+    viewInvoice: 'Visa Faktura',
     awaitingInvoicePayment:
       'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
   },
