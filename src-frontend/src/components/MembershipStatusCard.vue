@@ -213,8 +213,12 @@ export default {
     hasAnyStep() {
       return this.showPaymentStep || this.showInductionStep || this.showAccessCardStep;
     },
+    paymentPending() {
+      return this.profile.financial.subscriptionState === 'pending';
+    },
     nextStep() {
-      if (this.showPaymentStep && !this.paymentComplete) return 'payment';
+      // When invoice is pending, payment is "in progress" (awaiting invoice) — skip to next actionable step
+      if (this.showPaymentStep && !this.paymentComplete && !this.paymentPending) return 'payment';
       if (this.showInductionStep && !this.inductionComplete) return 'induction';
       if (this.showAccessCardStep && !this.accessCardComplete) return 'accessCard';
       return null;
