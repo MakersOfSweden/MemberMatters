@@ -275,7 +275,14 @@ class PaymentPlanSignup(StripeAPIView):
                 subscription_params["collection_method"] = "send_invoice"
                 subscription_params["days_until_due"] = config.INVOICE_DAYS_UNTIL_DUE
 
-            return stripe.Subscription.create(**subscription_params)
+            subscription = stripe.Subscription.create(**subscription_params)
+
+            # Stripe creates the first invoice as draft for send_invoice subscriptions.
+            # Finalize and send it immediately so the member receives it right away.
+            if billing_method == "invoice" and subscription.latest_invoice:
+                stripe.Invoice.send_invoice(subscription.latest_invoice)
+
+            return subscription
 
         except stripe.error.InvalidRequestError as e:
             capture_exception(e)

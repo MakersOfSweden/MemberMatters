@@ -102,14 +102,53 @@
 
         <div v-if="features.enableInvoiceBilling && features.enableMembershipPayments" class="q-mb-md" style="max-width: 500px">
           <div class="text-subtitle1 q-mb-sm">{{ $t('billing.selectMethod') }}</div>
-          <q-option-group
-            v-model="selectedBillingMethod"
-            :options="billingMethodOptions"
-            color="primary"
-          />
-          <div v-if="selectedBillingMethod === 'invoice'" class="q-mt-sm text-caption">
-            {{ $t('billing.invoiceDescription') }}
-          </div>
+          <q-list bordered separator class="rounded-borders">
+            <q-item
+              clickable
+              v-ripple
+              :active="selectedBillingMethod === 'card'"
+              active-class="billing-method-active"
+              @click="selectedBillingMethod = 'card'"
+            >
+              <q-item-section avatar>
+                <q-icon name="mdi-credit-card-outline" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
+                <q-slide-transition>
+                  <q-item-label v-if="selectedBillingMethod === 'card'" caption class="q-mt-xs">
+                    {{ $t('billing.cardDescription') }}
+                  </q-item-label>
+                </q-slide-transition>
+              </q-item-section>
+              <q-item-section side>
+                <q-radio v-model="selectedBillingMethod" val="card" color="primary" />
+              </q-item-section>
+            </q-item>
+
+            <q-item
+              clickable
+              v-ripple
+              :active="selectedBillingMethod === 'invoice'"
+              active-class="billing-method-active"
+              @click="selectedBillingMethod = 'invoice'"
+            >
+              <q-item-section avatar>
+                <q-icon name="mdi-email-outline" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ $t('billing.payByInvoice') }}</q-item-label>
+                <q-slide-transition>
+                  <q-item-label v-if="selectedBillingMethod === 'invoice'" caption class="q-mt-xs">
+                    {{ $t('billing.invoiceDescription') }}
+                  </q-item-label>
+                </q-slide-transition>
+              </q-item-section>
+              <q-item-section side>
+                <q-radio v-model="selectedBillingMethod" val="invoice" color="primary" />
+              </q-item-section>
+            </q-item>
+          </q-list>
         </div>
 
         <member-bucks-manage-billing
@@ -265,12 +304,6 @@ export default defineComponent({
       if (this.selectedBillingMethod === 'invoice') return true;
       return !!this.cardExists;
     },
-    billingMethodOptions() {
-      return [
-        { label: this.$t('billing.payByCard'), value: 'card' },
-        { label: this.$t('billing.payByInvoice'), value: 'invoice' },
-      ];
-    },
   },
   components: {
     TierCard,
@@ -384,5 +417,9 @@ export default defineComponent({
 .q-stepper__step-inner {
   width: 90vw;
   max-width: 1000px;
+}
+
+.billing-method-active {
+  background-color: rgba(var(--q-primary-rgb, 39, 138, 176), 0.08);
 }
 </style>

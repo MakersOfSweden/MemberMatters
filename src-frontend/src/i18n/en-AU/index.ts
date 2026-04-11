@@ -715,10 +715,12 @@ export default {
   },
   billing: {
     selectMethod: 'How would you like to pay?',
-    payByCard: 'Pay by card',
-    payByInvoice: 'Pay by invoice',
+    payByCard: 'Automatic payment by card',
+    cardDescription:
+      'Your card will be charged automatically each billing cycle.',
+    payByInvoice: 'Manual payment by invoice',
     invoiceDescription:
-      'An invoice will be emailed to you. Your membership will be activated once payment is received.',
+      'You will receive an invoice by email to pay manually. Your membership will be activated once payment is received.',
     invoiceAmount: 'Invoice amount: {amount}',
     awaitingInvoicePayment:
       'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',

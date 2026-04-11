@@ -712,10 +712,12 @@ export default {
   },
   billing: {
     selectMethod: 'Hur vill du betala?',
-    payByCard: 'Betala med kort',
-    payByInvoice: 'Betala med faktura',
+    payByCard: 'Automatisk betalning med kort',
+    cardDescription:
+      'Ditt kort debiteras automatiskt varje faktureringsperiod.',
+    payByInvoice: 'Manuell betalning med faktura',
     invoiceDescription:
-      'En faktura skickas till din e-post. Ditt medlemskap aktiveras när betalningen är mottagen.',
+      'Du får en faktura via e-post att betala manuellt. Ditt medlemskap aktiveras när betalningen är mottagen.',
     invoiceAmount: 'Fakturabelopp: {amount}',
     awaitingInvoicePayment:
       'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
