@@ -100,7 +100,20 @@
           {{ $tc('memberbucks.selectToContinue') }}
         </div>
 
+        <div v-if="features.enableInvoiceBilling && features.enableMembershipPayments" class="q-mb-md" style="max-width: 500px">
+          <div class="text-subtitle1 q-mb-sm">{{ $t('billing.selectMethod') }}</div>
+          <q-option-group
+            v-model="selectedBillingMethod"
+            :options="billingMethodOptions"
+            color="primary"
+          />
+          <div v-if="selectedBillingMethod === 'invoice'" class="q-mt-sm text-caption">
+            {{ $t('billing.invoiceDescription') }}
+          </div>
+        </div>
+
         <member-bucks-manage-billing
+          v-if="selectedBillingMethod === 'card'"
           style="max-width: 500px"
           flat
           @card-exists="cardExistsHandler"
@@ -110,7 +123,7 @@
           <q-btn @click="backToPlans" flat :label="$tc('button.back')" />
           <q-space />
           <q-btn
-            :disabled="!cardExists"
+            :disabled="!canContinueBilling"
             @click="selectedBillingMethodEvent"
             color="primary"
             :label="$tc('button.continue')"
@@ -136,15 +149,28 @@
         </div>
 
         <div class="text-h6">
-          {{
-            $t('paymentPlans.dueToday', {
-              amount: $n(
-                selectedPlan.cost / 100,
-                'currency',
-                siteLocaleCurrency
-              ),
-            })
-          }}
+          <template v-if="selectedBillingMethod === 'invoice'">
+            {{
+              $t('billing.invoiceAmount', {
+                amount: $n(
+                  selectedPlan.cost / 100,
+                  'currency',
+                  siteLocaleCurrency
+                ),
+              })
+            }}
+          </template>
+          <template v-else>
+            {{
+              $t('paymentPlans.dueToday', {
+                amount: $n(
+                  selectedPlan.cost / 100,
+                  'currency',
+                  siteLocaleCurrency
+                ),
+              })
+            }}
+          </template>
         </div>
 
         <p v-if="step > 2" class="q-py-md" style="max-width: 850px">
@@ -173,7 +199,7 @@
         <div v-if="finishSuccess" class="row">
           <q-banner class="bg-success text-white">
             <div class="text-h5">{{ $tc('paymentPlans.signupSuccess') }}</div>
-            <p>{{ $tc('paymentPlans.signupSuccessDescription') }}</p>
+            <p>{{ selectedBillingMethod === 'invoice' ? $tc('paymentPlans.signupSuccessInvoiceDescription') : $tc('paymentPlans.signupSuccessDescription') }}</p>
           </q-banner>
         </div>
 
@@ -190,7 +216,7 @@
             :disable="disableFinish"
             @click="finishSignup"
             color="primary"
-            :label="$tc('tiers.finish')"
+            :label="selectedBillingMethod === 'invoice' ? $tc('tiers.finishInvoice') : $tc('tiers.finish')"
           />
         </div>
       </q-step>
@@ -226,13 +252,24 @@ export default defineComponent({
       loading: false,
       finishSuccess: false,
       cardExists: false,
+      selectedBillingMethod: 'card',
     };
   },
   computed: {
     ...mapGetters('profile', ['loggedIn', 'profile']),
-    ...mapGetters('config', ['siteLocaleCurrency']),
+    ...mapGetters('config', ['siteLocaleCurrency', 'features']),
     icons() {
       return icons;
+    },
+    canContinueBilling() {
+      if (this.selectedBillingMethod === 'invoice') return true;
+      return !!this.cardExists;
+    },
+    billingMethodOptions() {
+      return [
+        { label: this.$t('billing.payByCard'), value: 'card' },
+        { label: this.$t('billing.payByInvoice'), value: 'invoice' },
+      ];
     },
   },
   components: {
@@ -275,7 +312,9 @@ export default defineComponent({
       this.disableFinish = true;
       this.loading = true;
       this.$axios
-        .post(`/api/billing/plans/${this.selectedPlan.id}/signup/`)
+        .post(`/api/billing/plans/${this.selectedPlan.id}/signup/`, {
+          billingMethod: this.selectedBillingMethod,
+        })
         .then((response) => {
           if (response.data.success) {
             this.finishSuccess = true;

@@ -310,6 +310,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         ("inactive", "Inactive"),
         ("active", "Active"),
         ("cancelling", "Cancelling"),
+        ("pending", "Pending"),
     )
 
     class Meta:
@@ -387,6 +388,17 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     )
     subscription_first_created = models.DateTimeField(
         default=None, blank=True, null=True, editable=False
+    )
+
+    BILLING_METHODS = (
+        ("card", "Card"),
+        ("invoice", "Invoice"),
+    )
+
+    billing_method = models.CharField(
+        max_length=10,
+        default="card",
+        choices=BILLING_METHODS,
     )
 
     def __str__(self):

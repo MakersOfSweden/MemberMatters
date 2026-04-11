@@ -482,6 +482,7 @@ export default {
       active: 'Aktiv',
       inactive: 'Inaktiv',
       cancelling: 'Avbruten',
+      pending: 'Väntande',
     },
     memberStatusString: {
       noob: 'Ny medlem',
@@ -548,6 +549,8 @@ export default {
     signupSuccess: 'Registrering lyckades',
     signupSuccessDescription:
       'Din betalning har hanterats. Denna sida kommer laddas om strax.',
+    signupSuccessInvoiceDescription:
+      'Ditt abonnemang har skapats. En faktura har skickats till din e-post — ditt medlemskap aktiveras när betalningen är mottagen.',
     cancelButton: 'Avbryt medlemskap',
     cancelConfirmDescription:
       'Är du säker på att du vill avbryta ditt medlemskap? Ditt medlemskap kommer fortsätta vara aktivt fram tills slutet på din nuvarande period. Du kan återuppta medlemskapet när du vill innan periodens slut.',
@@ -593,6 +596,9 @@ export default {
     submittedDescription:
       "Din ansökan för medlemskap har skickats in och du är nu en 'ansökande medlem'. Ditt medlemskap kommer godkännas snart, men vi har gett dig åtkomst till sidan direkt. Du kommer få ett mail som bekräftar ditt nyckelkort har aktiverats. Om du av någon anledning får avslag på medlemskapet så kommer du få ett mail med mer information.",
     continueToDashboard: 'Forsätt till dashboard',
+    awaitingPaymentTitle: 'Alla krav uppfyllda!',
+    awaitingInvoicePayment:
+      'Din åtkomst aktiveras automatiskt när din fakturabetalning är mottagen.',
     error: 'Fel vid inskickning av medelmsansökan',
     errorDescription:
       "Det blev tyvärr ett oväntat fel när du skickade in din anökan. Vänligen kontakta oss via {email} så hjälper vi dig.",
@@ -621,6 +627,7 @@ export default {
     confirmDelay:
       'Din ansökan om medlemskap kommer skickas efter att du färdigställt nästa steg.',
     finish: 'Betala & Fortsätt',
+    finishInvoice: 'Bekräfta & Få Faktura',
     plansFrom: 'Från {plan}',
     skipSignup: 'Skippa registrering (om du bara vill ha ett konto)',
   },
@@ -675,6 +682,7 @@ export default {
     payment: 'Betalning',
     paymentComplete: 'Abonnemang aktivt',
     paymentRequired: 'Betalning för medlemskap krävs',
+    paymentPending: 'Faktura skickad — väntar på betalning',
     inductionComplete: 'Introduktion genomförd',
     inductionRequired: 'Online-introduktion krävs',
     accessCardComplete: 'Nyckelkort registrerat',
@@ -685,6 +693,7 @@ export default {
       active: 'Abonnemang aktivt',
       cancelling: 'Abonnemang avslutas',
       inactive: 'Inget aktivt abonnemang',
+      pending: 'Väntar på fakturabetalning',
     },
     membershipExpires: 'Medlemskapet upphör den {date}.',
     cancellingWarning:
@@ -700,5 +709,15 @@ export default {
     viewMembership: 'Visa medlemskap',
     viewAccount: 'Visa konto',
     becomeMember: 'Bli medlem',
+  },
+  billing: {
+    selectMethod: 'Hur vill du betala?',
+    payByCard: 'Betala med kort',
+    payByInvoice: 'Betala med faktura',
+    invoiceDescription:
+      'En faktura skickas till din e-post. Ditt medlemskap aktiveras när betalningen är mottagen.',
+    invoiceAmount: 'Fakturabelopp: {amount}',
+    awaitingInvoicePayment:
+      'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
   },
 };

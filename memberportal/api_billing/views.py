@@ -25,6 +25,41 @@ from django.utils import timezone
 logger = logging.getLogger("billing")
 
 
+def ensure_stripe_customer(user):
+    """
+    Ensures a Stripe customer exists for the given user, creating one if needed.
+    Returns (True, None) on success, or (False, error_message) on failure.
+    """
+    profile = user.profile
+    if profile.stripe_customer_id:
+        try:
+            customer = stripe.Customer.retrieve(profile.stripe_customer_id)
+            if not customer.get("deleted"):
+                return True, None
+        except stripe.error.InvalidRequestError:
+            profile.stripe_customer_id = None
+            profile.save()
+
+    try:
+        user.log_event("Attempting to create stripe customer.", "stripe")
+        customer = stripe.Customer.create(
+            email=user.email,
+            name=profile.get_full_name(),
+            phone=profile.phone,
+        )
+        profile.stripe_customer_id = customer.id
+        profile.save()
+        user.log_event(
+            f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
+            "stripe",
+        )
+        return True, None
+    except stripe.error.StripeError as e:
+        capture_exception(e)
+        user.log_event("Error while creating stripe customer.", "stripe")
+        return False, str(e)
+
+
 class StripeAPIView(APIView):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -209,7 +244,11 @@ class PaymentPlanSignup(StripeAPIView):
     """
 
     def create_subscription(
-        self, request: HttpRequest, new_plan: PaymentPlan, attempts: int = 0
+        self,
+        request: HttpRequest,
+        new_plan: PaymentPlan,
+        billing_method: str = "card",
+        attempts: int = 0,
     ):
         attempts += 1
 
@@ -228,12 +267,15 @@ class PaymentPlanSignup(StripeAPIView):
             )
 
         try:
-            return stripe.Subscription.create(
-                customer=request.user.profile.stripe_customer_id,
-                items=[
-                    {"price": new_plan.stripe_id},
-                ],
-            )
+            subscription_params = {
+                "customer": request.user.profile.stripe_customer_id,
+                "items": [{"price": new_plan.stripe_id}],
+            }
+            if billing_method == "invoice":
+                subscription_params["collection_method"] = "send_invoice"
+                subscription_params["days_until_due"] = config.INVOICE_DAYS_UNTIL_DUE
+
+            return stripe.Subscription.create(**subscription_params)
 
         except stripe.error.InvalidRequestError as e:
             capture_exception(e)
@@ -257,7 +299,9 @@ class PaymentPlanSignup(StripeAPIView):
                     },
                 )
 
-                return self.create_subscription(attempts)
+                return self.create_subscription(
+                    request, new_plan, billing_method, attempts
+                )
 
             if (
                 error["code"] == "resource_missing"
@@ -314,13 +358,33 @@ class PaymentPlanSignup(StripeAPIView):
         if current_plan:
             return Response({"success": False}, status=status.HTTP_409_CONFLICT)
 
-        new_subscription = self.create_subscription(request, new_plan)
+        billing_method = request.data.get("billingMethod", "card")
+        if billing_method not in ("card", "invoice"):
+            billing_method = "card"
+
+        # Server-side guard: ignore invoice billing if feature is disabled
+        if billing_method == "invoice" and not config.ENABLE_INVOICE_BILLING:
+            billing_method = "card"
+
+        # For invoice billing, the user skipped the card step so customer may not exist yet
+        if billing_method == "invoice":
+            ok, err = ensure_stripe_customer(request.user)
+            if not ok:
+                return Response(
+                    {"success": False, "message": err},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        new_subscription = self.create_subscription(request, new_plan, billing_method)
 
         try:
             if new_subscription.status == "active":
                 request.user.profile.stripe_subscription_id = new_subscription.id
                 request.user.profile.membership_plan = new_plan
-                request.user.profile.subscription_status = "active"
+                request.user.profile.subscription_status = (
+                    "pending" if billing_method == "invoice" else "active"
+                )
+                request.user.profile.billing_method = billing_method
                 request.user.profile.save()
 
                 request.user.log_event(
@@ -435,7 +499,7 @@ class CompleteSignup(StripeAPIView):
     def post(self, request):
         member_profile = request.user.profile
 
-        if member_profile.subscription_status != "active":
+        if member_profile.subscription_status not in ("active", "pending"):
             return Response(
                 {
                     "success": False,
@@ -447,6 +511,23 @@ class CompleteSignup(StripeAPIView):
         signupCheck = member_profile.can_signup()
 
         if signupCheck["success"]:
+            # For invoice billing: all requirements met, but don't activate until
+            # invoice is paid. Pre-stage default door/interlock access — safe because
+            # get_tags() in access/models.py only includes state="active" profiles.
+            if member_profile.subscription_status == "pending":
+                for door in Doors.objects.filter(all_members=True):
+                    member_profile.doors.add(door)
+                for interlock in Interlock.objects.filter(all_members=True):
+                    member_profile.interlocks.add(interlock)
+
+                return Response(
+                    {
+                        "success": True,
+                        "awaitingPayment": True,
+                        "message": "signup.awaitingInvoicePayment",
+                    }
+                )
+
             member_profile.activate()
 
             # give default door access
@@ -505,6 +586,7 @@ class SubscriptionInfo(StripeAPIView):
                     "cancelAt": s.cancel_at,
                     "cancelAtPeriodEnd": s.cancel_at_period_end,
                     "startDate": s.start_date,
+                    "collectionMethod": s.collection_method,
                     "membershipTier": request.user.profile.membership_plan.member_tier.get_object(),
                     "membershipPlan": request.user.profile.membership_plan.get_object(),
                 }
@@ -537,8 +619,18 @@ class PaymentPlanResumeCancel(StripeAPIView):
                     "Member tried to resume a payment plan that doesn't exist - creating it.",
                     "stripe",
                 )
+
+                billing_method = request.user.profile.billing_method
+                if billing_method == "invoice":
+                    ok, err = ensure_stripe_customer(request.user)
+                    if not ok:
+                        return Response(
+                            {"success": False, "message": err},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        )
+
                 new_subscription = PaymentPlanSignup().create_subscription(
-                    request, current_plan
+                    request, current_plan, billing_method
                 )
 
                 try:
@@ -546,7 +638,9 @@ class PaymentPlanResumeCancel(StripeAPIView):
                         request.user.profile.stripe_subscription_id = (
                             new_subscription.id
                         )
-                        request.user.profile.subscription_status = "active"
+                        request.user.profile.subscription_status = (
+                            "pending" if billing_method == "invoice" else "active"
+                        )
                         request.user.profile.save()
 
                         request.user.log_event(
@@ -623,6 +717,29 @@ class PaymentPlanResumeCancel(StripeAPIView):
                     )
 
             else:
+                # Pending invoice subscription: cancel immediately and void the open invoice
+                if request.user.profile.subscription_status == "pending":
+                    stripe.Subscription.delete(
+                        request.user.profile.stripe_subscription_id
+                    )
+                    request.user.profile.membership_plan = None
+                    request.user.profile.stripe_subscription_id = None
+                    request.user.profile.subscription_status = "inactive"
+                    request.user.profile.billing_method = "card"
+                    request.user.profile.save()
+
+                    request.user.log_event(
+                        "Cancelled pending invoice subscription.", "stripe"
+                    )
+                    subject = f"{request.user.get_full_name()} cancelled their pending membership (no payment was made)."
+                    send_email_to_admin(
+                        subject=subject,
+                        template_vars={"title": subject, "message": subject},
+                        user=request.user,
+                        reply_to=request.user.email,
+                    )
+                    return Response({"success": True})
+
                 modified_subscription = stripe.Subscription.modify(
                     request.user.profile.stripe_subscription_id,
                     cancel_at_period_end=True,

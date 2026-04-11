@@ -70,15 +70,19 @@
           </q-card>
         </div>
 
+        <q-banner v-if="subscriptionStatus === 'pending'" class="bg-info text-white q-mb-md">
+          {{ $t('billing.awaitingInvoicePayment') }}
+        </q-banner>
+
         <q-btn
-          v-if="subscriptionStatus === 'active'"
+          v-if="subscriptionStatus === 'active' || subscriptionStatus === 'pending'"
           :disable="disableButton"
           :loading="loadingButton"
           @click="cancelPlan"
           color="error"
           :label="$tc('paymentPlans.cancelButton')"
         />
-        <member-bucks-manage-billing v-else-if="!cardExists" />
+        <member-bucks-manage-billing v-else-if="!cardExists && billingMethod !== 'invoice'" />
         <q-btn
           v-else
           :disable="disableButton"
@@ -140,6 +144,9 @@ export default defineComponent({
     },
     subscriptionStatus() {
       return this.profile.financial.subscriptionState;
+    },
+    billingMethod() {
+      return this?.profile?.financial?.billingMethod;
     },
     currentPeriodEnd() {
       return new Date(

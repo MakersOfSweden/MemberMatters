@@ -22,8 +22,8 @@
             <q-item v-if="showPaymentStep" dense>
               <q-item-section avatar>
                 <q-icon
-                  :name="paymentComplete ? icons.success : icons.fail"
-                  :color="paymentComplete ? 'positive' : nextStep === 'payment' ? 'negative' : 'grey-5'"
+                  :name="paymentComplete ? icons.success : profile.financial.subscriptionState === 'pending' ? icons.warning : icons.fail"
+                  :color="paymentComplete ? 'positive' : profile.financial.subscriptionState === 'pending' ? 'warning' : nextStep === 'payment' ? 'negative' : 'grey-5'"
                 />
               </q-item-section>
               <q-item-section :class="paymentComplete ? 'text-strike text-grey-6' : nextStep === 'payment' ? 'text-weight-bold' : 'text-grey-6'">
@@ -31,6 +31,8 @@
                 <q-item-label caption>{{
                   paymentComplete
                     ? $t('membershipStatusCard.paymentComplete')
+                    : profile.financial.subscriptionState === 'pending'
+                    ? $t('membershipStatusCard.paymentPending')
                     : $t('membershipStatusCard.paymentRequired')
                 }}</q-item-label>
               </q-item-section>
@@ -79,17 +81,17 @@
       <!-- active -->
       <template v-else-if="profile.memberStatus === 'active'">
         <div
-          v-if="formattedRenewalDate && profile.subscriptionStatus !== 'cancelling'"
+          v-if="formattedRenewalDate && profile.financial.subscriptionState !== 'cancelling'"
           class="q-mb-sm text-caption"
         >
           {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }} ({{ $t('membershipStatusCard.inDays', { days: daysUntilRenewal }) }})
         </div>
         <q-chip
-          v-if="features.enableMembershipPayments && profile.subscriptionStatus"
+          v-if="features.enableMembershipPayments && profile.financial.subscriptionState"
           :color="
-            profile.subscriptionStatus === 'active'
+            profile.financial.subscriptionState === 'active'
               ? 'positive'
-              : profile.subscriptionStatus === 'cancelling'
+              : profile.financial.subscriptionState === 'cancelling'
               ? 'orange'
               : 'grey-7'
           "
@@ -98,7 +100,7 @@
           :label="subscriptionLabel"
         />
         <q-banner
-          v-if="features.enableMembershipPayments && profile.subscriptionStatus === 'cancelling'"
+          v-if="features.enableMembershipPayments && profile.financial.subscriptionState === 'cancelling'"
           inline-actions
           rounded
           class="bg-orange text-white q-mt-sm"
@@ -218,7 +220,7 @@ export default {
       return null;
     },
     paymentComplete() {
-      return this.profile.subscriptionStatus === 'active';
+      return this.profile.financial.subscriptionState === 'active';
     },
     inductionComplete() {
       return this.requiredSteps !== null && !this.requiredSteps.includes('induction');
@@ -236,8 +238,8 @@ export default {
       return colors[this.profile.memberStatus] || 'grey-7';
     },
     subscriptionLabel() {
-      const key = `membershipStatusCard.subscriptionChip.${this.profile.subscriptionStatus}`;
-      return this.$te(key) ? this.$t(key) : this.profile.subscriptionStatus;
+      const key = `membershipStatusCard.subscriptionChip.${this.profile.financial.subscriptionState}`;
+      return this.$te(key) ? this.$t(key) : this.profile.financial.subscriptionState;
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;

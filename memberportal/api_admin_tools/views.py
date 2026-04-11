@@ -19,6 +19,7 @@ from sentry_sdk import capture_message
 
 from access import models
 from access.models import DoorLog, InterlockLog
+from api_billing.views import ensure_stripe_customer
 from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
@@ -564,63 +565,16 @@ class MemberEnsureStripeCustomer(StripeAPIView):
 
     def post(self, request, member_id):
         member = get_object_or_404(User, id=member_id)
-        profile = member.profile
-        customer_exists = True
 
-        if profile.stripe_customer_id:
-            try:
-                customer = stripe.Customer.retrieve(profile.stripe_customer_id)
-                if customer.get("deleted") or not customer:
-                    customer_exists = False
-            except stripe.error.InvalidRequestError as error:
-                if error.http_status == 404:
-                    profile.stripe_customer_id = None
-                    profile.save()
-                    customer_exists = False
+        ok, err = ensure_stripe_customer(member)
+        if ok:
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Stripe customer exists with ID: {member.profile.stripe_customer_id}",
+                }
+            )
         else:
-            customer_exists = False
-
-        if customer_exists:
-            member.log_event(
-                f"Stripe customer already exists (Stripe ID: {profile.stripe_customer_id}).",
-                "stripe",
-            )
-            return Response(
-                {
-                    "success": True,
-                    "message": f"Customer already exists with Stripe ID: {profile.stripe_customer_id}",
-                }
-            )
-
-        try:
-            member.log_event("Attempting to create stripe customer.", "stripe")
-            customer = stripe.Customer.create(
-                email=member.email,
-                name=profile.get_full_name(),
-                phone=profile.phone,
-            )
-
-            profile.stripe_customer_id = customer.id
-            profile.save()
-
-            member.log_event(
-                f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
-                "stripe",
-            )
-
-            return Response(
-                {
-                    "success": True,
-                    "message": f"Created Stripe customer with ID: {customer.id}",
-                }
-            )
-
-        except stripe.error.StripeError as e:
-            capture_exception(e)
-            member.log_event(
-                "Error while creating stripe customer.",
-                "stripe",
-            )
             return Response(
                 {
                     "success": False,

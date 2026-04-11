@@ -120,6 +120,19 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    "ENABLE_INVOICE_BILLING": (
+        False,
+        "Enable the 'Pay by Invoice' option during membership signup. "
+        "When enabled, members may choose to receive a Stripe invoice by email "
+        "instead of paying by card. Membership activation is deferred until the invoice is paid.",
+    ),
+    "INVOICE_DAYS_UNTIL_DUE": (
+        14,
+        "Number of days before a Stripe membership invoice is due. "
+        "To automatically cancel subscriptions after non-payment, configure "
+        "'Cancel subscriptions after failed payment' in your Stripe Dashboard under "
+        "Billing → Settings → Subscriptions and emails.",
+    ),
     # ==== Membership Status Card ====
     "ENABLE_MEMBERSHIP_STATUS_CARD": (
         True,
@@ -502,6 +515,8 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "STRIPE_WEBHOOK_SECRET",
                 "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS",
                 "MEMBERBUCKS_CURRENCY",
+                "ENABLE_INVOICE_BILLING",
+                "INVOICE_DAYS_UNTIL_DUE",
             ),
         ),
         (

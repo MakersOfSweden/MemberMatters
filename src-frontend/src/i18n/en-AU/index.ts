@@ -484,6 +484,7 @@ export default {
       active: 'Active',
       inactive: 'Inactive',
       cancelling: 'Cancelling',
+      pending: 'Pending',
     },
     memberStatusString: {
       noob: 'New Member',
@@ -551,6 +552,8 @@ export default {
     signupSuccess: 'Signup success',
     signupSuccessDescription:
       'Your payment was processed successfully. This page will refresh in a moment.',
+    signupSuccessInvoiceDescription:
+      'Your subscription has been created. An invoice has been emailed to you — your membership will be activated once payment is received.',
     cancelButton: 'Cancel my membership',
     cancelConfirmDescription:
       'Are you sure you want to cancel your membership? Your membership will remain active until the end of your current billing period. You can resume it at any point before the end of your current billing period.',
@@ -596,6 +599,9 @@ export default {
     submittedDescription:
       "Your membership application has been submitted and you are now a 'member applicant'. Your membership will be accepted soon, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information.",
     continueToDashboard: 'Continue to dashboard',
+    awaitingPaymentTitle: 'All requirements complete!',
+    awaitingInvoicePayment:
+      'Your access will be activated automatically once your invoice payment is received.',
     error: 'Error submitting membership application',
     errorDescription:
       "We're very sorry but there was an unexpected error when submitting your application. Please contact us at {email} for assistance.",
@@ -624,6 +630,7 @@ export default {
     confirmDelay:
       'Your membership application will be submitted after you complete the next steps.',
     finish: 'Pay & Continue',
+    finishInvoice: 'Confirm & Get Invoice',
     plansFrom: 'From {plan}',
     skipSignup: 'Skip Signup (if you just want an account)',
   },
@@ -678,6 +685,7 @@ export default {
     payment: 'Payment',
     paymentComplete: 'Subscription active',
     paymentRequired: 'Membership payment required',
+    paymentPending: 'Invoice sent — awaiting payment',
     inductionComplete: 'Induction completed',
     inductionRequired: 'Online induction required',
     accessCardComplete: 'Access card registered',
@@ -688,6 +696,7 @@ export default {
       active: 'Subscription active',
       cancelling: 'Subscription cancelling',
       inactive: 'No active subscription',
+      pending: 'Awaiting invoice payment',
     },
     membershipExpires: 'Membership expires on {date}.',
     cancellingWarning:
@@ -703,5 +712,15 @@ export default {
     viewMembership: 'View Membership',
     viewAccount: 'View Account',
     becomeMember: 'Become a Member',
+  },
+  billing: {
+    selectMethod: 'How would you like to pay?',
+    payByCard: 'Pay by card',
+    payByInvoice: 'Pay by invoice',
+    invoiceDescription:
+      'An invoice will be emailed to you. Your membership will be activated once payment is received.',
+    invoiceAmount: 'Invoice amount: {amount}',
+    awaitingInvoicePayment:
+      'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
   },
 };
