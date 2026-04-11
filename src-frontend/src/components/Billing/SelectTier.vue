@@ -106,8 +106,7 @@
             <q-item
               clickable
               v-ripple
-              :active="selectedBillingMethod === 'card'"
-              active-class="billing-method-active"
+              :class="{ 'billing-method-active': selectedBillingMethod === 'card' }"
               @click="selectedBillingMethod = 'card'"
             >
               <q-item-section avatar>
@@ -124,8 +123,7 @@
             <q-item
               clickable
               v-ripple
-              :active="selectedBillingMethod === 'invoice'"
-              active-class="billing-method-active"
+              :class="{ 'billing-method-active': selectedBillingMethod === 'invoice' }"
               @click="selectedBillingMethod = 'invoice'"
             >
               <q-item-section avatar>
@@ -140,10 +138,10 @@
             </q-item>
           </q-list>
 
-          <div class="text-caption text-grey-7 q-mt-sm q-px-sm">
+          <div class="text-caption q-mt-sm q-px-sm">
             {{ selectedBillingMethod === 'card' ? $t('billing.cardDescription') : $t('billing.invoiceDescription') }}
           </div>
-          <div v-if="selectedBillingMethod === 'invoice' && features.invoiceBillingNote" class="text-caption text-grey-7 q-mt-xs q-px-sm">
+          <div v-if="selectedBillingMethod === 'invoice' && features.invoiceBillingNote" class="text-caption q-mt-xs q-px-sm">
             {{ features.invoiceBillingNote }}
           </div>
         </div>
@@ -418,9 +416,5 @@ export default defineComponent({
 
 .billing-method-active {
   background-color: rgba(var(--q-primary-rgb, 39, 138, 176), 0.08);
-
-  .q-item__label {
-    color: inherit;
-  }
 }
 </style>
