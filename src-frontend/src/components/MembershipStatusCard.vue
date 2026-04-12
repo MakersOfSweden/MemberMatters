@@ -8,12 +8,12 @@
     </q-card-section>
 
     <div :class="`bg-${stateBadgeColor} text-white text-center text-subtitle1 text-weight-medium q-py-sm q-mb-sm`">
-      {{ $t(`membershipStatusCard.stateBanner.${profile.memberStatus}`) }}
+      {{ $t(`membershipStatusCard.stateBanner.${bannerKey}`) }}
     </div>
 
     <q-card-section class="q-pt-sm">
-      <!-- noob: signup checklist -->
-      <template v-if="profile.memberStatus === 'noob'">
+      <!-- signup checklist: new members, or returning members awaiting invoice payment -->
+      <template v-if="isSignupInProgress">
         <template v-if="requiredSteps === null">
           <q-spinner color="primary" size="sm" />
         </template>
@@ -79,7 +79,7 @@
       </template>
 
       <!-- active -->
-      <template v-else-if="profile.memberStatus === 'active'">
+      <template v-else-if="isActiveMember">
         <div
           v-if="formattedRenewalDate && profile.financial.subscriptionState !== 'cancelling'"
           class="q-mb-sm text-caption"
@@ -116,8 +116,8 @@
         </q-banner>
       </template>
 
-      <!-- inactive -->
-      <template v-else-if="profile.memberStatus === 'inactive'">
+      <!-- inactive (former member, no pending invoice) -->
+      <template v-else-if="isInactiveMember">
         <p class="q-mb-none">{{ $t('membershipStatusCard.inactiveDescription') }}</p>
       </template>
 
@@ -165,10 +165,10 @@ export default {
     };
   },
   watch: {
-    'profile.memberStatus': {
+    isSignupInProgress: {
       immediate: true,
-      handler(status) {
-        if (status === 'noob') {
+      handler(inProgress) {
+        if (inProgress) {
           this.$axios
             .get('/api/billing/can-signup/')
             .then((response) => {
@@ -178,7 +178,12 @@ export default {
               console.log(e);
             });
         }
-        if (status === 'active' && this.features.enableMembershipPayments) {
+      },
+    },
+    isActiveMember: {
+      immediate: true,
+      handler(active) {
+        if (active && this.features.enableMembershipPayments) {
           this.$axios
             .get('/api/billing/myplan/')
             .then((response) => {
@@ -216,6 +221,23 @@ export default {
     paymentPending() {
       return this.profile.financial.subscriptionState === 'pending';
     },
+    // A returning member (state="inactive") with a pending invoice subscription
+    // is mid-signup — treat them like a new "noob" member until payment arrives.
+    isSignupInProgress() {
+      return (
+        this.profile.memberStatus === 'noob' ||
+        (this.profile.memberStatus === 'inactive' && this.paymentPending)
+      );
+    },
+    isActiveMember() {
+      return this.profile.memberStatus === 'active';
+    },
+    isInactiveMember() {
+      return this.profile.memberStatus === 'inactive' && !this.paymentPending;
+    },
+    bannerKey() {
+      return this.isSignupInProgress ? 'noob' : this.profile.memberStatus;
+    },
     nextStep() {
       // When invoice is pending, payment is "in progress" (awaiting invoice) — skip to next actionable step
       if (this.showPaymentStep && !this.paymentComplete && !this.paymentPending) return 'payment';
@@ -239,7 +261,7 @@ export default {
         inactive: 'yellow-8',
         accountonly: 'grey-7',
       };
-      return colors[this.profile.memberStatus] || 'grey-7';
+      return colors[this.bannerKey] || 'grey-7';
     },
     subscriptionLabel() {
       const key = `membershipStatusCard.subscriptionChip.${this.profile.financial.subscriptionState}`;
@@ -262,25 +284,22 @@ export default {
       return dayjs(this.cancelAt * 1000).diff(dayjs(), 'day');
     },
     ctaLabel() {
-      if (this.profile.memberStatus === 'noob') {
+      if (this.isSignupInProgress) {
         return this.$t('membershipStatusCard.completeSetup');
       }
-      if (this.profile.memberStatus === 'active') {
+      if (this.isActiveMember) {
         return this.$t('membershipStatusCard.viewMembership');
       }
-      if (
-        this.profile.memberStatus === 'inactive' &&
-        this.features.enableMembershipPayments
-      ) {
+      if (this.isInactiveMember && this.features.enableMembershipPayments) {
         return this.$t('membershipStatusCard.activateMembership');
       }
       return this.$t('membershipStatusCard.viewAccount');
     },
     ctaRoute() {
       if (
-        this.profile.memberStatus === 'noob' ||
-        this.profile.memberStatus === 'active' ||
-        (this.profile.memberStatus === 'inactive' && this.features.enableMembershipPayments)
+        this.isSignupInProgress ||
+        this.isActiveMember ||
+        (this.isInactiveMember && this.features.enableMembershipPayments)
       ) {
         return 'membershipPlan';
       }
