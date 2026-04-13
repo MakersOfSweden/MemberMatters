@@ -86,19 +86,6 @@
         >
           {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }} ({{ $t('membershipStatusCard.inDays', { days: daysUntilRenewal }) }})
         </div>
-        <q-chip
-          v-if="features.enableMembershipPayments && profile.financial.subscriptionState"
-          :color="
-            profile.financial.subscriptionState === 'active'
-              ? 'positive'
-              : profile.financial.subscriptionState === 'cancelling'
-              ? 'orange'
-              : 'grey-7'
-          "
-          text-color="white"
-          dense
-          :label="subscriptionLabel"
-        />
         <q-banner
           v-if="features.enableMembershipPayments && profile.financial.subscriptionState === 'cancelling'"
           inline-actions
@@ -262,10 +249,6 @@ export default {
         accountonly: 'grey-7',
       };
       return colors[this.bannerKey] || 'grey-7';
-    },
-    subscriptionLabel() {
-      const key = `membershipStatusCard.subscriptionChip.${this.profile.financial.subscriptionState}`;
-      return this.$te(key) ? this.$t(key) : this.profile.financial.subscriptionState;
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;

@@ -688,13 +688,6 @@ export default {
     accessCardComplete: 'Nyckelkort registrerat',
     accessCardRequired: 'Registrering av nyckelkort krävs',
     setupInProgress: 'Installation pågår.',
-    activeDescription: 'Du är en aktiv medlem.',
-    subscriptionChip: {
-      active: 'Abonnemang aktivt',
-      cancelling: 'Abonnemang avslutas',
-      inactive: 'Inget aktivt abonnemang',
-      pending: 'Väntar på fakturabetalning',
-    },
     membershipExpires: 'Medlemskapet upphör den {date}.',
     cancellingWarning:
       'Ditt abonnemang avslutas. Åtkomst upphör vid nästa förnyelsedatum.',
