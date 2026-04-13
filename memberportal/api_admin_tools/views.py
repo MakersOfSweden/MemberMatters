@@ -973,3 +973,104 @@ class ManageSettings(APIView):
 
         except ConstanceSetting.DoesNotExist as e:
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class PendingInvoices(StripeAPIView):
+    """
+    get: Returns a list of members with an outstanding (open) Stripe invoice
+    for their subscription. Used by the admin Pending Invoices panel to
+    facilitate off-Stripe payment collection (bank transfer, cash, etc.)
+    while still using the Stripe subscription mechanism.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request):
+        if not config.ENABLE_INVOICE_BILLING:
+            return Response([])
+
+        pending_members = User.objects.select_related("profile").filter(
+            profile__subscription_status="pending"
+        )
+
+        results = []
+        for member in pending_members:
+            profile = member.profile
+            if not profile.stripe_subscription_id:
+                continue
+
+            try:
+                invoices = stripe.Invoice.list(
+                    subscription=profile.stripe_subscription_id,
+                    status="open",
+                    limit=1,
+                )
+                if not invoices.data:
+                    continue
+                invoice = invoices.data[0]
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                continue
+
+            plan = profile.membership_plan
+            results.append(
+                {
+                    "memberId": member.id,
+                    "memberName": profile.get_full_name(),
+                    "memberEmail": member.email,
+                    "planName": plan.name if plan else None,
+                    "invoiceId": invoice.id,
+                    "invoiceNumber": invoice.number,
+                    "amountDue": invoice.amount_due,
+                    "currency": invoice.currency,
+                    "created": invoice.created,
+                    "dueDate": invoice.due_date,
+                    "hostedInvoiceUrl": invoice.hosted_invoice_url,
+                }
+            )
+
+        return Response(results)
+
+
+class MarkInvoicePaid(StripeAPIView):
+    """
+    post: Marks a Stripe invoice as paid out-of-band (e.g. bank transfer,
+    cash) without charging through Stripe. An optional comment is stored on
+    the invoice's metadata for audit trail purposes.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, invoice_id):
+        if not config.ENABLE_INVOICE_BILLING:
+            return Response(
+                {"success": False, "message": "Invoice billing is disabled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        comment = (request.data.get("comment") or "").strip()
+
+        try:
+            if comment:
+                stripe.Invoice.modify(
+                    invoice_id,
+                    metadata={
+                        "marked_paid_by": request.user.email,
+                        "marked_paid_comment": comment[:500],
+                    },
+                )
+            stripe.Invoice.pay(invoice_id, paid_out_of_band=True)
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        request.user.log_event(
+            f"Marked Stripe invoice {invoice_id} as paid out-of-band."
+            + (f" Comment: {comment}" if comment else ""),
+            "stripe",
+        )
+
+        return Response({"success": True})

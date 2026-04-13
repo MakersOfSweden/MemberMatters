@@ -27,6 +27,7 @@ export default {
     interlocks: 'Interlocks',
     devices: 'Devices',
     kiosks: 'Kiosks',
+    pendingInvoices: 'Pending Invoices',
 
     memberTools: 'Member Tools',
     reportIssue: 'Report Issue',
@@ -718,5 +719,29 @@ export default {
     viewInvoice: 'View Invoice',
     awaitingInvoicePayment:
       'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
+  },
+  pendingInvoices: {
+    title: 'Pending Invoices',
+    description:
+      'Members with an outstanding invoice for their membership subscription. Use this panel to record payments received outside of Stripe (bank transfer, cash, etc.).',
+    noInvoices: 'No pending invoices.',
+    columnMember: 'Member',
+    columnEmail: 'Email',
+    columnPlan: 'Plan',
+    columnAmount: 'Amount Due',
+    columnCreated: 'Created',
+    columnDue: 'Due',
+    columnActions: 'Actions',
+    viewInStripe: 'View in Stripe',
+    markPaid: 'Mark as Paid',
+    markPaidTitle: 'Mark Invoice as Paid',
+    markPaidHelp:
+      'This marks the invoice as paid out-of-band in Stripe (no card charge). The subscription will activate via the paid webhook. Add an optional note for the audit trail.',
+    commentLabel: 'Comment (optional)',
+    commentPlaceholder: 'e.g. Paid by bank transfer on 2026-04-10',
+    confirmMarkPaid: 'Mark as Paid',
+    markPaidSuccess: 'Invoice marked as paid.',
+    markPaidError: 'Failed to mark invoice as paid.',
+    fetchError: 'Failed to load pending invoices.',
   },
 };
