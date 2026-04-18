@@ -65,6 +65,7 @@ export default {
     loginFailed: 'Ditt användarnamn eller lösenord är felaktigt.',
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
+    screenNameRequired: 'Ange ett användarnamn.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
     requestFailed:
       "Det har uppstått ett fel. Försök igen senare.",
