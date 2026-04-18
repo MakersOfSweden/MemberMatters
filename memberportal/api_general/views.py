@@ -54,6 +54,8 @@ class GetConfig(APIView):
                 "memberCanEnterAccessCard": config.MEMBER_CAN_ENTER_ACCESS_CARD,
                 "postInductionUrl": config.POST_INDUCTION_URL,
                 "collectVehicleRegistrationPlate": config.COLLECT_VEHICLE_REGISTRATION_PLATE,
+                "requirePrivacyConsent": config.SIGNUP_REQUIRE_PRIVACY_CONSENT,
+                "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
             },
             "enableWebcams": config.ENABLE_WEBCAMS,
             "siteBanner": config.SITE_BANNER,

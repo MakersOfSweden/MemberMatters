@@ -112,6 +112,37 @@
                 />
               </template>
             </q-input>
+
+            <q-field
+              v-if="features?.signup?.requirePrivacyConsent"
+              class="col-12"
+              borderless
+              dense
+              :model-value="form.privacyConsent"
+              :rules="[
+                (val) => val || $t('registrationCard.privacyConsentRequired'),
+              ]"
+            >
+              <q-checkbox
+                v-model="form.privacyConsent"
+                class="q-mt-sm"
+                color="primary"
+              >
+                <span>
+                  {{ $t('registrationCard.privacyConsent') }}
+                  <a
+                    v-if="features?.signup?.privacyPolicyUrl"
+                    :href="features.signup.privacyPolicyUrl"
+                    target="_blank"
+                    rel="noopener"
+                    :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+                    @click.stop
+                  >
+                    {{ $t('registrationCard.privacyPolicyLink') }}
+                  </a>
+                </span>
+              </q-checkbox>
+            </q-field>
           </div>
 
           <q-banner v-if="error" class="bg-negative text-white">
@@ -173,6 +204,7 @@ export default defineComponent({
         mobile: null,
         password: null,
         vehicleRegistrationPlate: null,
+        privacyConsent: false,
       },
     };
   },

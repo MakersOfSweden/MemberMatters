@@ -655,6 +655,10 @@ export default {
     loginHere: 'Login Here',
     registrationComplete:
       'Registration complete. Please check your email and click the link to verify your email address.',
+    privacyConsent:
+      'I consent to the storage and processing of my personal data.',
+    privacyPolicyLink: 'View privacy policy.',
+    privacyConsentRequired: 'You must consent before registering.',
   },
   verifyEmail: {
     error:
