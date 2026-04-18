@@ -277,10 +277,12 @@ class PaymentPlanSignup(StripeAPIView):
 
             subscription = stripe.Subscription.create(**subscription_params)
 
-            # Stripe creates the first invoice as draft for send_invoice subscriptions.
-            # Finalize and send it immediately so the member receives it right away.
+            # For send_invoice subscriptions, Stripe delays finalizing the first
+            # invoice by ~1 hour before auto-sending it. Finalize it immediately
+            # so the member receives the invoice right away — Stripe then emails
+            # it automatically as part of send_invoice collection behavior.
             if billing_method == "invoice" and subscription.latest_invoice:
-                stripe.Invoice.send_invoice(subscription.latest_invoice)
+                stripe.Invoice.finalize_invoice(subscription.latest_invoice)
 
             return subscription
 
