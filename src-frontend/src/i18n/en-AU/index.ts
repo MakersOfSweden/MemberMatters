@@ -568,6 +568,9 @@ export default {
       "Your membership is scheduled to be cancelled on {date}. If you'd like to resume your plan (listed above), please tap below.",
     renewalDate: 'Renewal Date',
     signupDate: 'Signup Date',
+    paymentMethod: 'Payment Method',
+    paymentMethodCard: 'Card (automatic)',
+    paymentMethodInvoice: 'Invoice (manual)',
     subscriptionInfo: 'Subscription Info',
     accountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped this process last time. You're welcome to continue using this account for our online services, or you can signup to become a member below. ",
@@ -719,6 +722,10 @@ export default {
     viewInvoice: 'View Invoice',
     awaitingInvoicePayment:
       'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
+    invoiceMethodMemberbucksInfo:
+      'You pay your membership by invoice — no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
+    invoiceMethodNoCardNeeded:
+      'You pay your membership by invoice — no card is needed. Your membership invoice will be emailed to you each billing cycle.',
   },
   pendingInvoices: {
     title: 'Pending Invoices',

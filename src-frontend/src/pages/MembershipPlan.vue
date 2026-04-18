@@ -71,6 +71,14 @@
             <q-list bordered separator>
               <q-item>
                 <q-item-section>
+                  <q-item-label>{{ paymentMethodLabel }}</q-item-label>
+                  <q-item-label caption>{{
+                    $tc('paymentPlans.paymentMethod')
+                  }}</q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item>
+                <q-item-section>
                   <q-item-label>{{ currentPeriodEnd }}</q-item-label>
                   <q-item-label caption>{{
                     $tc('paymentPlans.renewalDate')
@@ -177,6 +185,12 @@ export default defineComponent({
       return new Date(this.subscriptionInfo?.cancelAt * 1000).toLocaleString(
         'en-au'
       );
+    },
+    paymentMethodLabel() {
+      const method = this.profile?.financial?.billingMethod;
+      return method === 'invoice'
+        ? this.$t('paymentPlans.paymentMethodInvoice')
+        : this.$t('paymentPlans.paymentMethodCard');
     },
   },
   methods: {

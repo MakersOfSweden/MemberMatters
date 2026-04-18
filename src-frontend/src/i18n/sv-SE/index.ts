@@ -565,6 +565,9 @@ export default {
       "Ditt medlemskap kommer att avslutas på datumet {date}. Om du vill återstarta ditt medlemskap (se ovan), vänligen klicka nedan.",
     renewalDate: 'Förnyelsedatum',
     signupDate: 'Registreringsdatum',
+    paymentMethod: 'Betalningsmetod',
+    paymentMethodCard: 'Kort (automatisk)',
+    paymentMethodInvoice: 'Faktura (manuell)',
     subscriptionInfo: 'Abonnemangs-info',
     accountOnlyWarning:
       "Din profil är för närvarande 'endast konto'. Detta beror på att du skippade denna process förra gången. Du är välkommen att forsätta använda detta konto i sin nuvarande form, eller så kan du registrera dig för att bli medlem nedan. ",
@@ -716,6 +719,10 @@ export default {
     viewInvoice: 'Visa Faktura',
     awaitingInvoicePayment:
       'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
+    invoiceMethodMemberbucksInfo:
+      'Du betalar ditt medlemskap via faktura — inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
+    invoiceMethodNoCardNeeded:
+      'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
   },
   pendingInvoices: {
     title: 'Väntande fakturor',
