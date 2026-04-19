@@ -1062,10 +1062,13 @@ class MarkInvoicePaid(StripeAPIView):
         # Only allow paying invoices that belong to a member whose subscription
         # is currently pending — this prevents marking arbitrary invoices in the
         # Stripe account (memberbucks top-ups, unrelated charges, etc.) as paid.
-        if not invoice.subscription or not Profile.objects.filter(
-            stripe_subscription_id=invoice.subscription,
-            subscription_status="pending",
-        ).exists():
+        if (
+            not invoice.subscription
+            or not Profile.objects.filter(
+                stripe_subscription_id=invoice.subscription,
+                subscription_status="pending",
+            ).exists()
+        ):
             return Response(
                 {
                     "success": False,
