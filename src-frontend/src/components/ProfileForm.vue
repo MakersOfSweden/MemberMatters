@@ -5,7 +5,7 @@
         v-model="form.email"
         outlined
         :debounce="debounceLength"
-        :label="$t('form.email')"
+        :label="`${$t('form.email')} *`"
         :rules="[(val) => validateEmail(val) || $t('validation.invalidEmail')]"
         @update:model-value="saveChange('email')"
       >
@@ -22,7 +22,7 @@
         v-model="form.firstName"
         outlined
         :debounce="debounceLength"
-        :label="$t('form.firstName')"
+        :label="`${$t('form.firstName')} *`"
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
         ]"
@@ -41,7 +41,7 @@
         v-model="form.lastName"
         outlined
         :debounce="debounceLength"
-        :label="$t('form.lastName')"
+        :label="`${$t('form.lastName')} *`"
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
         ]"
@@ -60,7 +60,7 @@
         v-model="form.phone"
         outlined
         :debounce="debounceLength"
-        :label="$t('form.mobile')"
+        :label="`${$t('form.mobile')} *`"
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.invalidPhone'),
         ]"
@@ -79,7 +79,7 @@
         v-model="form.screenName"
         outlined
         :debounce="debounceLength"
-        :label="$t('form.screenName')"
+        :label="`${$t('form.screenName')} *`"
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
         ]"
