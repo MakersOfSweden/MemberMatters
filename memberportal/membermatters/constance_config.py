@@ -124,14 +124,21 @@ CONSTANCE_CONFIG = {
         False,
         "Enable the 'Pay by Invoice' option during membership signup. "
         "When enabled, members may choose to receive a Stripe invoice by email "
-        "instead of paying by card. Membership activation is deferred until the invoice is paid.",
+        "instead of paying by card. Membership activation is deferred until the "
+        "invoice is paid. REQUIRED Stripe setup: in Billing → Settings → "
+        "Subscriptions and emails, configure 'Manage failed payments' to cancel "
+        "the subscription after the invoice goes past due. Without this, "
+        "members who never pay stay in 'pending' state indefinitely — it is "
+        "the customer.subscription.deleted webhook (triggered by Stripe's "
+        "auto-cancel) that moves the member back to 'inactive'. MemberMatters "
+        "automatically voids the open invoice when that webhook fires, so no "
+        "additional invoice-handling configuration is required in Stripe.",
     ),
     "INVOICE_DAYS_UNTIL_DUE": (
         31,
         "Number of days before a Stripe membership invoice is due. "
-        "To automatically cancel subscriptions after non-payment, configure "
-        "'Cancel subscriptions after failed payment' in your Stripe Dashboard under "
-        "Billing → Settings → Subscriptions and emails.",
+        "See ENABLE_INVOICE_BILLING for the required Stripe Dashboard setup "
+        "that handles what happens once an invoice goes past due.",
     ),
     "INVOICE_BILLING_NOTE": (
         "Supported payment methods are: ",

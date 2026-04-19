@@ -24,7 +24,7 @@ from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
 )
-from profile.models import User, UserEventLog
+from profile.models import Profile, User, UserEventLog
 from services import sms
 from services.emails import send_email_to_admin
 from .models import MemberTier, PaymentPlan
@@ -1051,14 +1051,30 @@ class MarkInvoicePaid(StripeAPIView):
         comment = (request.data.get("comment") or "").strip()
 
         try:
-            if comment:
-                stripe.Invoice.modify(
-                    invoice_id,
-                    metadata={
-                        "marked_paid_by": request.user.email,
-                        "marked_paid_comment": comment[:500],
-                    },
-                )
+            invoice = stripe.Invoice.retrieve(invoice_id)
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Only allow paying invoices that belong to a member whose subscription
+        # is currently pending — this prevents marking arbitrary invoices in the
+        # Stripe account (memberbucks top-ups, unrelated charges, etc.) as paid.
+        if not invoice.subscription or not Profile.objects.filter(
+            stripe_subscription_id=invoice.subscription,
+            subscription_status="pending",
+        ).exists():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invoice is not for a pending membership subscription.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
             stripe.Invoice.pay(invoice_id, paid_out_of_band=True)
         except stripe.error.StripeError as e:
             capture_exception(e)
@@ -1066,6 +1082,18 @@ class MarkInvoicePaid(StripeAPIView):
                 {"success": False, "message": str(e)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+        if comment:
+            try:
+                stripe.Invoice.modify(
+                    invoice_id,
+                    metadata={
+                        "marked_paid_by": request.user.email,
+                        "marked_paid_comment": comment[:500],
+                    },
+                )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
 
         request.user.log_event(
             f"Marked Stripe invoice {invoice_id} as paid out-of-band."

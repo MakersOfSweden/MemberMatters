@@ -280,9 +280,20 @@ class PaymentPlanSignup(StripeAPIView):
             # For send_invoice subscriptions, Stripe delays finalizing the first
             # invoice by ~1 hour before auto-sending it. Finalize it immediately
             # so the member receives the invoice right away — Stripe then emails
-            # it automatically as part of send_invoice collection behavior.
+            # it automatically as part of send_invoice collection behavior. If
+            # this call fails (rate limit, transient API error), Stripe's built-in
+            # auto-finalize still runs within ~1 hour, so the subscription is
+            # still usable — the member just gets their invoice email delayed.
             if billing_method == "invoice" and subscription.latest_invoice:
-                stripe.Invoice.finalize_invoice(subscription.latest_invoice)
+                try:
+                    stripe.Invoice.finalize_invoice(subscription.latest_invoice)
+                except stripe.error.StripeError as e:
+                    capture_exception(e)
+                    request.user.log_event(
+                        "Failed to finalize invoice immediately; "
+                        "Stripe will auto-finalize within ~1 hour.",
+                        "stripe",
+                    )
 
             return subscription
 
@@ -732,10 +743,21 @@ class PaymentPlanResumeCancel(StripeAPIView):
                     )
 
             else:
-                # Pending invoice subscription: cancel immediately and void the open invoice
+                # Pending invoice subscription: void any open invoice(s) and cancel immediately.
+                # Stripe does not auto-void open invoices when a subscription is cancelled, so
+                # they would otherwise linger in the customer's Stripe portal.
                 if request.user.profile.subscription_status == "pending":
+                    subscription_id = request.user.profile.stripe_subscription_id
+                    open_invoices = stripe.Invoice.list(
+                        subscription=subscription_id, status="open"
+                    )
+                    for invoice in open_invoices.auto_paging_iter():
+                        stripe.Invoice.void_invoice(invoice.id)
+
+                    # No period has elapsed and nothing was paid, so we explicitly
+                    # don't want Stripe to generate a final/proration invoice.
                     stripe.Subscription.delete(
-                        request.user.profile.stripe_subscription_id
+                        subscription_id, invoice_now=False, prorate=False
                     )
                     request.user.profile.membership_plan = None
                     request.user.profile.stripe_subscription_id = None
@@ -944,6 +966,20 @@ class StripeWebhook(StripeAPIView):
 
         if event_type == "customer.subscription.deleted":
             # the subscription was deleted, so deactivate the member
+
+            # Void any invoices still open against this subscription. Stripe does
+            # not auto-void them on cancellation, so without this they linger in
+            # the customer's Stripe portal indefinitely. Safe for both card and
+            # invoice billing — paid/void/uncollectible invoices are not listed.
+            try:
+                open_invoices = stripe.Invoice.list(
+                    subscription=data["id"], status="open"
+                )
+                for invoice in open_invoices.auto_paging_iter():
+                    stripe.Invoice.void_invoice(invoice.id)
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+
             subject = "Your membership has been cancelled"
             message = (
                 "You will receive another email shortly confirming that your access has been deactivated. Your "
