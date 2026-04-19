@@ -57,6 +57,7 @@ class GetConfig(APIView):
                 "requirePrivacyConsent": config.SIGNUP_REQUIRE_PRIVACY_CONSENT,
                 "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
                 "privacyPolicyText": config.SIGNUP_PRIVACY_POLICY_TEXT,
+                "requireScreenName": config.REQUIRE_SCREEN_NAME,
             },
             "enableWebcams": config.ENABLE_WEBCAMS,
             "siteBanner": config.SITE_BANNER,
@@ -424,7 +425,7 @@ class ProfileDetail(generics.GenericAPIView):
         p = request.user.profile
         body = json.loads(request.body)
         email = body.get("email").lower()
-        screen_name = body.get("screenName").lower()
+        screen_name = (body.get("screenName") or "").strip()
 
         # check if email is specified
         if not email:
@@ -437,10 +438,12 @@ class ProfileDetail(generics.GenericAPIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # check if screen name is already in use
+        # check if screen name is already in use (case-insensitive, excluding self)
         if (
-            Profile.objects.filter(screen_name=screen_name).exists()
-            and screen_name != request.user.profile.screen_name
+            screen_name
+            and Profile.objects.filter(screen_name__iexact=screen_name)
+            .exclude(pk=p.pk)
+            .exists()
         ):
             return Response(
                 {"message": "error.screenNameAlreadyExists"},
@@ -451,7 +454,7 @@ class ProfileDetail(generics.GenericAPIView):
         p.first_name = body.get("firstName")
         p.last_name = body.get("lastName")
         p.phone = body.get("phone")
-        p.screen_name = body.get("screenName")
+        p.screen_name = screen_name
         p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
 
         request.user.save()
@@ -655,7 +658,15 @@ class Register(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if Profile.objects.filter(screen_name=body.get("screenName").lower()).exists():
+        screen_name = (body.get("screenName") or "").strip()
+
+        if not screen_name:
+            if config.REQUIRE_SCREEN_NAME:
+                return Response(
+                    {"message": "error.screenNameRequired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif Profile.objects.filter(screen_name__iexact=screen_name).exists():
             return Response(
                 {"message": "error.screenNameAlreadyExists"},
                 status=status.HTTP_409_CONFLICT,
@@ -673,7 +684,7 @@ class Register(APIView):
             user=new_user,
             first_name=body.get("firstName"),
             last_name=body.get("lastName"),
-            screen_name=body.get("screenName"),
+            screen_name=screen_name,
             phone=body.get("mobile"),
             vehicle_registration_plate=body.get("vehicleRegistrationPlate"),
         )

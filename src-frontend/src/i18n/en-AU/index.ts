@@ -65,6 +65,7 @@ export default {
     loginFailed: 'Your username or password was incorrect.',
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
+    screenNameRequired: 'Please enter a screen name.',
     downloadFailed: 'Failed to download the file.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",

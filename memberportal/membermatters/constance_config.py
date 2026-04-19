@@ -327,6 +327,10 @@ CONSTANCE_CONFIG = {
         False,
         "Display a field that collects the member's vehicle registration plate on signup & in the profile page.",
     ),
+    "REQUIRE_SCREEN_NAME": (
+        True,
+        "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
+    ),
     "SIGNUP_REQUIRE_PRIVACY_CONSENT": (
         False,
         "Display a checkbox on the signup page requiring the user to consent to the storage of their personal data before registering.",
@@ -473,6 +477,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "REQUIRE_ACCESS_CARD",
                 "MEMBER_CAN_ENTER_ACCESS_CARD",
                 "COLLECT_VEHICLE_REGISTRATION_PLATE",
+                "REQUIRE_SCREEN_NAME",
                 "SIGNUP_REQUIRE_PRIVACY_CONSENT",
                 "SIGNUP_PRIVACY_POLICY_URL",
                 "SIGNUP_PRIVACY_POLICY_TEXT",

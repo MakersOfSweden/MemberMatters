@@ -23,7 +23,7 @@ from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
 )
-from profile.models import User, UserEventLog
+from profile.models import Profile, User, UserEventLog
 from services import sms
 from services.emails import send_email_to_admin
 from .models import MemberTier, PaymentPlan
@@ -648,12 +648,26 @@ class MemberProfile(APIView):
         if member.profile.rfid != body.get("rfidCard"):
             rfid_changed = True
 
+        screen_name = (body.get("screenName") or "").strip()
+
+        # check if screen name is already in use (case-insensitive, excluding self)
+        if (
+            screen_name
+            and Profile.objects.filter(screen_name__iexact=screen_name)
+            .exclude(pk=member.profile.pk)
+            .exists()
+        ):
+            return Response(
+                {"message": "error.screenNameAlreadyExists"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         member.email = body.get("email")
         member.profile.first_name = body.get("firstName")
         member.profile.last_name = body.get("lastName")
         member.profile.rfid = body.get("rfidCard")
         member.profile.phone = body.get("phone")
-        member.profile.screen_name = body.get("screenName")
+        member.profile.screen_name = screen_name
         member.profile.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
         member.profile.exclude_from_email_export = body.get("excludeFromEmailExport")
 

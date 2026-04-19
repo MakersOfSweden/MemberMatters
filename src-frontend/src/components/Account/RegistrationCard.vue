@@ -62,10 +62,15 @@
               filled
               :label="$t('form.screenName')"
               lazy-rules
-              :rules="[
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-              ]"
+              :rules="
+                features?.signup?.requireScreenName !== false
+                  ? [
+                      (val) =>
+                        validateNotEmpty(val) ||
+                        $t('validation.cannotBeEmpty'),
+                    ]
+                  : []
+              "
             />
             <q-input
               v-model="form.mobile"
