@@ -333,7 +333,11 @@ CONSTANCE_CONFIG = {
     ),
     "SIGNUP_PRIVACY_POLICY_URL": (
         "",
-        "Optional URL to a privacy policy document. If set, the privacy consent checkbox will link to it.",
+        "Optional URL to a privacy policy document. If set, the privacy consent checkbox will link to it. Ignored when SIGNUP_PRIVACY_POLICY_TEXT is also set.",
+    ),
+    "SIGNUP_PRIVACY_POLICY_TEXT": (
+        "",
+        "Optional privacy policy text shown to the user in a popup on the signup page. Takes precedence over SIGNUP_PRIVACY_POLICY_URL if both are set. Leave empty to use the URL (or no link at all).",
     ),
     "ENABLE_PROXY_VOTING": (False, "Enables the proxy voting management feature."),
     "ENABLE_WEBCAMS": (
@@ -471,6 +475,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "COLLECT_VEHICLE_REGISTRATION_PLATE",
                 "SIGNUP_REQUIRE_PRIVACY_CONSENT",
                 "SIGNUP_PRIVACY_POLICY_URL",
+                "SIGNUP_PRIVACY_POLICY_TEXT",
             ),
         ),
         (

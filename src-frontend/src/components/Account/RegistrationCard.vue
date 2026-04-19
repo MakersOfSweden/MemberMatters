@@ -131,7 +131,15 @@
                 <span>
                   {{ $t('registrationCard.privacyConsent') }}
                   <a
-                    v-if="features?.signup?.privacyPolicyUrl"
+                    v-if="features?.signup?.privacyPolicyText"
+                    href="#"
+                    :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+                    @click.stop.prevent="showPrivacyPolicy = true"
+                  >
+                    {{ $t('registrationCard.privacyPolicyLink') }}
+                  </a>
+                  <a
+                    v-else-if="features?.signup?.privacyPolicyUrl"
                     :href="features.signup.privacyPolicyUrl"
                     target="_blank"
                     rel="noopener"
@@ -144,6 +152,29 @@
               </q-checkbox>
             </q-field>
           </div>
+
+          <q-dialog v-model="showPrivacyPolicy">
+            <q-card style="max-width: 600px; width: 100%">
+              <q-card-section class="row items-center q-pb-none">
+                <div class="text-h6">
+                  {{ $t('registrationCard.privacyPolicyTitle') }}
+                </div>
+                <q-space />
+                <q-btn v-close-popup icon="close" flat round dense />
+              </q-card-section>
+              <q-card-section class="privacy-policy-text">
+                {{ features.signup.privacyPolicyText }}
+              </q-card-section>
+              <q-card-actions align="right">
+                <q-btn
+                  v-close-popup
+                  :label="$t('button.close')"
+                  color="primary-btn"
+                  flat
+                />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
 
           <q-banner v-if="error" class="bg-negative text-white">
             {{ $t('error.requestFailed') }}
@@ -196,6 +227,7 @@ export default defineComponent({
       complete: false,
       buttonLoading: false,
       isPwd: true,
+      showPrivacyPolicy: false,
       form: {
         firstName: null,
         lastName: null,
@@ -272,5 +304,11 @@ export default defineComponent({
 .register-card {
   width: 100%;
   max-width: 500px;
+}
+
+.privacy-policy-text {
+  white-space: pre-wrap;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 </style>

@@ -655,6 +655,7 @@ export default {
     privacyConsent:
       'Jag samtycker till att mina personuppgifter lagras och behandlas.',
     privacyPolicyLink: 'Läs integritetspolicyn.',
+    privacyPolicyTitle: 'Integritetspolicy',
     privacyConsentRequired: 'Du måste samtycka innan du kan registrera dig.',
   },
   verifyEmail: {

@@ -658,6 +658,7 @@ export default {
     privacyConsent:
       'I consent to the storage and processing of my personal data.',
     privacyPolicyLink: 'View privacy policy.',
+    privacyPolicyTitle: 'Privacy Policy',
     privacyConsentRequired: 'You must consent before registering.',
   },
   verifyEmail: {
