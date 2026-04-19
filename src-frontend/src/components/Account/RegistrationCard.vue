@@ -26,7 +26,7 @@
               autofocus
               filled
               type="email"
-              :label="$t('form.email')"
+              :label="emailLabel"
               lazy-rules
               :rules="[
                 (val) => validateEmail(val) || $t('validation.invalidEmail'),
@@ -37,7 +37,7 @@
               v-model="form.firstName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.firstName')"
+              :label="firstNameLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -48,7 +48,7 @@
               v-model="form.lastName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.lastName')"
+              :label="lastNameLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -60,7 +60,7 @@
               v-model="form.screenName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.screenName')"
+              :label="screenNameLabel"
               lazy-rules
               :rules="
                 features?.signup?.requireScreenName !== false
@@ -77,7 +77,7 @@
               class="col-12 col-sm-6"
               filled
               type="tel"
-              :label="$t('form.mobile')"
+              :label="mobileLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -100,7 +100,7 @@
             <q-input
               class="col-12"
               v-model="form.password"
-              :label="$t('form.password')"
+              :label="passwordLabel"
               filled
               :type="isPwd ? 'password' : 'text'"
               lazy-rules
@@ -251,6 +251,27 @@ export default defineComponent({
     ...mapGetters('config', ['features', 'images']),
     icons() {
       return icons;
+    },
+    emailLabel(): string {
+      return `${this.$t('form.email')} *`;
+    },
+    firstNameLabel(): string {
+      return `${this.$t('form.firstName')} *`;
+    },
+    lastNameLabel(): string {
+      return `${this.$t('form.lastName')} *`;
+    },
+    mobileLabel(): string {
+      return `${this.$t('form.mobile')} *`;
+    },
+    passwordLabel(): string {
+      return `${this.$t('form.password')} *`;
+    },
+    screenNameLabel(): string {
+      const label = this.$t('form.screenName');
+      return this.features?.signup?.requireScreenName !== false
+        ? `${label} *`
+        : label;
     },
   },
   methods: {

@@ -144,7 +144,7 @@
                   v-model="profileForm.email"
                   outlined
                   :debounce="debounceLength"
-                  :label="$t('form.email')"
+                  :label="emailLabel"
                   :rules="[
                     (val) =>
                       validateEmail(val) || $t('validation.invalidEmail'),
