@@ -128,8 +128,8 @@
                 class="q-mt-sm"
                 color="primary"
               >
-                <span>
-                  {{ $t('registrationCard.privacyConsent') }}
+                <div>
+                  <div>{{ $t('registrationCard.privacyConsent') }}</div>
                   <a
                     v-if="features?.signup?.privacyPolicyText"
                     href="#"
@@ -148,19 +148,17 @@
                   >
                     {{ $t('registrationCard.privacyPolicyLink') }}
                   </a>
-                </span>
+                </div>
               </q-checkbox>
             </q-field>
           </div>
 
           <q-dialog v-model="showPrivacyPolicy">
             <q-card style="max-width: 600px; width: 100%">
-              <q-card-section class="row items-center q-pb-none">
+              <q-card-section>
                 <div class="text-h6">
                   {{ $t('registrationCard.privacyPolicyTitle') }}
                 </div>
-                <q-space />
-                <q-btn v-close-popup icon="close" flat round dense />
               </q-card-section>
               <q-card-section class="privacy-policy-text">
                 {{ features.signup.privacyPolicyText }}
