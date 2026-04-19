@@ -70,6 +70,7 @@ class GetConfig(APIView):
             },
             "enableStatsPage": config.ENABLE_STATS_PAGE,
             "enableLastSeenPage": config.ENABLE_LAST_SEEN_PAGE or user_is_admin,
+            "enableRecentSwipesPage": config.ENABLE_RECENT_SWIPES_PAGE or user_is_admin,
             "enableReportIssue": config.ENABLE_REPORT_ISSUE,
             "enableMembershipStatusCard": config.ENABLE_MEMBERSHIP_STATUS_CARD,
         }

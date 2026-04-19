@@ -176,6 +176,7 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         loggedIn: true,
         kiosk: true,
         memberOnly: true,
+        featureEnabledFlag: 'enableRecentSwipesPage',
         component: () => import('pages/RecentSwipes.vue'),
       },
       {
