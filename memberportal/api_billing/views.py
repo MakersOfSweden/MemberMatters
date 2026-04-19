@@ -759,6 +759,15 @@ class PaymentPlanResumeCancel(StripeAPIView):
                     stripe.Subscription.delete(
                         subscription_id, invoice_now=False, prorate=False
                     )
+
+                    # If this was a noob who never activated, drop the default
+                    # door/interlock access that CompleteSignup pre-staged so we
+                    # don't leave dangling M2M links. For returning members
+                    # (state="inactive"), leave their historical access intact.
+                    if request.user.profile.state == "noob":
+                        request.user.profile.doors.clear()
+                        request.user.profile.interlocks.clear()
+
                     request.user.profile.membership_plan = None
                     request.user.profile.stripe_subscription_id = None
                     request.user.profile.subscription_status = "inactive"
@@ -899,6 +908,16 @@ class StripeWebhook(StripeAPIView):
                 )
                 member_profile.user.email_notification(subject, message)
 
+                # For invoice billing the member may pay the invoice (via the
+                # Stripe email link) before the frontend ever calls
+                # /complete-signup/ to pre-stage access. Stage defaults here so
+                # activate()'s sync_access actually pushes their tags.
+                if member_profile.billing_method == "invoice":
+                    for door in Doors.objects.filter(all_members=True):
+                        member_profile.doors.add(door)
+                    for interlock in Interlock.objects.filter(all_members=True):
+                        member_profile.interlocks.add(interlock)
+
                 # set the subscription status to active
                 member_profile.subscription_status = "active"
                 member_profile.save()
@@ -992,6 +1011,7 @@ class StripeWebhook(StripeAPIView):
             member_profile.membership_plan = None
             member_profile.stripe_subscription_id = None
             member_profile.subscription_status = "inactive"
+            member_profile.billing_method = "card"
             member_profile.save()
 
             member_profile.user.log_event(

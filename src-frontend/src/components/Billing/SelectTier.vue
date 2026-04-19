@@ -415,6 +415,6 @@ export default defineComponent({
 }
 
 .billing-method-active {
-  background-color: rgba(var(--q-primary-rgb, 39, 138, 176), 0.08);
+  background-color: color-mix(in srgb, var(--q-primary) 8%, transparent);
 }
 </style>

@@ -1097,6 +1097,11 @@ class MarkInvoicePaid(StripeAPIView):
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
+                request.user.log_event(
+                    f"Failed to attach audit comment to Stripe invoice "
+                    f"{invoice_id} (invoice was still marked paid). Comment: {comment}",
+                    "stripe",
+                )
 
         request.user.log_event(
             f"Marked Stripe invoice {invoice_id} as paid out-of-band."
