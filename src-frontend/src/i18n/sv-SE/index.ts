@@ -652,6 +652,11 @@ export default {
     loginHere: 'Logga in här',
     registrationComplete:
       'Registrering färdig. Kolla din email och klicka på länken för att verifiera din epostadress.',
+    privacyConsent:
+      'Jag samtycker till att mina personuppgifter lagras och behandlas.',
+    privacyPolicyLink: 'Läs integritetspolicyn.',
+    privacyPolicyTitle: 'Integritetspolicy',
+    privacyConsentRequired: 'Du måste samtycka innan du kan registrera dig.',
   },
   verifyEmail: {
     error:
