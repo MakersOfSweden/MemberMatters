@@ -9,7 +9,7 @@ def blank_stripe_customer_id_to_null(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("profile", "0018_profile_billing_method"),
+        ("profile", "0019_profile_billing_method"),
     ]
 
     operations = [

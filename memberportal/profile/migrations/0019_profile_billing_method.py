@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("profile", "0017_alter_log_logtype"),
+        ("profile", "0018_alter_profile_screen_name"),
     ]
 
     operations = [
