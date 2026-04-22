@@ -23,7 +23,5 @@ def setup_periodic_tasks(sender, **kwargs):
 @app.task
 def cleanup_processed_stripe_events():
     cutoff = timezone.now() - timedelta(days=EVENT_RETENTION_DAYS)
-    deleted, _ = ProcessedStripeEvent.objects.filter(
-        processed_at__lt=cutoff
-    ).delete()
+    deleted, _ = ProcessedStripeEvent.objects.filter(processed_at__lt=cutoff).delete()
     logger.info(f"Deleted {deleted} expired Stripe webhook dedup rows")
