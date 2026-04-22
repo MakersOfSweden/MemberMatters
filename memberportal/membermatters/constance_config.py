@@ -353,6 +353,22 @@ CONSTANCE_CONFIG = {
         False,
         "Display a field that collects the member's vehicle registration plate on signup & in the profile page.",
     ),
+    "REQUIRE_SCREEN_NAME": (
+        True,
+        "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
+    ),
+    "SIGNUP_REQUIRE_PRIVACY_CONSENT": (
+        False,
+        "Display a checkbox on the signup page requiring the user to consent to the storage of their personal data before registering.",
+    ),
+    "SIGNUP_PRIVACY_POLICY_URL": (
+        "",
+        "Optional URL to a privacy policy document. If set, the privacy consent checkbox will link to it. Ignored when SIGNUP_PRIVACY_POLICY_TEXT is also set.",
+    ),
+    "SIGNUP_PRIVACY_POLICY_TEXT": (
+        "",
+        "Optional privacy policy text shown to the user in a popup on the signup page. Takes precedence over SIGNUP_PRIVACY_POLICY_URL if both are set. Leave empty to use the URL (or no link at all).",
+    ),
     "ENABLE_PROXY_VOTING": (False, "Enables the proxy voting management feature."),
     "ENABLE_WEBCAMS": (
         False,
@@ -434,6 +450,10 @@ CONSTANCE_CONFIG = {
         True,
         "Enable the Last Seen page that shows member last seen data.",
     ),
+    "ENABLE_RECENT_SWIPES_PAGE": (
+        True,
+        "Enable the Recent Swipes page for regular members. Admins can always see it.",
+    ),
 }
 
 CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
@@ -468,6 +488,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_PORTAL_MEMBERS_ON_SITE",
                 "ENABLE_DOOR_BUMP_API",
                 "ENABLE_LAST_SEEN_PAGE",
+                "ENABLE_RECENT_SWIPES_PAGE",
             ),
         ),
         ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS")),
@@ -487,6 +508,10 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "REQUIRE_ACCESS_CARD",
                 "MEMBER_CAN_ENTER_ACCESS_CARD",
                 "COLLECT_VEHICLE_REGISTRATION_PLATE",
+                "REQUIRE_SCREEN_NAME",
+                "SIGNUP_REQUIRE_PRIVACY_CONSENT",
+                "SIGNUP_PRIVACY_POLICY_URL",
+                "SIGNUP_PRIVACY_POLICY_TEXT",
             ),
         ),
         (

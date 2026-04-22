@@ -66,6 +66,7 @@ export default {
     loginFailed: 'Your username or password was incorrect.',
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
+    screenNameRequired: 'Please enter a screen name.',
     downloadFailed: 'Failed to download the file.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",
@@ -245,12 +246,12 @@ export default {
     noResults: 'No Results',
     allFieldsRequired: 'All fields marked * are required.',
     featured: 'Featured?',
-    email: 'Email *',
+    email: 'Email',
     rfidCard: 'RFID Card',
-    firstName: 'First Name *',
-    lastName: 'Last Name *',
-    mobile: 'Mobile Number *',
-    screenName: 'Screen / Nickname *',
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    mobile: 'Mobile Number',
+    screenName: 'Screen / Nickname',
     date: 'Date',
     dateTime: 'Date & Time',
     chair: 'Chair',
@@ -261,7 +262,7 @@ export default {
     playTheme: 'Play Theme Song',
     ipAddress: 'IP Address',
     lastSeen: 'Last Seen',
-    password: 'Password *',
+    password: 'Password',
     registrationDate: 'Registration Date',
     state: 'State',
     id: 'Member ID',
@@ -666,6 +667,11 @@ export default {
     loginHere: 'Login Here',
     registrationComplete:
       'Registration complete. Please check your email and click the link to verify your email address.',
+    privacyConsent:
+      'I consent to the storage and processing of my personal data.',
+    privacyPolicyLink: 'View privacy policy.',
+    privacyPolicyTitle: 'Privacy Policy',
+    privacyConsentRequired: 'You must consent before registering.',
   },
   verifyEmail: {
     error:

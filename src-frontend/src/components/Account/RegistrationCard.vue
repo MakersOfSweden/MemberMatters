@@ -26,7 +26,7 @@
               autofocus
               filled
               type="email"
-              :label="$t('form.email')"
+              :label="emailLabel"
               lazy-rules
               :rules="[
                 (val) => validateEmail(val) || $t('validation.invalidEmail'),
@@ -37,7 +37,7 @@
               v-model="form.firstName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.firstName')"
+              :label="firstNameLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -48,7 +48,7 @@
               v-model="form.lastName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.lastName')"
+              :label="lastNameLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -60,19 +60,24 @@
               v-model="form.screenName"
               class="col-12 col-sm-6"
               filled
-              :label="$t('form.screenName')"
+              :label="screenNameLabel"
               lazy-rules
-              :rules="[
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-              ]"
+              :rules="
+                features?.signup?.requireScreenName !== false
+                  ? [
+                      (val) =>
+                        validateNotEmpty(val) ||
+                        $t('validation.cannotBeEmpty'),
+                    ]
+                  : []
+              "
             />
             <q-input
               v-model="form.mobile"
               class="col-12 col-sm-6"
               filled
               type="tel"
-              :label="$t('form.mobile')"
+              :label="mobileLabel"
               lazy-rules
               :rules="[
                 (val) =>
@@ -95,7 +100,7 @@
             <q-input
               class="col-12"
               v-model="form.password"
-              :label="$t('form.password')"
+              :label="passwordLabel"
               filled
               :type="isPwd ? 'password' : 'text'"
               lazy-rules
@@ -112,7 +117,67 @@
                 />
               </template>
             </q-input>
+
+            <q-field
+              v-if="features?.signup?.requirePrivacyConsent"
+              class="col-12"
+              borderless
+              dense
+              :model-value="form.privacyConsent"
+              :rules="[
+                (val) => val || $t('registrationCard.privacyConsentRequired'),
+              ]"
+            >
+              <q-checkbox
+                v-model="form.privacyConsent"
+                class="q-mt-sm"
+                color="primary"
+              >
+                <div>
+                  <div>{{ $t('registrationCard.privacyConsent') }}</div>
+                  <a
+                    v-if="features?.signup?.privacyPolicyText"
+                    href="#"
+                    :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+                    @click.stop.prevent="showPrivacyPolicy = true"
+                  >
+                    {{ $t('registrationCard.privacyPolicyLink') }}
+                  </a>
+                  <a
+                    v-else-if="features?.signup?.privacyPolicyUrl"
+                    :href="features.signup.privacyPolicyUrl"
+                    target="_blank"
+                    rel="noopener"
+                    :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+                    @click.stop
+                  >
+                    {{ $t('registrationCard.privacyPolicyLink') }}
+                  </a>
+                </div>
+              </q-checkbox>
+            </q-field>
           </div>
+
+          <q-dialog v-model="showPrivacyPolicy">
+            <q-card style="max-width: 600px; width: 100%">
+              <q-card-section>
+                <div class="text-h6">
+                  {{ $t('registrationCard.privacyPolicyTitle') }}
+                </div>
+              </q-card-section>
+              <q-card-section class="privacy-policy-text">
+                {{ features.signup.privacyPolicyText }}
+              </q-card-section>
+              <q-card-actions align="right">
+                <q-btn
+                  v-close-popup
+                  :label="$t('button.close')"
+                  color="primary-btn"
+                  flat
+                />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
 
           <q-banner v-if="error" class="bg-negative text-white">
             {{ $t('error.requestFailed') }}
@@ -165,6 +230,7 @@ export default defineComponent({
       complete: false,
       buttonLoading: false,
       isPwd: true,
+      showPrivacyPolicy: false,
       form: {
         firstName: null,
         lastName: null,
@@ -173,6 +239,7 @@ export default defineComponent({
         mobile: null,
         password: null,
         vehicleRegistrationPlate: null,
+        privacyConsent: false,
       },
     };
   },
@@ -184,6 +251,27 @@ export default defineComponent({
     ...mapGetters('config', ['features', 'images']),
     icons() {
       return icons;
+    },
+    emailLabel(): string {
+      return `${this.$t('form.email')} *`;
+    },
+    firstNameLabel(): string {
+      return `${this.$t('form.firstName')} *`;
+    },
+    lastNameLabel(): string {
+      return `${this.$t('form.lastName')} *`;
+    },
+    mobileLabel(): string {
+      return `${this.$t('form.mobile')} *`;
+    },
+    passwordLabel(): string {
+      return `${this.$t('form.password')} *`;
+    },
+    screenNameLabel(): string {
+      const label = this.$t('form.screenName');
+      return this.features?.signup?.requireScreenName !== false
+        ? `${label} *`
+        : label;
     },
   },
   methods: {
@@ -240,5 +328,11 @@ export default defineComponent({
 .register-card {
   width: 100%;
   max-width: 500px;
+}
+
+.privacy-policy-text {
+  white-space: pre-wrap;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 </style>

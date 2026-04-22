@@ -66,6 +66,7 @@ export default {
     loginFailed: 'Ditt användarnamn eller lösenord är felaktigt.',
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
+    screenNameRequired: 'Ange ett användarnamn.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
     requestFailed:
       "Det har uppstått ett fel. Försök igen senare.",
@@ -244,12 +245,12 @@ export default {
     noResults: 'Inga resultat',
     allFieldsRequired: 'Alla fält markerade med * är obligatoriska.',
     featured: 'Utvalda?',
-    email: 'Email *',
+    email: 'Email',
     rfidCard: 'RFID Card',
-    firstName: 'Förnamn *',
-    lastName: 'Efternamn *',
-    mobile: 'Mobilnummer *',
-    screenName: 'Skärm / Användarnamn *',
+    firstName: 'Förnamn',
+    lastName: 'Efternamn',
+    mobile: 'Mobilnummer',
+    screenName: 'Skärm / Användarnamn',
     date: 'Datum',
     dateTime: 'Datum & Tid',
     chair: 'Stol',
@@ -260,7 +261,7 @@ export default {
     playTheme: 'Spela Temalåt',
     ipAddress: 'IP Address',
     lastSeen: 'Senast aktiv',
-    password: 'Lösenord *',
+    password: 'Lösenord',
     registrationDate: 'Registreringsdatum',
     state: 'State',
     id: 'Medlems-ID',
@@ -663,6 +664,11 @@ export default {
     loginHere: 'Logga in här',
     registrationComplete:
       'Registrering färdig. Kolla din email och klicka på länken för att verifiera din epostadress.',
+    privacyConsent:
+      'Jag samtycker till att mina personuppgifter lagras och behandlas.',
+    privacyPolicyLink: 'Läs integritetspolicyn.',
+    privacyPolicyTitle: 'Integritetspolicy',
+    privacyConsentRequired: 'Du måste samtycka innan du kan registrera dig.',
   },
   verifyEmail: {
     error:

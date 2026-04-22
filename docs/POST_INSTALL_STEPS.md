@@ -103,6 +103,16 @@ However, as noted below, currencies will use a hardcoded value set by a configur
     to require an admin to assign the card (members will see a "Contact Us" button instead). Only applies if
     "REQUIRE_ACCESS_CARD" is `True`.
   * "COLLECT_VEHICLE_REGISTRATION_PLATE" - Allow the portal to collect vehicle registration plate number(s).
+  * "SIGNUP_REQUIRE_PRIVACY_CONSENT" - When `True`, the signup page shows a checkbox that the user must tick before
+    registering, confirming that they consent to their personal data being stored. Useful for GDPR / privacy-law
+    compliance.
+  * "SIGNUP_PRIVACY_POLICY_URL" - Optional URL to an external privacy policy document. If set (and
+    `SIGNUP_PRIVACY_POLICY_TEXT` is empty), the consent checkbox label includes a link that opens the policy in a
+    new tab. Leave empty for no link.
+  * "SIGNUP_PRIVACY_POLICY_TEXT" - Optional privacy policy text shown inline in a popup on the signup page. If set,
+    this takes precedence over `SIGNUP_PRIVACY_POLICY_URL` — the consent checkbox label shows a link that opens a
+    dialog displaying this text (line breaks are preserved). Use this if you'd rather keep the policy in
+    MemberMatters than link out to a separate document.
 
 ### Canvas Integration
   * "CANVAS_API_TOKEN" - the API token for the Canvas LMS integration.

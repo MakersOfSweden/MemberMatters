@@ -21,7 +21,10 @@ class SwipesList(APIView):
     get: This method returns the 300 most recent swipes for both doors and interlocks.
     """
 
-    permission_classes = (permissions.IsAuthenticated,)
+    def get_permissions(self):
+        if config.ENABLE_RECENT_SWIPES_PAGE:
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
 
     def get(self, request):
         recent_doors = (
