@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from datetime import timedelta, datetime
 import pytz
@@ -369,7 +369,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     last_induction = models.DateTimeField(default=None, blank=True, null=True)
 
     stripe_customer_id = models.CharField(
-        max_length=100, blank=True, null=True, default=""
+        max_length=100, blank=True, null=True, unique=True, default=None
     )
     stripe_card_expiry = models.CharField(
         max_length=10, blank=True, null=True, default=""
@@ -430,54 +430,80 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             interlock.sync()
 
     def deactivate(self, request=None):
-        if request:
-            request.user.log_event(
-                f"{request.user.profile.get_full_name()} deactivated member ({self.get_full_name()}).",
-                "admin",
-            )
-            self.user.log_event(
-                f"{request.user.profile.get_full_name()} deactivated member.",
-                "admin",
-            )
-        else:
-            self.user.log_event(
-                f"system deactivated member ({self.get_full_name()}).",
-                "profile",
-            )
+        # Lock + re-read state to keep concurrent callers (e.g. Stripe webhook
+        # retries racing an admin action) from double-running side effects.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            if locked.state == "inactive":
+                return False
+            self.state = locked.state
 
-        self.user.email_disable_member()
-        sms_message = sms.SMS()
-        sms_message.send_deactivated_access(self.phone)
-        self.state = "inactive"
-        self.save()
-        self.sync_access()
-        return True
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} deactivated member ({self.get_full_name()}).",
+                    "admin",
+                )
+                self.user.log_event(
+                    f"{request.user.profile.get_full_name()} deactivated member.",
+                    "admin",
+                )
+            else:
+                self.user.log_event(
+                    f"system deactivated member ({self.get_full_name()}).",
+                    "profile",
+                )
+
+            self.user.email_disable_member()
+            sms_message = sms.SMS()
+            sms_message.send_deactivated_access(self.phone)
+            self.state = "inactive"
+            self.save()
+            self.sync_access()
+            return True
 
     def activate(self, request=None):
-        if request:
-            request.user.log_event(
-                f"{request.user.profile.get_full_name()} activated member ({self.get_full_name()}).",
-                "admin",
-            )
-            self.user.log_event(
-                f"{request.user.profile.get_full_name()} activated member.",
-                "admin",
-            )
-        else:
-            self.user.log_event(
-                f"system activated member ({self.get_full_name()})",
-                "profile",
-            )
+        # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
+        # racing the invoice.paid webhook) from double-running side effects.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            if locked.state == "active":
+                return False
+            self.state = locked.state
 
-        if self.state != "noob":
-            sms_message = sms.SMS()
-            sms_message.send_activated_access(self.phone)
-            self.user.email_enable_member()
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} activated member ({self.get_full_name()}).",
+                    "admin",
+                )
+                self.user.log_event(
+                    f"{request.user.profile.get_full_name()} activated member.",
+                    "admin",
+                )
+            else:
+                self.user.log_event(
+                    f"system activated member ({self.get_full_name()})",
+                    "profile",
+                )
 
-        self.state = "active"
-        self.save()
-        self.sync_access()
-        return True
+            # First-time activation (noob): send the welcome/applicant emails.
+            # Re-activation (inactive/accountonly): send the access-enabled
+            # notification. These live inside activate() so that every code
+            # path that flips a member to active — CompleteSignup, the
+            # invoice.paid webhook, admin MakeMember, admin MemberState —
+            # sends the right notifications without the caller duplicating
+            # them.
+            if self.state == "noob":
+                self.user.email_membership_application()
+                self.user.email_welcome()
+            else:
+                sms_message = sms.SMS()
+                sms_message.send_activated_access(self.phone)
+                self.user.email_enable_member()
+
+            self.state = "active"
+            self.save()
+            self.sync_access()
+            return True
 
     def set_account_only(self):
         self.state = "accountonly"
