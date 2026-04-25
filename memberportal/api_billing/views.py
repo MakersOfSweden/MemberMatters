@@ -899,7 +899,15 @@ class StripeWebhook(StripeAPIView):
                 return Response()
 
             try:
-                member_profile = Profile.objects.get(stripe_customer_id=customer_id)
+                # select_for_update serialises concurrent webhook deliveries
+                # for the same member. Without it, two events with different
+                # ids (e.g. an admin replay) can both read state != "active"
+                # before either commits, and the "payment successful" email
+                # at line 955 fires twice — activate()'s own lock catches
+                # the state flip but not the surrounding notifications.
+                member_profile = Profile.objects.select_for_update().get(
+                    stripe_customer_id=customer_id
+                )
             except Profile.DoesNotExist as e:
                 capture_exception(e)
                 return Response()

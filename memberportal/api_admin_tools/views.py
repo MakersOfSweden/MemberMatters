@@ -1043,7 +1043,10 @@ class MarkInvoicePaid(StripeAPIView):
         except stripe.error.StripeError as e:
             capture_exception(e)
             return Response(
-                {"success": False, "message": str(e)},
+                {
+                    "success": False,
+                    "message": "Failed to retrieve invoice from Stripe.",
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -1070,7 +1073,10 @@ class MarkInvoicePaid(StripeAPIView):
         except stripe.error.StripeError as e:
             capture_exception(e)
             return Response(
-                {"success": False, "message": str(e)},
+                {
+                    "success": False,
+                    "message": "Failed to mark invoice as paid in Stripe.",
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -1079,25 +1085,25 @@ class MarkInvoicePaid(StripeAPIView):
                 stripe.Invoice.modify(
                     invoice_id,
                     metadata={
-                        "marked_paid_by": request.user.email,
+                        # User id (not email) so we don't ship staff PII to
+                        # Stripe. Internal lookups can resolve id → user.
+                        "marked_paid_by_user_id": str(request.user.id),
                         "marked_paid_comment": comment[:500],
                     },
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
-                # Log description is capped at 500 chars; comment can be up
-                # to 500 on its own, so truncate before concatenating.
                 request.user.log_event(
                     f"Failed to attach audit comment to Stripe invoice "
-                    f"{invoice_id} (invoice was still marked paid). "
-                    f"Comment: {comment[:300]}",
+                    f"{invoice_id} (invoice was still marked paid).",
                     "stripe",
+                    data=comment,
                 )
 
         request.user.log_event(
-            f"Marked Stripe invoice {invoice_id} as paid out-of-band."
-            + (f" Comment: {comment[:400]}" if comment else ""),
+            f"Marked Stripe invoice {invoice_id} as paid out-of-band.",
             "stripe",
+            data=comment,
         )
 
         return Response({"success": True})
