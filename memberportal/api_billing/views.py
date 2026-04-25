@@ -390,11 +390,36 @@ class CheckInductionStatus(APIView):
         score = 0
 
         if config.MOODLE_INDUCTION_ENABLED:
-            user_id = moodle_get_user_from_email(request.user.email).get("id")
-            activities = moodle_get_course_activity_completion_status(
-                config.MOODLE_INDUCTION_COURSE_ID, user_id
-            )
-            score = activities["percentage_completed"]
+            try:
+                moodle_user = moodle_get_user_from_email(request.user.email)
+                activities = moodle_get_course_activity_completion_status(
+                    config.MOODLE_INDUCTION_COURSE_ID, moodle_user["id"]
+                )
+                score = activities["percentage_completed"]
+            except RuntimeError as e:
+                # Helper raises RuntimeError when 0 or >1 Moodle users match
+                # the member's email. Most common case: member hasn't set up
+                # their Moodle account yet — return a friendly response so
+                # the frontend can prompt them, instead of 500-ing.
+                logger.info("Moodle lookup for %s: %s", request.user.email, e)
+                return Response(
+                    {
+                        "success": False,
+                        "score": 0,
+                        "message": "signup.noMoodleAccount",
+                    }
+                )
+            except Exception as e:
+                # Network / JSON / unexpected Moodle response — log and
+                # surface a generic error rather than leaking the trace.
+                capture_exception(e)
+                return Response(
+                    {
+                        "success": False,
+                        "score": 0,
+                        "message": "signup.moodleUnavailable",
+                    }
+                )
 
         elif config.CANVAS_INDUCTION_ENABLED:
             try:
@@ -477,7 +502,23 @@ class SkipSignup(APIView):
     """
 
     def post(self, request):
-        request.user.profile.set_account_only()
+        profile = request.user.profile
+
+        # Only valid as an opt-out from a brand-new signup. If the member
+        # already has any kind of subscription (active, pending, cancelling)
+        # flipping state to "accountonly" silently revokes their access
+        # while Stripe keeps billing — caller must cancel the subscription
+        # first via /api/billing/myplan/cancel/.
+        if profile.state != "noob" or profile.subscription_status != "inactive":
+            return Response(
+                {
+                    "success": False,
+                    "message": "signup.skipNotAllowed",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile.set_account_only()
 
         return Response({"success": True})
 
@@ -682,40 +723,60 @@ class StripeWebhook(StripeAPIView):
     permission_classes = (permissions.AllowAny,)
 
     def post(self, request):
+        # Fail closed when no signing secret is configured. The endpoint is
+        # publicly reachable and unauthenticated by design (Stripe can't
+        # present a session/JWT), so signature verification is the *only*
+        # gate. Without it, anyone who guesses a stripe_customer_id can
+        # forge invoice.paid / customer.subscription.deleted events and
+        # activate or cancel arbitrary members.
         webhook_secret = config.STRIPE_WEBHOOK_SECRET
-        body = request.body
-        request_data = request.data
+        if not webhook_secret:
+            logger.error(
+                "STRIPE_WEBHOOK_SECRET is not configured; rejecting webhook event."
+            )
+            return Response(
+                {"error": "Webhook signing not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        if webhook_secret:
-            # Retrieve the event by verifying the signature if webhook signing is configured.
-            signature = request.headers.get("stripe-signature")
-            try:
-                event = stripe.Webhook.construct_event(
-                    payload=body, sig_header=signature, secret=webhook_secret
-                )
-                data = event["data"]
-            except Exception as e:
-                logger.error(e)
-                capture_exception(e)
-                return Response({"error": "Error validating Stripe signature."})
+        signature = request.headers.get("stripe-signature")
+        try:
+            event = stripe.Webhook.construct_event(
+                payload=request.body, sig_header=signature, secret=webhook_secret
+            )
+        except Exception as e:
+            logger.error(e)
+            capture_exception(e)
+            return Response({"error": "Error validating Stripe signature."})
 
-            # Get the type of webhook event sent - used to check the status of PaymentIntents.
-            event_type = event["type"]
-        else:
-            data = request_data["data"]
-            event_type = request_data["type"]
+        data = event["data"]
+        event_type = event["type"]
 
         data = data["object"]
-        try:
-            member_profile = Profile.objects.get(stripe_customer_id=data["customer"])
 
-        except Profile.DoesNotExist as e:
-            capture_exception(e)
+        # Some Stripe events (e.g. account-level ones) don't carry a customer
+        # field — we can't do anything useful with those.
+        customer_id = data.get("customer")
+        if not customer_id:
             return Response()
 
-        # Just in case the linked Stripe account also processes other payments we should just ignore a non existent
-        # customer.
-        if not member_profile:
+        try:
+            member_profile = Profile.objects.get(stripe_customer_id=customer_id)
+
+        except Profile.DoesNotExist:
+            # Stripe sends events for customers we don't track (e.g. one-off
+            # charges, deleted profiles). Don't sentry-spam on these — info
+            # log only, so we still have a trail without paging anyone.
+            logger.info(
+                "Webhook event for unknown stripe_customer_id; ignoring."
+            )
+            return Response()
+
+        except Profile.MultipleObjectsReturned as e:
+            # stripe_customer_id is not unique at the DB level on this branch,
+            # so a fixture import or manual edit can leave duplicates. Bail
+            # loudly — acting on either profile would corrupt their state.
+            capture_exception(e)
             return Response()
 
         if event_type == "invoice.paid":

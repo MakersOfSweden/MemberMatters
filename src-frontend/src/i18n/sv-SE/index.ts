@@ -603,6 +603,12 @@ export default {
       'Vi har tyvärr problem med att skapa ditt abonnemang. Kontrollera saldo på ditt betalkort, försök igen eller kontakta oss för hjälp.',
     existingMemberSubscription:
       'Du har redan ett aktivt abonnemang på Stripe.',
+    skipNotAllowed:
+      'Du kan inte skippa registreringen medan du har ett aktivt eller väntande abonnemang. Avsluta ditt abonnemang från medlemskapssidan först.',
+    noMoodleAccount:
+      'Vi kunde inte hitta ett Moodle-konto kopplat till din email-adress. Se till att du har skapat ditt Moodle-konto med samma email-adress som du använde vid registreringen här, och försök sedan igen.',
+    moodleUnavailable:
+      'Vi kunde inte nå Moodle för att kontrollera dina framsteg i introduktionen. Försök igen om en stund, eller kontakta oss om problemet kvarstår.',
   },
   tiers: {
     disabledFeature:

@@ -606,6 +606,12 @@ export default {
       'Sorry, but there was a problem creating your subscription. Please check the card you used had enough funds, try again, or contact us for help.',
     existingMemberSubscription:
       'Sorry, you already have an active Stripe subscription.',
+    skipNotAllowed:
+      "You can't skip signup while you have an active or pending membership subscription. Please cancel your subscription from the membership page first.",
+    noMoodleAccount:
+      "We couldn't find a Moodle account matching your email address. Please make sure you've created your Moodle account using the same email you used to sign up here, then try again.",
+    moodleUnavailable:
+      "We couldn't reach Moodle to check your induction progress. Please try again in a moment, or contact us if the problem persists.",
   },
   tiers: {
     disabledFeature:

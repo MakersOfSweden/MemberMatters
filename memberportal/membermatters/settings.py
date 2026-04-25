@@ -39,9 +39,30 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 CORS_ALLOW_ALL_ORIGINS = True
 
 if os.environ.get("MM_ENV") == "Production":
+    from django.core.exceptions import ImproperlyConfigured
+
     ENVIRONMENT = "Production"
     CORS_ALLOW_ALL_ORIGINS = False
     DEBUG = False
+
+    # Refuse to boot in production with the bundled dev SECRET_KEY. JWTs
+    # are signed with this; a leaked default key means anyone can forge a
+    # session for any user (including admin).
+    if not os.environ.get("MM_SECRET_KEY"):
+        raise ImproperlyConfigured(
+            "MM_SECRET_KEY must be set when MM_ENV=Production."
+        )
+
+    # Pin ALLOWED_HOSTS to the deployment domain(s). Leaving "*" in
+    # production enables Host-header attacks (cache poisoning, password
+    # reset link spoofing). Comma-separated list; e.g.
+    # MM_ALLOWED_HOSTS="portal.example.org,www.example.org".
+    allowed_hosts_env = os.environ.get("MM_ALLOWED_HOSTS", "").strip()
+    if not allowed_hosts_env:
+        raise ImproperlyConfigured(
+            "MM_ALLOWED_HOSTS must be set when MM_ENV=Production."
+        )
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
 
 # Application definition
 INSTALLED_APPS = [

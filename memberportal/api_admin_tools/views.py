@@ -113,8 +113,9 @@ class MakeMember(APIView):
             # send the welcome email
             email = user.email_welcome()
 
-            # mark them as "active"
-            user.profile.activate()
+            # mark them as "active" — pass the request so the audit log
+            # attributes the activation to the admin instead of "system".
+            user.profile.activate(request)
 
             subject = f"{user.profile.get_full_name()} just got turned into a member!"
             send_email_to_admin(
