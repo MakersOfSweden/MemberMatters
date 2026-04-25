@@ -902,6 +902,19 @@ class StripeWebhook(StripeAPIView):
             capture_exception(e)
             return Response()
 
+        # Both invoice events must be scoped to the membership subscription —
+        # the customer can have unrelated invoices (admin-created one-offs,
+        # memberbucks-related charges, etc.) and acting on those would falsely
+        # activate the member or send misleading "membership payment failed"
+        # emails. The admin "mark paid out-of-band" tool has the same guard.
+        if event_type in ("invoice.paid", "invoice.payment_failed"):
+            invoice_subscription = data.get("subscription")
+            if (
+                not invoice_subscription
+                or invoice_subscription != member_profile.stripe_subscription_id
+            ):
+                return Response()
+
         if event_type == "invoice.paid":
             invoice_status = data["status"]
 
