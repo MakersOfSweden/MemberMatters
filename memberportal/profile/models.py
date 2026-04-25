@@ -429,14 +429,28 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         for interlock in self.interlocks.all():
             interlock.sync()
 
+    def add_default_access(self):
+        # Pre-stage default door/interlock access. Idempotent (M2M.add).
+        # Safe to call before activation: access.get_tags() filters by
+        # state="active", so these rows do not grant access until the
+        # member is actually activated.
+        from access.models import Doors, Interlock
+
+        for door in Doors.objects.filter(all_members=True):
+            self.doors.add(door)
+        for interlock in Interlock.objects.filter(all_members=True):
+            self.interlocks.add(interlock)
+
     def deactivate(self, request=None):
         # Lock + re-read state to keep concurrent callers (e.g. Stripe webhook
         # retries racing an admin action) from double-running side effects.
+        # External I/O (email/SMS, sync_access) runs after the lock is
+        # released so a slow Postmark/Twilio call cannot serialize concurrent
+        # webhook deliveries or push the handler past Stripe's 30s timeout.
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             if locked.state == "inactive":
                 return False
-            self.state = locked.state
 
             if request:
                 request.user.log_event(
@@ -453,22 +467,27 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
-            self.user.email_disable_member()
-            sms_message = sms.SMS()
-            sms_message.send_deactivated_access(self.phone)
             self.state = "inactive"
             self.save()
-            self.sync_access()
-            return True
+
+        # Best-effort notifications — DB state is already committed, so a
+        # Postmark/Twilio failure does not roll back the deactivation.
+        self.user.email_disable_member()
+        sms_message = sms.SMS()
+        sms_message.send_deactivated_access(self.phone)
+        self.sync_access()
+        return True
 
     def activate(self, request=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
         # racing the invoice.paid webhook) from double-running side effects.
+        # External I/O (email/SMS, sync_access) runs after the lock is
+        # released — see deactivate() for the rationale.
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             if locked.state == "active":
                 return False
-            self.state = locked.state
+            previous_state = locked.state
 
             if request:
                 request.user.log_event(
@@ -485,25 +504,27 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
-            # First-time activation (noob): send the welcome/applicant emails.
-            # Re-activation (inactive/accountonly): send the access-enabled
-            # notification. These live inside activate() so that every code
-            # path that flips a member to active — CompleteSignup, the
-            # invoice.paid webhook, admin MakeMember, admin MemberState —
-            # sends the right notifications without the caller duplicating
-            # them.
-            if self.state == "noob":
-                self.user.email_membership_application()
-                self.user.email_welcome()
-            else:
-                sms_message = sms.SMS()
-                sms_message.send_activated_access(self.phone)
-                self.user.email_enable_member()
-
             self.state = "active"
             self.save()
-            self.sync_access()
-            return True
+
+        # First-time activation (noob): send the welcome/applicant emails.
+        # Re-activation (inactive/accountonly): send the access-enabled
+        # notification. These live inside activate() so that every code
+        # path that flips a member to active — CompleteSignup, the
+        # invoice.paid webhook, admin MakeMember, admin MemberState —
+        # sends the right notifications without the caller duplicating
+        # them. Best-effort: a Postmark/Twilio failure does not roll back
+        # the activation.
+        if previous_state == "noob":
+            self.user.email_membership_application()
+            self.user.email_welcome()
+        else:
+            sms_message = sms.SMS()
+            sms_message.send_activated_access(self.phone)
+            self.user.email_enable_member()
+
+        self.sync_access()
+        return True
 
     def set_account_only(self):
         self.state = "accountonly"

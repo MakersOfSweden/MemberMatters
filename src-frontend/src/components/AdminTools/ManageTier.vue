@@ -523,12 +523,8 @@ export default defineComponent({
       this.editPlanForm.loading = true;
       this.editPlanForm.error = false;
       this.editPlanForm.success = false;
-      const payload = {
-        ...this.editPlan,
-        cost: Math.round(this.editPlan.cost * 100),
-      };
       api
-        .put(`/api/admin/plans/${this.editPlan.id}/`, payload)
+        .put(`/api/admin/plans/${this.editPlan.id}/`, this.editPlan)
         .then(() => {
           this.getPlans();
           this.editPlanForm.success = true;

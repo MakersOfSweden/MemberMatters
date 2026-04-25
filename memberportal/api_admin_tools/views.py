@@ -103,13 +103,7 @@ class MakeMember(APIView):
 
         # if they're a new member or account only
         if user.profile.state == "noob" or user.profile.state == "accountonly":
-            # give default door access
-            for door in models.Doors.objects.filter(all_members=True):
-                user.profile.doors.add(door)
-
-            # give default interlock access
-            for interlock in models.Interlock.objects.filter(all_members=True):
-                user.profile.interlocks.add(interlock)
+            user.profile.add_default_access()
 
             # activate() owns the welcome + access-enabled messaging.
             user.profile.activate(request)
@@ -1091,15 +1085,18 @@ class MarkInvoicePaid(StripeAPIView):
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
+                # Log description is capped at 500 chars; comment can be up
+                # to 500 on its own, so truncate before concatenating.
                 request.user.log_event(
                     f"Failed to attach audit comment to Stripe invoice "
-                    f"{invoice_id} (invoice was still marked paid). Comment: {comment}",
+                    f"{invoice_id} (invoice was still marked paid). "
+                    f"Comment: {comment[:300]}",
                     "stripe",
                 )
 
         request.user.log_event(
             f"Marked Stripe invoice {invoice_id} as paid out-of-band."
-            + (f" Comment: {comment}" if comment else ""),
+            + (f" Comment: {comment[:400]}" if comment else ""),
             "stripe",
         )
 
