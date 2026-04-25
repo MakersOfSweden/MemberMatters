@@ -17,9 +17,21 @@
         {{ $t('stats.disabled') }}
       </q-banner>
 
+      <q-banner
+        v-if="isAdmin && !hasAnyMetricData"
+        inline-actions
+        rounded
+        class="bg-info text-white q-ma-md"
+      >
+        <template v-slot:avatar>
+          <q-icon :name="icons.warning" />
+        </template>
+        {{ $t('stats.adminHint') }}
+      </q-banner>
+
       <template v-if="StatisticsLoaded">
         <template v-for="(value, key) in this.statistics" :key="key">
-          <div v-if="key !== 'on_site'" class="col-lg-6 col-12 q-px-md q-pt-md">
+          <div v-if="shouldShowMetric(key)" class="col-lg-6 col-12 q-px-md q-pt-md">
             <q-card class="full-width">
               <q-card-section>
                 <div class="row flex flex-center">
@@ -66,12 +78,29 @@ export default {
   },
   methods: {
     ...mapActions('tools', ['getStatistics']),
+    shouldShowMetric(key) {
+      if (key === 'on_site') return false;
+      if (key.startsWith('memberbucks_') && !this.features.enableMemberBucks) {
+        return false;
+      }
+      return true;
+    },
   },
   computed: {
     StatisticsLoaded() {
       return Object.keys(this.statistics).length > 0;
     },
+    isAdmin() {
+      return Boolean(this.profile?.permissions?.staff);
+    },
+    hasAnyMetricData() {
+      return Object.entries(this.statistics).some(([key, value]) => {
+        if (key === 'on_site') return false;
+        return Array.isArray(value) && value.length > 0;
+      });
+    },
     ...mapGetters('tools', ['statistics']),
+    ...mapGetters('profile', ['profile']),
     ...mapGetters('config', ['features']),
     icons() {
       return icons;

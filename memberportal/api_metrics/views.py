@@ -87,7 +87,7 @@ class UpdatePromMetrics(APIView):
     post: triggers Django to update the Prometheus site metrics from the database.
     """
 
-    permission_classes = (permissions.AllowAny,)
+    permission_classes = (permissions.IsAdminUser | HasAPIKey,)
 
     def post(self, request):
         metrics = []
