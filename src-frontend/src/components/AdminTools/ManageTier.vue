@@ -395,7 +395,18 @@ export default defineComponent({
       },
       addPlanDialog: false,
       editPlanDialog: false,
-      editPlan: null,
+      editPlan: null as {
+        id: number;
+        name: string;
+        description: string;
+        visible: boolean;
+        cost: number;
+        currency: string;
+        stripeId: string;
+        memberTier: number;
+        intervalCount: number;
+        interval: string;
+      } | null,
       editPlanForm: {
         loading: false,
         error: false,
@@ -520,11 +531,16 @@ export default defineComponent({
       this.editPlanDialog = true;
     },
     submitEditPlanForm() {
+      if (!this.editPlan) return;
       this.editPlanForm.loading = true;
       this.editPlanForm.error = false;
       this.editPlanForm.success = false;
+      const payload = {
+        ...this.editPlan,
+        cost: Math.round(this.editPlan.cost * 100),
+      };
       api
-        .put(`/api/admin/plans/${this.editPlan.id}/`, this.editPlan)
+        .put(`/api/admin/plans/${this.editPlan.id}/`, payload)
         .then(() => {
           this.getPlans();
           this.editPlanForm.success = true;
