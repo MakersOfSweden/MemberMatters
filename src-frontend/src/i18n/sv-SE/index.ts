@@ -27,6 +27,7 @@ export default {
     interlocks: 'Lås',
     devices: 'Enheter',
     kiosks: 'Kiosks',
+    pendingInvoices: 'Väntande fakturor',
 
     memberTools: 'Medlemsverktyg',
     reportIssue: 'Rapportera ett problem',
@@ -483,6 +484,7 @@ export default {
       active: 'Aktiv',
       inactive: 'Inaktiv',
       cancelling: 'Avbruten',
+      pending: 'Väntande',
     },
     memberStatusString: {
       noob: 'Ny medlem',
@@ -549,6 +551,8 @@ export default {
     signupSuccess: 'Registrering lyckades',
     signupSuccessDescription:
       'Din betalning har hanterats. Denna sida kommer laddas om strax.',
+    signupSuccessInvoiceDescription:
+      'Ditt abonnemang har skapats. En faktura har skickats till din e-post — ditt medlemskap aktiveras när betalningen är mottagen.',
     cancelButton: 'Avbryt medlemskap',
     cancelConfirmDescription:
       'Är du säker på att du vill avbryta ditt medlemskap? Ditt medlemskap kommer fortsätta vara aktivt fram tills slutet på din nuvarande period. Du kan återuppta medlemskapet när du vill innan periodens slut.',
@@ -562,6 +566,9 @@ export default {
       "Ditt medlemskap kommer att avslutas på datumet {date}. Om du vill återstarta ditt medlemskap (se ovan), vänligen klicka nedan.",
     renewalDate: 'Förnyelsedatum',
     signupDate: 'Registreringsdatum',
+    paymentMethod: 'Betalningsmetod',
+    paymentMethodCard: 'Kort (automatisk)',
+    paymentMethodInvoice: 'Faktura (manuell)',
     subscriptionInfo: 'Abonnemangs-info',
     accountOnlyWarning:
       "Din profil är för närvarande 'endast konto'. Detta beror på att du skippade denna process förra gången. Du är välkommen att forsätta använda detta konto i sin nuvarande form, eller så kan du registrera dig för att bli medlem nedan. ",
@@ -594,6 +601,9 @@ export default {
     submittedDescription:
       "Din ansökan för medlemskap har skickats in och du är nu en 'ansökande medlem'. Ditt medlemskap kommer godkännas snart, men vi har gett dig åtkomst till sidan direkt. Du kommer få ett mail som bekräftar ditt nyckelkort har aktiverats. Om du av någon anledning får avslag på medlemskapet så kommer du få ett mail med mer information.",
     continueToDashboard: 'Forsätt till dashboard',
+    awaitingPaymentTitle: 'Alla krav uppfyllda!',
+    awaitingInvoicePayment:
+      'Din åtkomst aktiveras automatiskt när din fakturabetalning är mottagen.',
     error: 'Fel vid inskickning av medelmsansökan',
     errorDescription:
       "Det blev tyvärr ett oväntat fel när du skickade in din anökan. Vänligen kontakta oss via {email} så hjälper vi dig.",
@@ -628,6 +638,7 @@ export default {
     confirmDelay:
       'Din ansökan om medlemskap kommer skickas efter att du färdigställt nästa steg.',
     finish: 'Betala & Fortsätt',
+    finishInvoice: 'Bekräfta & Få Faktura',
     plansFrom: 'Från {plan}',
     skipSignup: 'Skippa registrering (om du bara vill ha ett konto)',
   },
@@ -687,17 +698,12 @@ export default {
     payment: 'Betalning',
     paymentComplete: 'Abonnemang aktivt',
     paymentRequired: 'Betalning för medlemskap krävs',
+    paymentPending: 'Faktura skickad — väntar på betalning',
     inductionComplete: 'Introduktion genomförd',
     inductionRequired: 'Online-introduktion krävs',
     accessCardComplete: 'Nyckelkort registrerat',
     accessCardRequired: 'Registrering av nyckelkort krävs',
     setupInProgress: 'Installation pågår.',
-    activeDescription: 'Du är en aktiv medlem.',
-    subscriptionChip: {
-      active: 'Abonnemang aktivt',
-      cancelling: 'Abonnemang avslutas',
-      inactive: 'Inget aktivt abonnemang',
-    },
     membershipExpires: 'Medlemskapet upphör den {date}.',
     cancellingWarning:
       'Ditt abonnemang avslutas. Åtkomst upphör vid nästa förnyelsedatum.',
@@ -712,5 +718,46 @@ export default {
     viewMembership: 'Visa medlemskap',
     viewAccount: 'Visa konto',
     becomeMember: 'Bli medlem',
+  },
+  billing: {
+    selectMethod: 'Hur vill du betala?',
+    payByCard: 'Automatisk betalning med kort',
+    cardDescription:
+      'Ange dina kortuppgifter så dras din medlemsavgift automatiskt varje faktureringsperiod. Ingen manuell åtgärd krävs — ditt medlemskap förblir aktivt så länge ditt kort är giltigt.',
+    payByInvoice: 'Manuell betalning med faktura',
+    invoiceDescription:
+      'Du får en faktura via e-post varje faktureringsperiod som du betalar manuellt. Ditt medlemskap aktiveras när betalningen är mottagen och förnyas varje period så länge fakturan betalas i tid.',
+    invoiceAmount: 'Fakturabelopp: {amount}',
+    viewInvoice: 'Visa Faktura',
+    awaitingInvoicePayment:
+      'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
+    invoiceMethodMemberbucksInfo:
+      'Du betalar ditt medlemskap via faktura — inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
+    invoiceMethodNoCardNeeded:
+      'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
+  },
+  pendingInvoices: {
+    title: 'Väntande fakturor',
+    description:
+      'Medlemmar med en utestående faktura för sitt medlemskapsabonnemang. Använd den här panelen för att registrera betalningar mottagna utanför Stripe (banköverföring, kontanter, etc.).',
+    noInvoices: 'Inga väntande fakturor.',
+    columnMember: 'Medlem',
+    columnEmail: 'E-post',
+    columnPlan: 'Plan',
+    columnAmount: 'Belopp att betala',
+    columnCreated: 'Skapad',
+    columnDue: 'Förfaller',
+    columnActions: 'Åtgärder',
+    viewInStripe: 'Visa i Stripe',
+    markPaid: 'Markera som betald',
+    markPaidTitle: 'Markera faktura som betald',
+    markPaidHelp:
+      'Detta markerar fakturan som betald utanför Stripe (ingen kortbetalning). Abonnemanget aktiveras via webhook för betald faktura. Lägg till en valfri notering för granskningsloggen.',
+    commentLabel: 'Kommentar (valfri)',
+    commentPlaceholder: 't.ex. Betald via banköverföring 2026-04-10',
+    confirmMarkPaid: 'Markera som betald',
+    markPaidSuccess: 'Fakturan markerades som betald.',
+    markPaidError: 'Kunde inte markera fakturan som betald.',
+    fetchError: 'Kunde inte ladda väntande fakturor.',
   },
 };

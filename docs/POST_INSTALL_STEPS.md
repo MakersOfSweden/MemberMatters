@@ -183,6 +183,9 @@ You cannot currently enable specific events, you either get "all or nothing".
   * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe.
   * "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS" - enable the "Membership Plan" menu page on the front end so members can sign up with the Stripe billing integration. NOTE: make sure you configure these first from the "Admin Tools" > "Membership Plans" page.
   * "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS" - the options a member can see when on the MemberBucks top up page (in cents).
+  * "ENABLE_INVOICE_BILLING" - enable the "Pay by Invoice" option during membership signup so members can receive a Stripe invoice instead of paying by card. See the [Pay by Invoice setup](#pay-by-invoice-setup) section below — there is required Stripe Dashboard configuration, without which members can get stuck in the `pending` state indefinitely.
+  * "INVOICE_DAYS_UNTIL_DUE" - number of days before a Stripe invoice for invoice-billed membership becomes due.
+  * "INVOICE_BILLING_NOTE" - optional free-text note shown to members when they pick invoice billing (e.g. bank transfer details).
 
 #### Stripe Restricted Secret Key Permissions
 The following permissions are needed for all Member Matters payment features to work correctly.
@@ -194,6 +197,23 @@ The following permissions are needed for all Member Matters payment features to 
 * Setup Intents - Write
 * PaymentMethods - Write
 * Payment Intents - Write
+* Invoices - Write (required for "Pay by Invoice" billing)
+
+#### Pay by Invoice setup
+
+When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow).
+
+The activation and deactivation flow relies on Stripe webhooks:
+* `invoice.paid` → MemberMatters activates the member.
+* `customer.subscription.deleted` → MemberMatters marks the member `inactive` and clears the subscription.
+
+**Required Stripe Dashboard configuration** (Billing → Settings → Subscriptions and emails → *Manage failed payments*):
+
+After the invoice goes past due, configure Stripe to **cancel the subscription**. Pick a timeframe that matches your space's tolerance (e.g. 60 days). This is what fires `customer.subscription.deleted` and tells MemberMatters to drop the member back to `inactive`. Without this, members who never pay will stay in `pending` state indefinitely — there's no server-side fallback in MemberMatters that deletes the subscription itself.
+
+You do **not** need to configure "Mark invoice as uncollectible" or any other invoice-handling option in Stripe. When MemberMatters receives `customer.subscription.deleted`, it voids any invoices still open against that subscription so nothing lingers in the customer's Stripe portal.
+
+When testing this locally, make sure the `stripe listen` command in the backend README includes `customer.subscription.deleted` (it does by default) so subscription cancellations are forwarded to your dev server.
 
 ### Trello Integration
   * "ENABLE_TRELLO_INTEGRATION" - [Deprecated]

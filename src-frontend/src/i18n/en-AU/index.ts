@@ -27,6 +27,7 @@ export default {
     interlocks: 'Interlocks',
     devices: 'Devices',
     kiosks: 'Kiosks',
+    pendingInvoices: 'Pending Invoices',
 
     memberTools: 'Member Tools',
     reportIssue: 'Report Issue',
@@ -485,6 +486,7 @@ export default {
       active: 'Active',
       inactive: 'Inactive',
       cancelling: 'Cancelling',
+      pending: 'Pending',
     },
     memberStatusString: {
       noob: 'New Member',
@@ -552,6 +554,8 @@ export default {
     signupSuccess: 'Signup success',
     signupSuccessDescription:
       'Your payment was processed successfully. This page will refresh in a moment.',
+    signupSuccessInvoiceDescription:
+      'Your subscription has been created. An invoice has been emailed to you — your membership will be activated once payment is received.',
     cancelButton: 'Cancel my membership',
     cancelConfirmDescription:
       'Are you sure you want to cancel your membership? Your membership will remain active until the end of your current billing period. You can resume it at any point before the end of your current billing period.',
@@ -565,6 +569,9 @@ export default {
       "Your membership is scheduled to be cancelled on {date}. If you'd like to resume your plan (listed above), please tap below.",
     renewalDate: 'Renewal Date',
     signupDate: 'Signup Date',
+    paymentMethod: 'Payment Method',
+    paymentMethodCard: 'Card (automatic)',
+    paymentMethodInvoice: 'Invoice (manual)',
     subscriptionInfo: 'Subscription Info',
     accountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped this process last time. You're welcome to continue using this account for our online services, or you can signup to become a member below. ",
@@ -597,6 +604,9 @@ export default {
     submittedDescription:
       "Your membership application has been submitted and you are now a 'member applicant'. Your membership will be accepted soon, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information.",
     continueToDashboard: 'Continue to dashboard',
+    awaitingPaymentTitle: 'All requirements complete!',
+    awaitingInvoicePayment:
+      'Your access will be activated automatically once your invoice payment is received.',
     error: 'Error submitting membership application',
     errorDescription:
       "We're very sorry but there was an unexpected error when submitting your application. Please contact us at {email} for assistance.",
@@ -631,6 +641,7 @@ export default {
     confirmDelay:
       'Your membership application will be submitted after you complete the next steps.',
     finish: 'Pay & Continue',
+    finishInvoice: 'Confirm & Get Invoice',
     plansFrom: 'From {plan}',
     skipSignup: 'Skip Signup (if you just want an account)',
   },
@@ -690,17 +701,12 @@ export default {
     payment: 'Payment',
     paymentComplete: 'Subscription active',
     paymentRequired: 'Membership payment required',
+    paymentPending: 'Invoice sent — awaiting payment',
     inductionComplete: 'Induction completed',
     inductionRequired: 'Online induction required',
     accessCardComplete: 'Access card registered',
     accessCardRequired: 'Access card registration required',
     setupInProgress: 'Setup in progress.',
-    activeDescription: 'You are an active member.',
-    subscriptionChip: {
-      active: 'Subscription active',
-      cancelling: 'Subscription cancelling',
-      inactive: 'No active subscription',
-    },
     membershipExpires: 'Membership expires on {date}.',
     cancellingWarning:
       'Your subscription is cancelling. Access will end at the next renewal date.',
@@ -715,5 +721,46 @@ export default {
     viewMembership: 'View Membership',
     viewAccount: 'View Account',
     becomeMember: 'Become a Member',
+  },
+  billing: {
+    selectMethod: 'How would you like to pay?',
+    payByCard: 'Automatic payment by card',
+    cardDescription:
+      'Enter your card details and your membership payment will be collected automatically each billing cycle. No manual action needed — your membership stays active as long as your card is valid.',
+    payByInvoice: 'Manual payment by invoice',
+    invoiceDescription:
+      'You will receive an invoice by email each billing cycle that you pay manually. Your membership will be activated once payment is received, and renewed each cycle as long as the invoice is paid on time.',
+    invoiceAmount: 'Invoice amount: {amount}',
+    viewInvoice: 'View Invoice',
+    awaitingInvoicePayment:
+      'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
+    invoiceMethodMemberbucksInfo:
+      'You pay your membership by invoice — no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
+    invoiceMethodNoCardNeeded:
+      'You pay your membership by invoice — no card is needed. Your membership invoice will be emailed to you each billing cycle.',
+  },
+  pendingInvoices: {
+    title: 'Pending Invoices',
+    description:
+      'Members with an outstanding invoice for their membership subscription. Use this panel to record payments received outside of Stripe (bank transfer, cash, etc.).',
+    noInvoices: 'No pending invoices.',
+    columnMember: 'Member',
+    columnEmail: 'Email',
+    columnPlan: 'Plan',
+    columnAmount: 'Amount Due',
+    columnCreated: 'Created',
+    columnDue: 'Due',
+    columnActions: 'Actions',
+    viewInStripe: 'View in Stripe',
+    markPaid: 'Mark as Paid',
+    markPaidTitle: 'Mark Invoice as Paid',
+    markPaidHelp:
+      'This marks the invoice as paid out-of-band in Stripe (no card charge). The subscription will activate via the paid webhook. Add an optional note for the audit trail.',
+    commentLabel: 'Comment (optional)',
+    commentPlaceholder: 'e.g. Paid by bank transfer on 2026-04-10',
+    confirmMarkPaid: 'Mark as Paid',
+    markPaidSuccess: 'Invoice marked as paid.',
+    markPaidError: 'Failed to mark invoice as paid.',
+    fetchError: 'Failed to load pending invoices.',
   },
 };

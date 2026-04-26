@@ -94,6 +94,16 @@ urlpatterns = [
         name="ManageMembershipTierPlan",
     ),
     path(
+        "api/admin/billing/pending-invoices/",
+        views.PendingInvoices.as_view(),
+        name="PendingInvoices",
+    ),
+    path(
+        "api/admin/billing/invoices/<str:invoice_id>/mark-paid/",
+        views.MarkInvoicePaid.as_view(),
+        name="MarkInvoicePaid",
+    ),
+    path(
         "api/admin/settings/",
         views.ManageSettings.as_view(),
         name="ManageSettings",

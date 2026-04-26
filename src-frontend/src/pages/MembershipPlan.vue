@@ -20,6 +20,25 @@
       <template v-else>
         <selected-tier :plan="currentPlan" :tier="currentTier" />
 
+        <q-banner v-if="subscriptionStatus === 'pending'" class="bg-orange text-white q-mb-md" inline-actions rounded>
+          <template v-slot:avatar>
+            <q-icon name="mdi-alert" />
+          </template>
+          {{ $t('billing.awaitingInvoicePayment') }}
+          <template v-slot:action>
+            <q-btn
+              v-if="subscriptionInfo?.invoiceUrl"
+              flat
+              no-caps
+              text-color="white"
+              :label="$tc('billing.viewInvoice')"
+              :href="subscriptionInfo.invoiceUrl"
+              target="_blank"
+              icon="mdi-open-in-new"
+            />
+          </template>
+        </q-banner>
+
         <div v-if="cancelSuccess" class="row q-mb-md">
           <q-banner class="bg-success text-white">
             <div class="text-h5">{{ $tc('actionSuccess') }}</div>
@@ -52,6 +71,14 @@
             <q-list bordered separator>
               <q-item>
                 <q-item-section>
+                  <q-item-label>{{ paymentMethodLabel }}</q-item-label>
+                  <q-item-label caption>{{
+                    $tc('paymentPlans.paymentMethod')
+                  }}</q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item>
+                <q-item-section>
                   <q-item-label>{{ currentPeriodEnd }}</q-item-label>
                   <q-item-label caption>{{
                     $tc('paymentPlans.renewalDate')
@@ -71,14 +98,14 @@
         </div>
 
         <q-btn
-          v-if="subscriptionStatus === 'active'"
+          v-if="subscriptionStatus === 'active' || subscriptionStatus === 'pending'"
           :disable="disableButton"
           :loading="loadingButton"
           @click="cancelPlan"
           color="error"
           :label="$tc('paymentPlans.cancelButton')"
         />
-        <member-bucks-manage-billing v-else-if="!cardExists" />
+        <member-bucks-manage-billing v-else-if="!cardExists && billingMethod !== 'invoice'" />
         <q-btn
           v-else
           :disable="disableButton"
@@ -141,6 +168,9 @@ export default defineComponent({
     subscriptionStatus() {
       return this.profile.financial.subscriptionState;
     },
+    billingMethod() {
+      return this?.profile?.financial?.billingMethod;
+    },
     currentPeriodEnd() {
       return new Date(
         this.subscriptionInfo?.currentPeriodEnd * 1000
@@ -155,6 +185,12 @@ export default defineComponent({
       return new Date(this.subscriptionInfo?.cancelAt * 1000).toLocaleString(
         'en-au'
       );
+    },
+    paymentMethodLabel() {
+      const method = this.profile?.financial?.billingMethod;
+      return method === 'invoice'
+        ? this.$t('paymentPlans.paymentMethodInvoice')
+        : this.$t('paymentPlans.paymentMethodCard');
     },
   },
   methods: {

@@ -161,7 +161,23 @@
         :active-icon="icons.success"
         :done="step > 2"
       >
-        <template v-if="signupError">
+        <template v-if="awaitingPayment">
+          <q-banner class="bg-info text-white">
+            <div class="text-h5">{{ $tc('signup.awaitingPaymentTitle') }}</div>
+            <p>{{ $tc('signup.awaitingInvoicePayment') }}</p>
+          </q-banner>
+
+          <div class="row justify-start q-mt-md">
+            <q-space />
+            <q-btn
+              :to="{ name: 'dashboard' }"
+              color="primary"
+              :label="$tc('signup.continueToDashboard')"
+            />
+          </div>
+        </template>
+
+        <template v-else-if="signupError">
           <div class="text-h6 q-py-md">
             {{ $tc('signup.error') }}
           </div>
@@ -231,6 +247,7 @@ export default defineComponent({
       signupError: false,
       signupErrorMessage: 'Unknown',
       signupErrorItems: [],
+      awaitingPayment: false,
       inductionScore: 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       interval: null as any,
@@ -283,7 +300,9 @@ export default defineComponent({
       api
         .post('/api/billing/complete-signup/')
         .then((result) => {
-          if (!result.data.success) {
+          if (result.data.awaitingPayment) {
+            this.awaitingPayment = true;
+          } else if (!result.data.success) {
             this.signupError = true;
             this.signupErrorMessage = result.data.message;
             this.signupErrorItems = result.data.items;

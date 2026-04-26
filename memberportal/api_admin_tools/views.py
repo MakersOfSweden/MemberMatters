@@ -19,6 +19,7 @@ from sentry_sdk import capture_message
 
 from access import models
 from access.models import DoorLog, InterlockLog
+from api_billing.views import ensure_stripe_customer
 from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
@@ -102,19 +103,9 @@ class MakeMember(APIView):
 
         # if they're a new member or account only
         if user.profile.state == "noob" or user.profile.state == "accountonly":
-            # give default door access
-            for door in models.Doors.objects.filter(all_members=True):
-                user.profile.doors.add(door)
+            user.profile.add_default_access()
 
-            # give default interlock access
-            for interlock in models.Interlock.objects.filter(all_members=True):
-                user.profile.interlocks.add(interlock)
-
-            # send the welcome email
-            email = user.email_welcome()
-
-            # mark them as "active" — pass the request so the audit log
-            # attributes the activation to the admin instead of "system".
+            # activate() owns the welcome + access-enabled messaging.
             user.profile.activate(request)
 
             subject = f"{user.profile.get_full_name()} just got turned into a member!"
@@ -124,29 +115,12 @@ class MakeMember(APIView):
                 user=request.user,
             )
 
-            if email:
-                return Response(
-                    {
-                        "success": True,
-                        "message": "adminTools.makeMemberSuccess",
-                    }
-                )
-
-            # if there was an error sending the welcome email
-            elif email is False:
-                return Response(
-                    {"success": False, "message": "adminTools.makeMemberErrorEmail"}
-                )
-
-            # otherwise some other error happened
-            else:
-                capture_message("Unknown error occurred when running makemember.")
-                return Response(
-                    {
-                        "success": False,
-                        "message": "adminTools.makeMemberError",
-                    }
-                )
+            return Response(
+                {
+                    "success": True,
+                    "message": "adminTools.makeMemberSuccess",
+                }
+            )
         else:
             return Response(
                 {
@@ -565,63 +539,16 @@ class MemberEnsureStripeCustomer(StripeAPIView):
 
     def post(self, request, member_id):
         member = get_object_or_404(User, id=member_id)
-        profile = member.profile
-        customer_exists = True
 
-        if profile.stripe_customer_id:
-            try:
-                customer = stripe.Customer.retrieve(profile.stripe_customer_id)
-                if customer.get("deleted") or not customer:
-                    customer_exists = False
-            except stripe.error.InvalidRequestError as error:
-                if error.http_status == 404:
-                    profile.stripe_customer_id = None
-                    profile.save()
-                    customer_exists = False
+        ok, err = ensure_stripe_customer(member)
+        if ok:
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Stripe customer exists with ID: {member.profile.stripe_customer_id}",
+                }
+            )
         else:
-            customer_exists = False
-
-        if customer_exists:
-            member.log_event(
-                f"Stripe customer already exists (Stripe ID: {profile.stripe_customer_id}).",
-                "stripe",
-            )
-            return Response(
-                {
-                    "success": True,
-                    "message": f"Customer already exists with Stripe ID: {profile.stripe_customer_id}",
-                }
-            )
-
-        try:
-            member.log_event("Attempting to create stripe customer.", "stripe")
-            customer = stripe.Customer.create(
-                email=member.email,
-                name=profile.get_full_name(),
-                phone=profile.phone,
-            )
-
-            profile.stripe_customer_id = customer.id
-            profile.save()
-
-            member.log_event(
-                f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
-                "stripe",
-            )
-
-            return Response(
-                {
-                    "success": True,
-                    "message": f"Created Stripe customer with ID: {customer.id}",
-                }
-            )
-
-        except stripe.error.StripeError as e:
-            capture_exception(e)
-            member.log_event(
-                "Error while creating stripe customer.",
-                "stripe",
-            )
             return Response(
                 {
                     "success": False,
@@ -1034,3 +961,149 @@ class ManageSettings(APIView):
 
         except ConstanceSetting.DoesNotExist as e:
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class PendingInvoices(StripeAPIView):
+    """
+    get: Returns a list of members with an outstanding (open) Stripe invoice
+    for their subscription. Used by the admin Pending Invoices panel to
+    facilitate off-Stripe payment collection (bank transfer, cash, etc.)
+    while still using the Stripe subscription mechanism.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request):
+        if not config.ENABLE_INVOICE_BILLING:
+            return Response([])
+
+        pending_members = User.objects.select_related("profile").filter(
+            profile__subscription_status="pending"
+        )
+
+        results = []
+        for member in pending_members:
+            profile = member.profile
+            if not profile.stripe_subscription_id:
+                continue
+
+            try:
+                invoices = stripe.Invoice.list(
+                    subscription=profile.stripe_subscription_id,
+                    status="open",
+                    limit=1,
+                )
+                if not invoices.data:
+                    continue
+                invoice = invoices.data[0]
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                continue
+
+            plan = profile.membership_plan
+            results.append(
+                {
+                    "memberId": member.id,
+                    "memberName": profile.get_full_name(),
+                    "memberEmail": member.email,
+                    "planName": plan.name if plan else None,
+                    "invoiceId": invoice.id,
+                    "invoiceNumber": invoice.number,
+                    "amountDue": invoice.amount_due,
+                    "currency": invoice.currency,
+                    "created": invoice.created,
+                    "dueDate": invoice.due_date,
+                    "hostedInvoiceUrl": invoice.hosted_invoice_url,
+                }
+            )
+
+        return Response(results)
+
+
+class MarkInvoicePaid(StripeAPIView):
+    """
+    post: Marks a Stripe invoice as paid out-of-band (e.g. bank transfer,
+    cash) without charging through Stripe. An optional comment is stored on
+    the invoice's metadata for audit trail purposes.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, invoice_id):
+        if not config.ENABLE_INVOICE_BILLING:
+            return Response(
+                {"success": False, "message": "Invoice billing is disabled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        comment = (request.data.get("comment") or "").strip()
+
+        try:
+            invoice = stripe.Invoice.retrieve(invoice_id)
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            return Response(
+                {
+                    "success": False,
+                    "message": "Failed to retrieve invoice from Stripe.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Only allow paying invoices that belong to a member whose subscription
+        # is currently pending — this prevents marking arbitrary invoices in the
+        # Stripe account (memberbucks top-ups, unrelated charges, etc.) as paid.
+        if (
+            not invoice.subscription
+            or not Profile.objects.filter(
+                stripe_subscription_id=invoice.subscription,
+                subscription_status="pending",
+            ).exists()
+        ):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invoice is not for a pending membership subscription.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            stripe.Invoice.pay(invoice_id, paid_out_of_band=True)
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            return Response(
+                {
+                    "success": False,
+                    "message": "Failed to mark invoice as paid in Stripe.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if comment:
+            try:
+                stripe.Invoice.modify(
+                    invoice_id,
+                    metadata={
+                        # User id (not email) so we don't ship staff PII to
+                        # Stripe. Internal lookups can resolve id → user.
+                        "marked_paid_by_user_id": str(request.user.id),
+                        "marked_paid_comment": comment[:500],
+                    },
+                )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                request.user.log_event(
+                    f"Failed to attach audit comment to Stripe invoice "
+                    f"{invoice_id} (invoice was still marked paid).",
+                    "stripe",
+                    data=comment,
+                )
+
+        request.user.log_event(
+            f"Marked Stripe invoice {invoice_id} as paid out-of-band.",
+            "stripe",
+            data=comment,
+        )
+
+        return Response({"success": True})

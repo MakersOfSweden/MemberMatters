@@ -68,6 +68,12 @@ class MemberBucksAddFunds(StripeAPIView):
     def post(self, request, amount=None):
         profile = request.user.profile
 
+        if not profile.stripe_payment_method_id:
+            return Response(
+                "No saved payment method. Please add a card to top up Memberbucks.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # check if we got an amount, and if it's less than or equal to 50 dollars
         if amount and amount <= int(config.MEMBERBUCKS_MAX_TOPUP):
             payment_amount = amount * 100  # convert to cents

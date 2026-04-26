@@ -117,6 +117,15 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/ManageTier.vue'),
       },
       {
+        icon: icons.plans,
+        to: '/manage/pending-invoices',
+        name: 'pendingInvoices',
+        loggedIn: true,
+        admin: true,
+        featureEnabledFlag: 'enableInvoiceBilling',
+        component: () => import('pages/AdminTools/PendingInvoices.vue'),
+      },
+      {
         icon: icons.interlocks,
         to: '/manage/devices',
         name: 'devices',

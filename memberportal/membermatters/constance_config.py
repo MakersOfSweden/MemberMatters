@@ -120,6 +120,32 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    "ENABLE_INVOICE_BILLING": (
+        False,
+        "Enable the 'Pay by Invoice' option during membership signup. "
+        "When enabled, members may choose to receive a Stripe invoice by email "
+        "instead of paying by card. Membership activation is deferred until the "
+        "invoice is paid. REQUIRED Stripe setup: in Billing → Settings → "
+        "Subscriptions and emails, configure 'Manage failed payments' to cancel "
+        "the subscription after the invoice goes past due. Without this, "
+        "members who never pay stay in 'pending' state indefinitely — it is "
+        "the customer.subscription.deleted webhook (triggered by Stripe's "
+        "auto-cancel) that moves the member back to 'inactive'. MemberMatters "
+        "automatically voids the open invoice when that webhook fires, so no "
+        "additional invoice-handling configuration is required in Stripe.",
+    ),
+    "INVOICE_DAYS_UNTIL_DUE": (
+        31,
+        "Number of days before a Stripe membership invoice is due. "
+        "See ENABLE_INVOICE_BILLING for the required Stripe Dashboard setup "
+        "that handles what happens once an invoice goes past due.",
+    ),
+    "INVOICE_BILLING_NOTE": (
+        "Supported payment methods are: ",
+        "Optional note displayed to members when they select invoice billing during signup. "
+        "Use this for additional payment instructions, bank details, or other information. "
+        "Leave empty to hide.",
+    ),
     # ==== Membership Status Card ====
     "ENABLE_MEMBERSHIP_STATUS_CARD": (
         True,
@@ -527,6 +553,9 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "STRIPE_WEBHOOK_SECRET",
                 "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS",
                 "MEMBERBUCKS_CURRENCY",
+                "ENABLE_INVOICE_BILLING",
+                "INVOICE_DAYS_UNTIL_DUE",
+                "INVOICE_BILLING_NOTE",
             ),
         ),
         (
