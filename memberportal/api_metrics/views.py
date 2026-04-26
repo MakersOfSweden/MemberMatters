@@ -87,7 +87,7 @@ class UpdatePromMetrics(APIView):
     post: triggers Django to update the Prometheus site metrics from the database.
     """
 
-    permission_classes = (permissions.AllowAny,)
+    permission_classes = (permissions.IsAdminUser | HasAPIKey,)
 
     def post(self, request):
         metrics = []
@@ -107,7 +107,7 @@ class UpdatePromMetrics(APIView):
                 Metric.MetricName.MEMBERBUCKS_BALANCE_TOTAL,
                 Metric.MetricName.MEMBERBUCKS_TRANSACTIONS_TOTAL,
             ]:
-                prom_metric = getattr(api_metrics.metrics, metric.name)
+                prom_metric = getattr(api_metrics, metric.name, None)
 
                 if not prom_metric:
                     logger.error(f"Prometheus metric {metric.name} not found.")

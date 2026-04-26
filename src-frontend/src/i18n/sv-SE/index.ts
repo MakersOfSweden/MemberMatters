@@ -113,6 +113,8 @@ export default {
       'Denna sida listar några stats och nyckeltal som hämtas in av medlemsportalen.',
     disabled:
       'Denna funktion är just nu avstängd. Nyckeltal kan saknas eller vara utdaterade.',
+    adminHint:
+      'Admin-tips: ingen nyckeltalsdata visas. Se avsnittet "Stats Settings" i POST_INSTALL_STEPS för konfigurationsdetaljer.',
     member_count_total: 'Antal medlemmar',
     member_count_6_months_total: 'Antal medlemmar (>6 Mån)',
     member_count_12_months_total: 'Antal medlemmar (>12 Mån)',

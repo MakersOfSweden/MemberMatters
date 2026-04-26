@@ -133,7 +133,7 @@ def calculate_memberbucks_balance():
     )
     Metric.objects.create(
         name=Metric.MetricName.MEMBERBUCKS_BALANCE_TOTAL,
-        data={"value": total_balance["memberbucks_balance__sum"]},
+        data={"value": total_balance["memberbucks_balance__sum"] or 0},
     ).full_clean()
 
 

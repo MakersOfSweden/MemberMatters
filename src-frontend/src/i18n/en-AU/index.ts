@@ -114,6 +114,8 @@ export default {
       'This page lists some stats and metrics collected by the member portal.',
     disabled:
       'This feature is currently disabled. Metrics data may not be available or up to date.',
+    adminHint:
+      'Admin hint: no metrics data is being plotted. See the "Stats Settings" section of POST_INSTALL_STEPS for setup details.',
     member_count_total: 'Member Count',
     member_count_6_months_total: 'Member Count (>6 Mths)',
     member_count_12_months_total: 'Member Count (>12 Mths)',

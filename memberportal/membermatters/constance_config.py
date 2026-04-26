@@ -446,6 +446,10 @@ CONSTANCE_CONFIG = {
         365,
         "The maximum number of days to show on the stats page.",
     ),
+    "METRICS_API_KEY": (
+        "",
+        "API key (Api-Key <key>) used by the Celery metrics task to push Prometheus values back to the web server. Create one in Django admin under 'API Keys' and paste the raw key here.",
+    ),
     "ENABLE_LAST_SEEN_PAGE": (
         True,
         "Enable the Last Seen page that shows member last seen data.",
@@ -491,7 +495,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_RECENT_SWIPES_PAGE",
             ),
         ),
-        ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS")),
+        ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS", "METRICS_API_KEY")),
         (
             "Sentry Error Reporting",
             (

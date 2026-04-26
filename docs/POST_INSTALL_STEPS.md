@@ -228,6 +228,22 @@ When testing this locally, make sure the `stripe listen` command in the backend 
   * "THEME_SWIPE_URL" - a URL to hit on each door/interlock swipe that can trigger a theme song played over your intercom system, or something else.
   * "ENABLE_THEME_SWIPE" - enable the theme song swipe webhook.
 
+### Stats Settings
+  * "ENABLE_STATS_PAGE" - enables the in-portal stats page for non-admins. Admins can always view it.
+  * "STATS_MAX_DAYS" - the maximum window (in days) of historical metrics shown on the stats page.
+  * "METRICS_API_KEY" - **required for Prometheus scraping**. The Celery `calculate_metrics` task computes
+    metric values in a worker process and then POSTs to `/api/update-prom-metrics/` so the values land in the
+    web server's Prometheus registry (where `/metrics` is scraped from). That endpoint requires admin or
+    API-key authentication, so the task needs a key:
+    1. Open Django admin (`/admin`) and log in as a superuser.
+    2. Under **API Key Permissions → API Keys**, click **Add API Key**, give it a name like
+       `metrics-task`, and save. Copy the raw key shown once on the next page (you cannot retrieve it
+       again — it is only displayed at creation time).
+    3. In Constance, paste the raw key into `METRICS_API_KEY` and save.
+
+    If `METRICS_API_KEY` is empty, the metrics rows are still written to the database (so the in-portal
+    stats page works), but the Celery task will skip the Prometheus push and log a warning.
+
 ### Members Settings
   * "ENABLE_LAST_SEEN_PAGE" - shows the last seen listing on members pages when enabled
 
