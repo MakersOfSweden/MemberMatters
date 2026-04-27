@@ -136,123 +136,77 @@
               class="col-12 col-md-6"
               :class="{ 'q-px-sm': $q.screen.xs, 'q-px-lg': !$q.screen.xs }"
             >
-              <q-form ref="formRef">
+              <q-form ref="formRef" @submit="onSubmit">
                 <h5 class="q-my-sm">
                   {{ $t('adminTools.mainProfile') }}
                 </h5>
                 <q-input
                   v-model="profileForm.email"
                   outlined
-                  :debounce="debounceLength"
-                  :label="emailLabel"
+                  type="email"
+                  :label="requiredLabel($t('form.email'))"
+                  lazy-rules
                   :rules="[
                     (val) =>
                       validateEmail(val) || $t('validation.invalidEmail'),
                   ]"
-                  @update:model-value="saveChange('email')"
-                >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.email"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                />
 
                 <q-input
                   v-model="profileForm.rfidCard"
                   outlined
-                  :debounce="debounceLength"
-                  :label="$t('form.rfidCard')"
+                  :label="requiredLabel($t('form.rfidCard'))"
+                  lazy-rules
                   :rules="[
                     (val) =>
                       validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
                   ]"
-                  @update:model-value="saveChange('rfidCard')"
-                >
-                  <template v-slot:append>
-                    <saved-notification
-                      :success="saved.rfidCard"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                />
 
                 <q-input
                   v-model="profileForm.firstName"
                   outlined
-                  :debounce="debounceLength"
-                  :label="$t('form.firstName')"
+                  :label="requiredLabel($t('form.firstName'))"
+                  lazy-rules
                   :rules="[
                     (val) =>
                       validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
                   ]"
-                  @update:model-value="saveChange('firstName')"
-                >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.firstName"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                />
 
                 <q-input
                   v-model="profileForm.lastName"
                   outlined
-                  :debounce="debounceLength"
-                  :label="$t('form.lastName')"
+                  :label="requiredLabel($t('form.lastName'))"
+                  lazy-rules
                   :rules="[
                     (val) =>
                       validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
                   ]"
-                  @update:model-value="saveChange('lastName')"
-                >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.lastName"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                />
 
                 <q-input
                   v-model="profileForm.phone"
                   outlined
-                  :debounce="debounceLength"
-                  :label="$t('form.mobile')"
-                  :rules="[
-                    (val) =>
-                      validateNotEmpty(val) || $t('validation.invalidPhone'),
-                  ]"
-                  @update:model-value="saveChange('phone')"
-                >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.phone"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
-
-                <q-input
-                  v-model="profileForm.screenName"
-                  outlined
-                  :debounce="debounceLength"
-                  :label="$t('form.screenName')"
+                  type="tel"
+                  :label="requiredLabel($t('form.mobile'))"
+                  lazy-rules
                   :rules="[
                     (val) =>
                       validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
                   ]"
-                  @update:model-value="saveChange('screenName')"
-                >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.screenName"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                />
+
+                <q-input
+                  v-model="profileForm.screenName"
+                  outlined
+                  :label="requiredLabel($t('form.screenName'))"
+                  lazy-rules
+                  :rules="[
+                    (val) =>
+                      validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                  ]"
+                />
 
                 <q-input
                   v-if="
@@ -262,20 +216,42 @@
                   v-model="profileForm.vehicleRegistrationPlate"
                   :disable="!features?.signup?.collectVehicleRegistrationPlate"
                   outlined
-                  :debounce="debounceLength"
                   :label="$t('form.vehicleRegistrationPlate')"
+                  lazy-rules
                   :rules="[
                     (val) => validateMax30(val) || $t('validation.max30'),
                   ]"
-                  @update:model-value="saveChange('vehicleRegistrationPlate')"
+                />
+
+                <q-banner
+                  v-if="success"
+                  class="bg-positive text-white q-mt-md"
                 >
-                  <template #append>
-                    <saved-notification
-                      :success="saved.vehicleRegistrationPlate"
-                      :error="saved.error"
-                    />
-                  </template>
-                </q-input>
+                  {{ $t('form.saved') }}
+                </q-banner>
+
+                <q-banner
+                  v-if="errorMessageKey"
+                  class="bg-negative text-white q-mt-md"
+                >
+                  {{ $t(errorMessageKey) }}
+                </q-banner>
+
+                <q-banner
+                  v-else-if="genericError"
+                  class="bg-negative text-white q-mt-md"
+                >
+                  {{ $t('error.requestFailed') }}
+                </q-banner>
+
+                <q-btn
+                  :label="$t('button.submit')"
+                  type="submit"
+                  color="primary"
+                  class="full-width q-mt-md"
+                  :loading="saving"
+                  :disable="saving || !isDirty"
+                />
               </q-form>
             </div>
 
@@ -1380,17 +1356,15 @@
 <script lang="ts">
 import AccessList from '@components/AccessList.vue';
 import formMixin from '@mixins/formMixin';
-import SavedNotification from '@components/SavedNotification.vue';
 import icons from '../../icons';
 import formatMixin from '@mixins/formatMixin';
 import { mapGetters } from 'vuex';
-import { QForm } from 'quasar';
 import { MemberBillingInfo, MemberProfile, MemberState } from 'types/member';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
   name: 'ManageMember',
-  components: { AccessList, SavedNotification },
+  components: { AccessList },
   mixins: [formMixin, formatMixin],
   props: {
     member: {
@@ -1423,18 +1397,11 @@ export default defineComponent({
         screenName: '',
         vehicleRegistrationPlate: '',
       },
-      saved: {
-        // if there was an error saving the form
-        error: false,
-
-        email: false,
-        rfidCard: false,
-        firstName: false,
-        lastName: false,
-        phone: false,
-        screenName: false,
-        vehicleRegistrationPlate: false,
-      },
+      initialFormSnapshot: '',
+      saving: false,
+      success: false,
+      genericError: false,
+      errorMessageKey: null as string | null,
       billing: null as MemberBillingInfo | null,
       logs: {
         userEventLogs: [],
@@ -1463,45 +1430,42 @@ export default defineComponent({
   },
   methods: {
     loadInitialForm() {
-      this.profileForm.email = this.selectedMember.email;
-      this.profileForm.rfidCard = this.selectedMember.rfid;
-      this.profileForm.firstName = this.selectedMember.name.first;
-      this.profileForm.lastName = this.selectedMember.name.last;
-      this.profileForm.phone = this.selectedMember.phone;
-      this.profileForm.screenName = this.selectedMember.screenName;
+      this.profileForm.email = this.selectedMember.email ?? '';
+      this.profileForm.rfidCard = this.selectedMember.rfid ?? '';
+      this.profileForm.firstName = this.selectedMember.name?.first ?? '';
+      this.profileForm.lastName = this.selectedMember.name?.last ?? '';
+      this.profileForm.phone = this.selectedMember.phone ?? '';
+      this.profileForm.screenName = this.selectedMember.screenName ?? '';
       this.profileForm.vehicleRegistrationPlate =
-        this.selectedMember.vehicleRegistrationPlate;
+        this.selectedMember.vehicleRegistrationPlate ?? '';
+      this.initialFormSnapshot = JSON.stringify(this.profileForm);
     },
-    saveChange(field: keyof typeof this.saved) {
-      const formRef = this.$refs.formRef as typeof QForm;
-      formRef.validate(false).then(() => {
-        formRef.validate(false).then((result: boolean) => {
-          if (result) {
-            this.$axios
-              .put(`/api/admin/members/${this.member.id}/profile/`, {
-                ...this.profileForm,
-                excludeFromEmailExport:
-                  this.selectedMember.excludeFromEmailExport,
-              })
-              .then(() => {
-                this.saved.error = false;
-                this.saved[field as keyof typeof this.saved] = true;
-                this.$emit('memberUpdated');
-                setTimeout(() => {
-                  this.saved[field as keyof typeof this.saved] = false;
-                }, 1500);
-              })
-              .catch(() => {
-                this.saved.error = true;
-                this.saved[field as keyof typeof this.saved] = true;
-                setTimeout(() => {
-                  this.saved[field as keyof typeof this.saved] = false;
-                  this.saved.error = false;
-                }, 1500);
-              });
+    onSubmit() {
+      this.success = false;
+      this.genericError = false;
+      this.errorMessageKey = null;
+      this.saving = true;
+
+      this.$axios
+        .put(`/api/admin/members/${this.member.id}/profile/`, {
+          ...this.profileForm,
+          excludeFromEmailExport: this.selectedMember.excludeFromEmailExport,
+        })
+        .then(() => {
+          this.success = true;
+          this.$emit('memberUpdated');
+        })
+        .catch((err) => {
+          const message = err?.response?.data?.message;
+          if (err?.response?.status === 409 && message) {
+            this.errorMessageKey = message;
+          } else {
+            this.genericError = true;
           }
+        })
+        .finally(() => {
+          this.saving = false;
         });
-      });
     },
     sendWelcomeEmail() {
       this.welcomeLoading = true;
@@ -1711,6 +1675,23 @@ export default defineComponent({
       const smsContainsUnicode = /[^\u0000-\u00ff]/.test(this.smsBody);
       const charsPerSms = smsContainsUnicode ? 70 : 160;
       return Math.ceil(this.smsBody.length / charsPerSms);
+    },
+    isDirty(): boolean {
+      return JSON.stringify(this.profileForm) !== this.initialFormSnapshot;
+    },
+  },
+  watch: {
+    selectedMember() {
+      this.loadInitialForm();
+    },
+    profileForm: {
+      deep: true,
+      handler() {
+        if (!this.isDirty) return;
+        this.success = false;
+        this.genericError = false;
+        this.errorMessageKey = null;
+      },
     },
   },
 });

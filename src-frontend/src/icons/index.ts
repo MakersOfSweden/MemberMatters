@@ -60,6 +60,7 @@ export default {
 
   rfid: 'mdi-key-wireless',
   rfidSlash: 'mdi-key-remove',
+  digitalId: 'mdi-card-account-details',
 
   members: 'mdi-account-supervisor-circle',
   membersOnSite: 'mdi-contacts',

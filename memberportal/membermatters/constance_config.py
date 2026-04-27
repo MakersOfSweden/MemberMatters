@@ -357,6 +357,10 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
     ),
+    "MEMBER_CAN_EDIT_BASIC_DETAILS": (
+        True,
+        "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
+    ),
     "SIGNUP_REQUIRE_PRIVACY_CONSENT": (
         False,
         "Display a checkbox on the signup page requiring the user to consent to the storage of their personal data before registering.",
@@ -517,6 +521,10 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "SIGNUP_PRIVACY_POLICY_URL",
                 "SIGNUP_PRIVACY_POLICY_TEXT",
             ),
+        ),
+        (
+            "Member Profile",
+            ("MEMBER_CAN_EDIT_BASIC_DETAILS",),
         ),
         (
             "Moodle (LMS) Integration",
