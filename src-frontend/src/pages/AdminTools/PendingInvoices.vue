@@ -3,6 +3,13 @@
     <div class="text-h5 q-mb-md">{{ $t('pendingInvoices.title') }}</div>
     <p class="text-grey-7 q-mb-md">{{ $t('pendingInvoices.description') }}</p>
 
+    <q-banner
+      v-if="!features.enableInvoiceBilling"
+      class="bg-warning text-dark q-mb-md"
+    >
+      {{ $t('pendingInvoices.invoiceDisabledWarning') }}
+    </q-banner>
+
     <q-table
       :rows="invoices"
       :columns="columns"
@@ -102,6 +109,7 @@
 
 <script>
 import icons from '@icons';
+import { mapGetters } from 'vuex';
 
 export default {
   name: 'PendingInvoices',
@@ -116,6 +124,7 @@ export default {
     };
   },
   computed: {
+    ...mapGetters('config', ['features']),
     icons() {
       return icons;
     },

@@ -251,6 +251,7 @@ class PaymentPlanSignup(StripeAPIView):
         billing_method: str = "card",
         attempts: int = 0,
     ):
+        """Returns (subscription, error_response); exactly one is None."""
         attempts += 1
 
         if attempts > 3:
@@ -259,7 +260,7 @@ class PaymentPlanSignup(StripeAPIView):
                 "stripe",
                 "",
             )
-            return Response(
+            return None, Response(
                 {
                     "success": False,
                     "message": None,
@@ -276,7 +277,12 @@ class PaymentPlanSignup(StripeAPIView):
                 subscription_params["collection_method"] = "send_invoice"
                 subscription_params["days_until_due"] = config.INVOICE_DAYS_UNTIL_DUE
 
-            subscription = stripe.Subscription.create(**subscription_params)
+            # `attempts` suffix lets the resource_missing retry below get a
+            # fresh key instead of Stripe's cached failure response.
+            subscription = stripe.Subscription.create(
+                **subscription_params,
+                idempotency_key=f"signup-{request.user.id}-{new_plan.id}-{attempts}",
+            )
 
             # For send_invoice subscriptions, Stripe delays finalizing the first
             # invoice by ~1 hour before auto-sending it. Finalize it immediately
@@ -301,7 +307,7 @@ class PaymentPlanSignup(StripeAPIView):
                         "stripe",
                     )
 
-            return subscription
+            return subscription, None
 
         except stripe.error.InvalidRequestError as e:
             capture_exception(e)
@@ -340,7 +346,7 @@ class PaymentPlanSignup(StripeAPIView):
                     error,
                 )
 
-                return Response(
+                return None, Response(
                     {
                         "success": False,
                         "message": error["message"],
@@ -354,7 +360,7 @@ class PaymentPlanSignup(StripeAPIView):
                     "stripe",
                     error,
                 )
-                return Response(
+                return None, Response(
                     {
                         "success": False,
                         "message": None,
@@ -369,7 +375,7 @@ class PaymentPlanSignup(StripeAPIView):
                 e,
             )
             capture_exception(e)
-            return Response(
+            return None, Response(
                 {
                     "success": False,
                     "message": None,
@@ -378,19 +384,17 @@ class PaymentPlanSignup(StripeAPIView):
             )
 
     def post(self, request, plan_id):
-        current_plan = request.user.profile.membership_plan
         new_plan = PaymentPlan.objects.get(pk=plan_id)
-
-        if current_plan:
-            return Response({"success": False}, status=status.HTTP_409_CONFLICT)
 
         billing_method = request.data.get("billingMethod", "card")
         if billing_method not in ("card", "invoice"):
             billing_method = "card"
 
-        # Server-side guard: ignore invoice billing if feature is disabled
         if billing_method == "invoice" and not config.ENABLE_INVOICE_BILLING:
-            billing_method = "card"
+            return Response(
+                {"success": False, "message": "billing.invoiceDisabled"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # For invoice billing, the user skipped the card step so customer may not exist yet
         if billing_method == "invoice":
@@ -401,17 +405,30 @@ class PaymentPlanSignup(StripeAPIView):
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
-        new_subscription = self.create_subscription(request, new_plan, billing_method)
+        # Lock so concurrent signups serialize and the second one sees
+        # membership_plan set, returning 409 instead of creating a second sub.
+        with transaction.atomic():
+            locked_profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
+            )
 
-        try:
+            if locked_profile.membership_plan:
+                return Response({"success": False}, status=status.HTTP_409_CONFLICT)
+
+            new_subscription, error_response = self.create_subscription(
+                request, new_plan, billing_method
+            )
+            if error_response is not None:
+                return error_response
+
             if new_subscription.status == "active":
-                request.user.profile.stripe_subscription_id = new_subscription.id
-                request.user.profile.membership_plan = new_plan
-                request.user.profile.subscription_status = (
+                locked_profile.stripe_subscription_id = new_subscription.id
+                locked_profile.membership_plan = new_plan
+                locked_profile.subscription_status = (
                     "pending" if billing_method == "invoice" else "active"
                 )
-                request.user.profile.billing_method = billing_method
-                request.user.profile.save()
+                locked_profile.billing_method = billing_method
+                locked_profile.save()
 
                 request.user.log_event(
                     "Successfully created subscription in Stripe.",
@@ -421,29 +438,24 @@ class PaymentPlanSignup(StripeAPIView):
 
                 return Response({"success": True})
 
-            elif new_subscription.status == "incomplete":
-                # if we got here, that means the subscription wasn't successfully created
+            request.user.log_event(
+                f"Failed to create subscription in Stripe with status {new_subscription.status}.",
+                "stripe",
+                "",
+            )
+
+            # Cancel the non-active sub (e.g. incomplete from SCA) so it
+            # doesn't dangle on the customer and trigger a duplicate next try.
+            try:
+                stripe.Subscription.delete(new_subscription.id)
+            except stripe.error.StripeError as e:
+                capture_exception(e)
                 request.user.log_event(
-                    f"Failed to create subscription in Stripe with status {new_subscription.status}.",
+                    f"Failed to cancel orphaned subscription {new_subscription.id}.",
                     "stripe",
-                    "",
                 )
 
-                return Response(
-                    {"success": True, "message": "signup.subscriptionFailed"}
-                )
-
-            else:
-                request.user.log_event(
-                    f"Failed to create subscription in Stripe with status {new_subscription.status}.",
-                    "stripe",
-                    "",
-                )
-                return Response({"success": True})
-
-        except KeyError as e:
-            capture_exception(e)
-            return new_subscription or e
+            return Response({"success": False, "message": "signup.subscriptionFailed"})
 
 
 class CanSignup(APIView):
@@ -694,51 +706,49 @@ class PaymentPlanResumeCancel(StripeAPIView):
                             status=status.HTTP_503_SERVICE_UNAVAILABLE,
                         )
 
-                new_subscription = PaymentPlanSignup().create_subscription(
+                (
+                    new_subscription,
+                    error_response,
+                ) = PaymentPlanSignup().create_subscription(
                     request, current_plan, billing_method
                 )
+                if error_response is not None:
+                    return error_response
 
+                if new_subscription.status == "active":
+                    request.user.profile.stripe_subscription_id = new_subscription.id
+                    request.user.profile.subscription_status = (
+                        "pending" if billing_method == "invoice" else "active"
+                    )
+                    request.user.profile.save()
+
+                    request.user.log_event(
+                        "Successfully created subscription in Stripe.",
+                        "stripe",
+                        "",
+                    )
+
+                    return Response({"success": True})
+
+                request.user.log_event(
+                    f"Failed to create subscription in Stripe with status {new_subscription.status}.",
+                    "stripe",
+                    "",
+                )
+
+                # Cancel the non-active sub so a retry doesn't duplicate it.
                 try:
-                    if new_subscription.status == "active":
-                        request.user.profile.stripe_subscription_id = (
-                            new_subscription.id
-                        )
-                        request.user.profile.subscription_status = (
-                            "pending" if billing_method == "invoice" else "active"
-                        )
-                        request.user.profile.save()
-
-                        request.user.log_event(
-                            "Successfully created subscription in Stripe.",
-                            "stripe",
-                            "",
-                        )
-
-                        return Response({"success": True})
-
-                    elif new_subscription.status == "incomplete":
-                        # if we got here, that means the subscription wasn't successfully created
-                        request.user.log_event(
-                            f"Failed to create subscription in Stripe with status {new_subscription.status}.",
-                            "stripe",
-                            "",
-                        )
-
-                        return Response(
-                            {"success": True, "message": "signup.subscriptionFailed"}
-                        )
-
-                    else:
-                        request.user.log_event(
-                            f"Failed to create subscription in Stripe with status {new_subscription.status}.",
-                            "stripe",
-                            "",
-                        )
-                        return Response({"success": True})
-
-                except KeyError as e:
+                    stripe.Subscription.delete(new_subscription.id)
+                except stripe.error.StripeError as e:
                     capture_exception(e)
-                    return new_subscription or e
+                    request.user.log_event(
+                        f"Failed to cancel orphaned subscription {new_subscription.id}.",
+                        "stripe",
+                    )
+
+                return Response(
+                    {"success": False, "message": "signup.subscriptionFailed"}
+                )
 
             elif resume:
                 modified_subscription = stripe.Subscription.modify(

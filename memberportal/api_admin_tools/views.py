@@ -974,9 +974,10 @@ class PendingInvoices(StripeAPIView):
     permission_classes = (permissions.IsAdminUser,)
 
     def get(self, request):
-        if not config.ENABLE_INVOICE_BILLING:
-            return Response([])
-
+        # Intentionally no ENABLE_INVOICE_BILLING gate: existing invoice
+        # subscriptions keep billing in Stripe even when new invoice signups
+        # are disabled, so admins still need this view to record off-Stripe
+        # payments for those members. The frontend shows a config warning.
         pending_members = User.objects.select_related("profile").filter(
             profile__subscription_status="pending"
         )
@@ -1030,12 +1031,9 @@ class MarkInvoicePaid(StripeAPIView):
     permission_classes = (permissions.IsAdminUser,)
 
     def post(self, request, invoice_id):
-        if not config.ENABLE_INVOICE_BILLING:
-            return Response(
-                {"success": False, "message": "Invoice billing is disabled."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        # No ENABLE_INVOICE_BILLING gate — admins must be able to record
+        # off-Stripe payments for legacy invoice subscriptions even after
+        # new invoice signups are disabled.
         comment = (request.data.get("comment") or "").strip()
 
         try:
@@ -1053,13 +1051,15 @@ class MarkInvoicePaid(StripeAPIView):
         # Only allow paying invoices that belong to a member whose subscription
         # is currently pending — this prevents marking arbitrary invoices in the
         # Stripe account (memberbucks top-ups, unrelated charges, etc.) as paid.
-        if (
-            not invoice.subscription
-            or not Profile.objects.filter(
+        member_profile = (
+            Profile.objects.filter(
                 stripe_subscription_id=invoice.subscription,
                 subscription_status="pending",
-            ).exists()
-        ):
+            ).first()
+            if invoice.subscription
+            else None
+        )
+        if member_profile is None:
             return Response(
                 {
                     "success": False,
@@ -1102,6 +1102,12 @@ class MarkInvoicePaid(StripeAPIView):
 
         request.user.log_event(
             f"Marked Stripe invoice {invoice_id} as paid out-of-band.",
+            "stripe",
+            data=comment,
+        )
+        member_profile.user.log_event(
+            f"Admin {request.user.get_full_name()} marked Stripe invoice "
+            f"{invoice_id} as paid out-of-band.",
             "stripe",
             data=comment,
         )

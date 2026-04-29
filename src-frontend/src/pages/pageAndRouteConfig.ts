@@ -117,12 +117,11 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/ManageTier.vue'),
       },
       {
-        icon: icons.plans,
+        icon: icons.pendingInvoices,
         to: '/manage/pending-invoices',
         name: 'pendingInvoices',
         loggedIn: true,
         admin: true,
-        featureEnabledFlag: 'enableInvoiceBilling',
         component: () => import('pages/AdminTools/PendingInvoices.vue'),
       },
       {

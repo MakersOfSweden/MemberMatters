@@ -737,11 +737,15 @@ export default {
       'Du betalar ditt medlemskap via faktura — inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
     invoiceMethodNoCardNeeded:
       'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
+    invoiceDisabled:
+      'Fakturabetalning är inte tillgänglig för närvarande. Välj en annan betalmetod.',
   },
   pendingInvoices: {
     title: 'Väntande fakturor',
     description:
       'Medlemmar med en utestående faktura för sitt medlemskapsabonnemang. Använd den här panelen för att registrera betalningar mottagna utanför Stripe (banköverföring, kontanter, etc.).',
+    invoiceDisabledWarning:
+      'Fakturabetalning är för närvarande inaktiverad, så nya medlemmar kan inte registrera sig via faktura. Befintliga fakturaabonnemang debiteras fortfarande av Stripe — använd den här sidan för att registrera betalningar utanför Stripe för dessa medlemmar.',
     noInvoices: 'Inga väntande fakturor.',
     columnMember: 'Medlem',
     columnEmail: 'E-post',
