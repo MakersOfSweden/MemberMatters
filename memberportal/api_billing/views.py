@@ -560,26 +560,39 @@ class CompleteSignup(StripeAPIView):
     """
 
     def post(self, request):
-        member_profile = request.user.profile
-
-        if member_profile.subscription_status not in ("active", "pending"):
-            return Response(
-                {
-                    "success": False,
-                    "message": "signup.requirementsNotMet",
-                    "items": ["No active subscription found."],
-                }
+        # Lock so a concurrent cancel/webhook can't doors.clear() between
+        # our subscription_status check and add_default_access().
+        with transaction.atomic():
+            locked_profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
             )
 
-        signupCheck = member_profile.can_signup()
+            if locked_profile.subscription_status not in ("active", "pending"):
+                return Response(
+                    {
+                        "success": False,
+                        "message": "signup.requirementsNotMet",
+                        "items": ["No active subscription found."],
+                    }
+                )
 
-        if signupCheck["success"]:
+            signupCheck = locked_profile.can_signup()
+
+            if not signupCheck["success"]:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "signup.requirementsNotMet",
+                        "items": signupCheck["requiredSteps"],
+                    }
+                )
+
             # For invoice billing: all requirements met, but don't activate
             # until invoice is paid. Pre-stage default door/interlock access —
             # safe because access.get_tags() only includes state="active"
             # profiles.
-            if member_profile.subscription_status == "pending":
-                member_profile.add_default_access()
+            if locked_profile.subscription_status == "pending":
+                locked_profile.add_default_access()
 
                 return Response(
                     {
@@ -589,22 +602,19 @@ class CompleteSignup(StripeAPIView):
                     }
                 )
 
-            member_profile.add_default_access()
+            locked_profile.add_default_access()
 
-            # activate() owns the welcome/access-enabled emails and SMS; it
-            # is idempotent so a concurrent invoice.paid webhook cannot cause
-            # duplicate notifications here.
-            member_profile.activate()
+        # activate() takes its own lock + sends emails/SMS/sync_access; run
+        # outside our atomic so that I/O can't extend the row-lock window.
+        already_active = not locked_profile.activate()
 
-            return Response({"success": True})
+        # If activate() short-circuited because the webhook already flipped
+        # state to active, devices haven't been pushed the rows we just
+        # staged — sync explicitly.
+        if already_active:
+            locked_profile.sync_access()
 
-        return Response(
-            {
-                "success": False,
-                "message": "signup.requirementsNotMet",
-                "items": signupCheck["requiredSteps"],
-            }
-        )
+        return Response({"success": True})
 
 
 class SkipSignup(APIView):
@@ -613,23 +623,30 @@ class SkipSignup(APIView):
     """
 
     def post(self, request):
-        profile = request.user.profile
-
-        # Only valid as an opt-out from a brand-new signup. If the member
-        # already has any kind of subscription (active, pending, cancelling)
-        # flipping state to "accountonly" silently revokes their access
-        # while Stripe keeps billing — caller must cancel the subscription
-        # first via /api/billing/myplan/cancel/.
-        if profile.state != "noob" or profile.subscription_status != "inactive":
-            return Response(
-                {
-                    "success": False,
-                    "message": "signup.skipNotAllowed",
-                },
-                status=status.HTTP_409_CONFLICT,
+        # Only valid for a brand-new signup with no subscription. Flipping
+        # state="accountonly" while a Stripe sub is live revokes access but
+        # keeps billing — caller must cancel via /api/billing/myplan/cancel/
+        # first. Lock + re-read so a concurrent webhook can't flip
+        # subscription_status between the check and the write.
+        with transaction.atomic():
+            locked_profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
             )
 
-        profile.set_account_only()
+            if (
+                locked_profile.state != "noob"
+                or locked_profile.subscription_status != "inactive"
+            ):
+                return Response(
+                    {
+                        "success": False,
+                        "message": "signup.skipNotAllowed",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            locked_profile.state = "accountonly"
+            locked_profile.save(update_fields=["state"])
 
         return Response({"success": True})
 
@@ -690,21 +707,30 @@ class PaymentPlanResumeCancel(StripeAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        else:
-            if resume and not request.user.profile.stripe_subscription_id:
-                request.user.log_event(
-                    "Member tried to resume a payment plan that doesn't exist - creating it.",
-                    "stripe",
+        if resume and not request.user.profile.stripe_subscription_id:
+            request.user.log_event(
+                "Member tried to resume a payment plan that doesn't exist - creating it.",
+                "stripe",
+            )
+
+            billing_method = request.user.profile.billing_method
+            if billing_method == "invoice":
+                ok, err = ensure_stripe_customer(request.user)
+                if not ok:
+                    return Response(
+                        {"success": False, "message": err},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+
+            # Lock so two concurrent resume clicks don't both create a
+            # subscription. Mirrors PaymentPlanSignup.post.
+            with transaction.atomic():
+                locked_profile = Profile.objects.select_for_update().get(
+                    pk=request.user.profile.pk
                 )
 
-                billing_method = request.user.profile.billing_method
-                if billing_method == "invoice":
-                    ok, err = ensure_stripe_customer(request.user)
-                    if not ok:
-                        return Response(
-                            {"success": False, "message": err},
-                            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        )
+                if locked_profile.stripe_subscription_id:
+                    return Response({"success": False}, status=status.HTTP_409_CONFLICT)
 
                 (
                     new_subscription,
@@ -716,11 +742,16 @@ class PaymentPlanResumeCancel(StripeAPIView):
                     return error_response
 
                 if new_subscription.status == "active":
-                    request.user.profile.stripe_subscription_id = new_subscription.id
-                    request.user.profile.subscription_status = (
+                    locked_profile.stripe_subscription_id = new_subscription.id
+                    locked_profile.subscription_status = (
                         "pending" if billing_method == "invoice" else "active"
                     )
-                    request.user.profile.save()
+                    locked_profile.save(
+                        update_fields=[
+                            "stripe_subscription_id",
+                            "subscription_status",
+                        ]
+                    )
 
                     request.user.log_event(
                         "Successfully created subscription in Stripe.",
@@ -746,146 +777,208 @@ class PaymentPlanResumeCancel(StripeAPIView):
                         "stripe",
                     )
 
-                return Response(
-                    {"success": False, "message": "signup.subscriptionFailed"}
+            return Response({"success": False, "message": "signup.subscriptionFailed"})
+
+        if resume:
+            # Lock so a concurrent webhook can't null stripe_subscription_id
+            # while we're in the middle of resuming.
+            with transaction.atomic():
+                locked_profile = Profile.objects.select_for_update().get(
+                    pk=request.user.profile.pk
                 )
 
-            elif resume:
+                if not locked_profile.stripe_subscription_id:
+                    return Response(
+                        {"success": False, "message": "paymentPlan.notExists"},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
                 modified_subscription = stripe.Subscription.modify(
-                    request.user.profile.stripe_subscription_id,
+                    locked_profile.stripe_subscription_id,
                     cancel_at_period_end=False,
                 )
 
                 if not modified_subscription.cancel_at_period_end:
-                    request.user.profile.subscription_status = "active"
-                    request.user.profile.save()
+                    locked_profile.subscription_status = "active"
+                    locked_profile.save(update_fields=["subscription_status"])
+
                     subject = f"{request.user.get_full_name()} resumed their cancelling membership plan."
-                    send_email_to_admin(
-                        subject=subject,
-                        template_vars={
-                            "title": subject,
-                            "message": subject,
-                        },
-                        user=request.user,
-                        reply_to=request.user.email,
-                    )
-                    request.user.log_event(
-                        subject,
-                        "stripe",
-                    )
-                    return Response({"success": True})
-
-                else:
-                    subject = f"{request.user.get_full_name()} tried to resume their cancelling membership plan but it failed."
-                    send_email_to_admin(
-                        subject=subject,
-                        template_vars={
-                            "title": subject,
-                            "message": subject,
-                        },
-                        user=request.user,
-                        reply_to=request.user.email,
-                    )
                     request.user.log_event(
                         subject,
                         "stripe",
                     )
 
-            else:
-                # Pending invoice subscription: void any open invoice(s) and cancel immediately.
-                # Stripe does not auto-void open invoices when a subscription is cancelled, so
-                # they would otherwise linger in the customer's Stripe portal.
-                if request.user.profile.subscription_status == "pending":
-                    subscription_id = request.user.profile.stripe_subscription_id
-                    open_invoices = stripe.Invoice.list(
-                        subscription=subscription_id, status="open"
-                    )
-                    for invoice in open_invoices.auto_paging_iter():
-                        stripe.Invoice.void_invoice(invoice.id)
+                    def _on_commit_resume_admin_email(
+                        subject=subject, user=request.user
+                    ):
+                        send_email_to_admin(
+                            subject=subject,
+                            template_vars={
+                                "title": subject,
+                                "message": subject,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
 
-                    # No period has elapsed and nothing was paid, so we explicitly
-                    # don't want Stripe to generate a final/proration invoice.
-                    stripe.Subscription.delete(
-                        subscription_id, invoice_now=False, prorate=False
-                    )
-
-                    # If this was a noob who never activated, drop the default
-                    # door/interlock access that CompleteSignup pre-staged so we
-                    # don't leave dangling M2M links. For returning members
-                    # (state="inactive"), leave their historical access intact.
-                    if request.user.profile.state == "noob":
-                        request.user.profile.doors.clear()
-                        request.user.profile.interlocks.clear()
-
-                    request.user.profile.membership_plan = None
-                    request.user.profile.stripe_subscription_id = None
-                    request.user.profile.subscription_status = "inactive"
-                    # billing_method is intentionally preserved — keeping the
-                    # member's prior preference simplifies a future flow that
-                    # lets them switch billing method directly.
-                    request.user.profile.save()
-
-                    request.user.log_event(
-                        "Cancelled pending invoice subscription.", "stripe"
-                    )
-                    subject = f"{request.user.get_full_name()} cancelled their pending membership (no payment was made)."
-                    send_email_to_admin(
-                        subject=subject,
-                        template_vars={"title": subject, "message": subject},
-                        user=request.user,
-                        reply_to=request.user.email,
-                    )
+                    transaction.on_commit(_on_commit_resume_admin_email)
                     return Response({"success": True})
 
-                modified_subscription = stripe.Subscription.modify(
-                    request.user.profile.stripe_subscription_id,
-                    cancel_at_period_end=True,
+            subject = f"{request.user.get_full_name()} tried to resume their cancelling membership plan but it failed."
+            send_email_to_admin(
+                subject=subject,
+                template_vars={
+                    "title": subject,
+                    "message": subject,
+                },
+                user=request.user,
+                reply_to=request.user.email,
+            )
+            request.user.log_event(
+                subject,
+                "stripe",
+            )
+            return Response({"success": False})
+
+        # Cancel branch (resume == False).
+
+        # Pending invoice sub: void open invoices (Stripe doesn't auto-void
+        # them on cancel) and delete the sub immediately. Lock so this
+        # serialises with the customer.subscription.deleted webhook fired
+        # by Subscription.delete.
+        if request.user.profile.subscription_status == "pending":
+            with transaction.atomic():
+                locked_profile = Profile.objects.select_for_update().get(
+                    pk=request.user.profile.pk
                 )
 
-                if modified_subscription.cancel_at_period_end == True:
-                    request.user.profile.subscription_status = "cancelling"
-                    request.user.profile.save()
-                    subject = f"{request.user.get_full_name()} requested to cancel their membership plan."
-                    description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
+                # Re-read under the lock — a webhook may have flipped us
+                # out of "pending" between the outer check and the lock.
+                if (
+                    locked_profile.subscription_status != "pending"
+                    or not locked_profile.stripe_subscription_id
+                ):
+                    return Response(
+                        {"success": False, "message": "paymentPlan.notExists"},
+                        status=status.HTTP_409_CONFLICT,
+                    )
 
+                subscription_id = locked_profile.stripe_subscription_id
+
+                open_invoices = stripe.Invoice.list(
+                    subscription=subscription_id, status="open"
+                )
+                for invoice in open_invoices.auto_paging_iter():
+                    stripe.Invoice.void_invoice(invoice.id)
+
+                # No period has elapsed and nothing was paid, so we explicitly
+                # don't want Stripe to generate a final/proration invoice.
+                stripe.Subscription.delete(
+                    subscription_id, invoice_now=False, prorate=False
+                )
+
+                # If this was a noob who never activated, drop the default
+                # door/interlock access that CompleteSignup pre-staged so we
+                # don't leave dangling M2M links. For returning members
+                # (state="inactive"), leave their historical access intact.
+                if locked_profile.state == "noob":
+                    locked_profile.doors.clear()
+                    locked_profile.interlocks.clear()
+
+                locked_profile.membership_plan = None
+                locked_profile.stripe_subscription_id = None
+                locked_profile.subscription_status = "inactive"
+                # billing_method is intentionally preserved — keeping the
+                # member's prior preference simplifies a future flow that
+                # lets them switch billing method directly.
+                locked_profile.save(
+                    update_fields=[
+                        "membership_plan",
+                        "stripe_subscription_id",
+                        "subscription_status",
+                    ]
+                )
+
+                request.user.log_event(
+                    "Cancelled pending invoice subscription.", "stripe"
+                )
+
+            subject = f"{request.user.get_full_name()} cancelled their pending membership (no payment was made)."
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": subject},
+                user=request.user,
+                reply_to=request.user.email,
+            )
+            return Response({"success": True})
+
+        # Cancel-active: schedule cancellation at period end. Lock so a
+        # concurrent webhook can't interleave with our save.
+        with transaction.atomic():
+            locked_profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
+            )
+
+            if not locked_profile.stripe_subscription_id:
+                return Response(
+                    {"success": False, "message": "paymentPlan.notExists"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            modified_subscription = stripe.Subscription.modify(
+                locked_profile.stripe_subscription_id,
+                cancel_at_period_end=True,
+            )
+
+            if modified_subscription.cancel_at_period_end == True:
+                locked_profile.subscription_status = "cancelling"
+                locked_profile.save(update_fields=["subscription_status"])
+
+                cancel_subject = f"{request.user.get_full_name()} requested to cancel their membership plan."
+                request.user.log_event(
+                    "You've requested to cancel your membership plan.",
+                    "stripe",
+                )
+
+                def _on_commit_cancel_notifications(
+                    admin_subject=cancel_subject,
+                    user=request.user,
+                ):
+                    description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
                     send_email_to_admin(
-                        subject=subject,
+                        subject=admin_subject,
                         template_vars={
-                            "title": subject,
+                            "title": admin_subject,
                             "message": description,
                         },
-                        user=request.user,
-                        reply_to=request.user.email,
+                        user=user,
+                        reply_to=user.email,
                     )
 
-                    subject = "You've requested to cancel your membership plan."
-                    description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
-                    request.user.email_notification(subject, description)
+                    member_subject = "You've requested to cancel your membership plan."
+                    member_description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
+                    user.email_notification(member_subject, member_description)
 
-                    request.user.log_event(
-                        subject,
-                        "stripe",
-                    )
-                    return Response({"success": True})
+                transaction.on_commit(_on_commit_cancel_notifications)
+                return Response({"success": True})
 
-                else:
-                    subject = f"{request.user.get_full_name()} requested to cancel their membership plan but it failed."
+        subject = f"{request.user.get_full_name()} requested to cancel their membership plan but it failed."
 
-                    send_email_to_admin(
-                        subject=subject,
-                        template_vars={
-                            "title": subject,
-                            "message": "We're not sure what happened, you should check Stripe and contact the member.",
-                        },
-                        user=request.user,
-                        reply_to=request.user.email,
-                    )
-                    request.user.log_event(
-                        subject,
-                        "stripe",
-                    )
+        send_email_to_admin(
+            subject=subject,
+            template_vars={
+                "title": subject,
+                "message": "We're not sure what happened, you should check Stripe and contact the member.",
+            },
+            user=request.user,
+            reply_to=request.user.email,
+        )
+        request.user.log_event(
+            subject,
+            "stripe",
+        )
 
-            return Response({"success": False})
+        return Response({"success": False})
 
 
 class StripeWebhook(StripeAPIView):
@@ -926,13 +1019,13 @@ class StripeWebhook(StripeAPIView):
         event_type = event["type"]
         event_id = event["id"]
 
-        # Whole-handler transaction: the dedup row and any state changes
-        # commit or roll back together. If processing raises after the dedup
-        # row was inserted, the rollback releases the event id so Stripe's
-        # retry can re-process — otherwise a partial failure would leave the
-        # member permanently stuck (e.g. paid but never activated).
-        # Trade-off: a retry can re-fire emails/SMS, but that is a far better
-        # failure mode than a paid member with no access.
+        # Atomic wraps dedup row + DB writes; on raise, rollback releases
+        # the event id for Stripe's retry. External I/O (emails, SMS,
+        # activate/deactivate, Stripe Invoice.void) is deferred via
+        # on_commit so slow upstreams can't extend the row lock past
+        # Stripe's ~30s webhook timeout. Trade-off: on_commit failures
+        # don't retry — a missed receipt email is better than a paid
+        # member who never activates.
         with transaction.atomic():
             # Idempotency: Stripe retries deliveries for up to ~3 days on non-2xx
             # responses or timeouts. Skip any event id we've already processed so
@@ -954,193 +1047,200 @@ class StripeWebhook(StripeAPIView):
                 return Response()
 
             try:
-                # select_for_update serialises concurrent webhook deliveries
-                # for the same member. Without it, two events with different
-                # ids (e.g. an admin replay) can both read state != "active"
-                # before either commits, and the "payment successful" email
-                # at line 955 fires twice — activate()'s own lock catches
-                # the state flip but not the surrounding notifications.
-                member_profile = Profile.objects.select_for_update().get(
+                # Lock to serialise concurrent webhook deliveries for the
+                # same member; activate()'s own lock guards state but not
+                # the surrounding notifications.
+                locked_profile = Profile.objects.select_for_update().get(
                     stripe_customer_id=customer_id
                 )
             except Profile.DoesNotExist:
-                # Stripe sends events for customers we don't track (e.g. one-off
-                # charges, deleted profiles). Don't sentry-spam on these — info
-                # log only, so we still have a trail without paging anyone.
+                # Customers we don't track (one-off charges, etc.) — info-log only.
                 logger.info("Webhook event for unknown stripe_customer_id; ignoring.")
                 return Response()
             except Profile.MultipleObjectsReturned as e:
-                # stripe_customer_id is unique at the DB level, so this should
-                # be impossible — capture loudly and bail.
+                # stripe_customer_id is unique at the DB level — should be impossible.
                 capture_exception(e)
                 return Response()
 
-            # Scope events to the member's current membership subscription —
-            # the customer can have unrelated invoices/subscriptions (admin
-            # one-offs, memberbucks charges, prior cancelled subs replayed by
-            # Stripe, etc.) and acting on those would falsely activate the
-            # member, send misleading "payment failed" emails, or wipe the
-            # current subscription on a stale deletion event. The admin
-            # "mark paid out-of-band" tool has the same guard.
+            # Scope events to the member's current sub — the customer may
+            # have unrelated invoices/subs (admin one-offs, memberbucks,
+            # replayed cancelled subs) we must not act on.
             if event_type in ("invoice.paid", "invoice.payment_failed"):
                 invoice_subscription = data.get("subscription")
                 if (
                     not invoice_subscription
-                    or invoice_subscription != member_profile.stripe_subscription_id
+                    or invoice_subscription != locked_profile.stripe_subscription_id
                 ):
                     return Response()
             elif event_type == "customer.subscription.deleted":
-                if data.get("id") != member_profile.stripe_subscription_id:
+                if data.get("id") != locked_profile.stripe_subscription_id:
                     return Response()
 
             if event_type == "invoice.paid":
                 invoice_status = data["status"]
 
-                member_profile.user.log_event("Membership payment received.", "stripe")
+                locked_profile.user.log_event("Membership payment received.", "stripe")
 
                 if (
                     invoice_status == "paid"
-                    and not member_profile.subscription_first_created
+                    and not locked_profile.subscription_first_created
                 ):
-                    member_profile.subscription_first_created = timezone.now()
-                    member_profile.save()
+                    locked_profile.subscription_first_created = timezone.now()
+                    locked_profile.save(update_fields=["subscription_first_created"])
 
                 # If they aren't an active member, are allowed to signup, and have paid the invoice
                 # then lets activate their account (this could be a new OR returning member)
                 if (
-                    member_profile.state != "active"
-                    and member_profile.can_signup()["success"]
+                    locked_profile.state != "active"
+                    and locked_profile.can_signup()["success"]
                     and invoice_status == "paid"
                 ):
-                    subject = "Your payment was successful."
-                    message = (
-                        "Thanks for making a membership payment using our online payment system. "
-                        "You've already met all of the requirements for activating your site access. Please check "
-                        "for another email message confirming this was successful."
-                    )
-                    member_profile.user.email_notification(subject, message)
-
                     # For invoice billing the member may pay the invoice (via
                     # the Stripe email link) before the frontend ever calls
                     # /complete-signup/ to pre-stage access. Stage defaults
                     # here so activate()'s sync_access actually pushes their
                     # tags.
-                    if member_profile.billing_method == "invoice":
-                        member_profile.add_default_access()
+                    if locked_profile.billing_method == "invoice":
+                        locked_profile.add_default_access()
 
-                    # set the subscription status to active
-                    member_profile.subscription_status = "active"
-                    member_profile.save()
+                    locked_profile.subscription_status = "active"
+                    locked_profile.save(update_fields=["subscription_status"])
 
-                    # activate their access card
-                    member_profile.activate()
-
-                    member_profile.user.log_event(
+                    locked_profile.user.log_event(
                         "Activated membership because member met all requirements.",
                         "stripe",
                     )
 
+                    paid_subject = "Your payment was successful."
+                    paid_message = (
+                        "Thanks for making a membership payment using our online payment system. "
+                        "You've already met all of the requirements for activating your site access. Please check "
+                        "for another email message confirming this was successful."
+                    )
+
+                    def _on_commit_paid_activate(
+                        profile=locked_profile,
+                        subject=paid_subject,
+                        message=paid_message,
+                    ):
+                        profile.user.email_notification(subject, message)
+                        profile.activate()
+
+                    transaction.on_commit(_on_commit_paid_activate)
+
                 # If they aren't an active member, are NOT allowed to signup, and have paid the invoice
                 # then we need to let them know and mark the subscription as active
                 # (this could be a new OR returning member that's been too long since induction etc.)
-                elif member_profile.state != "active" and invoice_status == "paid":
-                    subject = "Your payment was successful."
-                    message = (
+                elif locked_profile.state != "active" and invoice_status == "paid":
+                    locked_profile.subscription_status = "active"
+                    locked_profile.save(update_fields=["subscription_status"])
+
+                    locked_profile.user.log_event(
+                        "Did not activate membership because member did not meet all requirements.",
+                        "stripe",
+                    )
+
+                    paid_subject = "Your payment was successful."
+                    paid_message = (
                         "Thanks for making a membership payment using our online payment system. "
                         "You haven't yet met all of the requirements for automatically activating your site access. "
                         "You'll receive confirmation that your site access is enabled soon, or we'll be in touch. "
                         "If you don't hear from us soon or require assistance, please contact us."
                     )
-                    member_profile.user.email_notification(subject, message)
+                    # Capture at decision time — state may shift before on_commit fires.
+                    notify_admin = locked_profile.state != "noob"
 
-                    member_profile.subscription_status = "active"
-                    member_profile.save()
+                    def _on_commit_paid_no_activate(
+                        profile=locked_profile,
+                        subject=paid_subject,
+                        message=paid_message,
+                        notify_admin=notify_admin,
+                    ):
+                        profile.user.email_notification(subject, message)
+                        if notify_admin:
+                            admin_subject = "Action Required: Verify returning member"
+                            admin_message = (
+                                "An existing member (or someone who clicked 'skip signup I just want an account') "
+                                "has setup a membership subscription. You must now decide whether to enable their site access."
+                            )
+                            send_email_to_admin(
+                                admin_subject,
+                                template_vars={
+                                    "title": admin_subject,
+                                    "message": admin_message,
+                                },
+                                reply_to=profile.user.email,
+                            )
 
-                    # if this is a returning member then send the exec an email (new members have
-                    # already had this sent)
-                    if member_profile.state != "noob":
-                        subject = "Action Required: Verify returning member"
-                        title = subject
-                        message = (
-                            "An existing member (or someone who clicked 'skip signup I just want an account') "
-                            "has setup a membership subscription. You must now decide whether to enable their site access."
-                        )
-                        send_email_to_admin(
-                            subject,
-                            template_vars={
-                                "title": title,
-                                "message": message,
-                            },
-                            reply_to=member_profile.user.email,
-                        )
-
-                    member_profile.user.log_event(
-                        "Did not activate membership because member did not meet all requirements.",
-                        "stripe",
-                    )
+                    transaction.on_commit(_on_commit_paid_no_activate)
 
                 # in all other instances, we don't care about a paid invoice and can ignore it
 
             if event_type == "invoice.payment_failed":
-                subject = "Your membership payment failed"
-                message = (
+                locked_profile.user.log_event("Membership payment failed", "stripe")
+
+                failed_subject = "Your membership payment failed"
+                failed_message = (
                     "Hi there, we tried to collect your membership payment but "
                     "weren't successful. Please update your billing method or contact "
                     "us if you need more time. We'll try again a few times, but if we're unable to "
                     "collect your payment soon, your membership may be cancelled."
                 )
 
-                member_profile.user.email_notification(subject, message)
-                member_profile.user.log_event("Membership payment failed", "stripe")
+                def _on_commit_payment_failed(
+                    profile=locked_profile,
+                    subject=failed_subject,
+                    message=failed_message,
+                ):
+                    profile.user.email_notification(subject, message)
+
+                transaction.on_commit(_on_commit_payment_failed)
 
             if event_type == "customer.subscription.deleted":
-                # Void any invoices still open against this subscription. Stripe does
-                # not auto-void them on cancellation, so without this they linger in
-                # the customer's Stripe portal indefinitely. Safe for both card and
-                # invoice billing — paid/void/uncollectible invoices are not listed.
-                try:
-                    open_invoices = stripe.Invoice.list(
-                        subscription=data["id"], status="open"
-                    )
-                    for invoice in open_invoices.auto_paging_iter():
-                        stripe.Invoice.void_invoice(invoice.id)
-                except stripe.error.StripeError as e:
-                    capture_exception(e)
+                previous_state = locked_profile.state
+                deleted_subscription_id = data["id"]
 
-                previous_state = member_profile.state
+                # Capture name now so a concurrent rename can't reach the admin email.
+                full_name = locked_profile.get_full_name()
 
                 if previous_state == "active":
-                    # Member had site access — deactivate and notify.
                     subject = "Your membership has been cancelled"
                     message = (
                         "You will receive another email shortly confirming that your access has been deactivated. Your "
                         "membership was cancelled because we couldn't collect your payment, or you chose not to renew it."
                     )
-                    member_profile.deactivate()
-                    member_profile.user.email_notification(subject, message)
-
-                    admin_subject = f"The membership for {member_profile.get_full_name()} was just cancelled"
+                    admin_subject = f"The membership for {full_name} was just cancelled"
                     admin_message = (
-                        f"The Stripe subscription for {member_profile.get_full_name()} ended, so their membership has "
+                        f"The Stripe subscription for {full_name} ended, so their membership has "
                         f"been cancelled. Their site access has been turned off."
                     )
-                    send_email_to_admin(
-                        admin_subject,
-                        template_vars={
-                            "title": admin_subject,
-                            "message": admin_message,
-                        },
-                        reply_to=member_profile.user.email,
-                        user=member_profile.user,
-                    )
+
+                    def _on_commit_active_cancel(
+                        profile=locked_profile,
+                        subject=subject,
+                        message=message,
+                        admin_subject=admin_subject,
+                        admin_message=admin_message,
+                    ):
+                        # deactivate() sends its own access-disabled email/SMS.
+                        profile.deactivate()
+                        profile.user.email_notification(subject, message)
+                        send_email_to_admin(
+                            admin_subject,
+                            template_vars={
+                                "title": admin_subject,
+                                "message": admin_message,
+                            },
+                            reply_to=profile.user.email,
+                            user=profile.user,
+                        )
+
+                    transaction.on_commit(_on_commit_active_cancel)
                 elif previous_state == "noob":
-                    # Signup lapsed without the member ever activating (e.g. invoice
-                    # billing where the invoice went past due and Stripe auto-cancelled).
-                    # They never had access — don't send "access disabled" messaging.
-                    # Drop the default door/interlock rows that CompleteSignup
-                    # pre-staged so they don't linger for a future re-enrolment.
-                    member_profile.doors.clear()
-                    member_profile.interlocks.clear()
+                    # Signup lapsed before activation — drop the default M2M
+                    # rows CompleteSignup pre-staged so they don't linger.
+                    locked_profile.doors.clear()
+                    locked_profile.interlocks.clear()
 
                     subject = "Your membership signup has lapsed"
                     message = (
@@ -1148,18 +1248,47 @@ class StripeWebhook(StripeAPIView):
                         "so your pending signup has been cancelled. You can sign up "
                         "again at any time from the member portal."
                     )
-                    member_profile.user.email_notification(subject, message)
-                # state in {"inactive", "accountonly"}: quiet cleanup only — they
-                # already lacked access (or opted out), so no notification fires.
 
-                member_profile.membership_plan = None
-                member_profile.stripe_subscription_id = None
-                member_profile.subscription_status = "inactive"
-                member_profile.save()
+                    def _on_commit_noob_cancel(
+                        profile=locked_profile,
+                        subject=subject,
+                        message=message,
+                    ):
+                        profile.user.email_notification(subject, message)
 
-                member_profile.user.log_event(
+                    transaction.on_commit(_on_commit_noob_cancel)
+                # state in {"inactive", "accountonly"}: quiet cleanup, no notification.
+
+                locked_profile.membership_plan = None
+                locked_profile.stripe_subscription_id = None
+                locked_profile.subscription_status = "inactive"
+                locked_profile.save(
+                    update_fields=[
+                        "membership_plan",
+                        "stripe_subscription_id",
+                        "subscription_status",
+                    ]
+                )
+
+                locked_profile.user.log_event(
                     "Membership was cancelled due to Stripe subscription ending",
                     "stripe",
                 )
+
+                # Void open invoices — Stripe doesn't auto-void on cancel.
+                # On on_commit so the Stripe call can't extend the row lock.
+                def _on_commit_void_open_invoices(
+                    subscription_id=deleted_subscription_id,
+                ):
+                    try:
+                        open_invoices = stripe.Invoice.list(
+                            subscription=subscription_id, status="open"
+                        )
+                        for invoice in open_invoices.auto_paging_iter():
+                            stripe.Invoice.void_invoice(invoice.id)
+                    except stripe.error.StripeError as e:
+                        capture_exception(e)
+
+                transaction.on_commit(_on_commit_void_open_invoices)
 
         return Response()

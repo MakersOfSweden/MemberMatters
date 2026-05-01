@@ -467,8 +467,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
+            # update_fields so a stale `self` can't revert concurrent
+            # writes to other columns (e.g. webhook clearing stripe_*).
             self.state = "inactive"
-            self.save()
+            self.save(update_fields=["state"])
 
         # Best-effort notifications — DB state is already committed, so a
         # Postmark/Twilio failure does not roll back the deactivation.
@@ -504,8 +506,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
+            # See deactivate() for why update_fields is required here.
             self.state = "active"
-            self.save()
+            self.save(update_fields=["state"])
 
         # First-time activation (noob): send the welcome/applicant emails.
         # Re-activation (inactive/accountonly): send the access-enabled
@@ -556,12 +559,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         return self.first_name
 
     def update_last_seen(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_seen = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_seen"])
 
     def update_last_induction(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_induction = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_induction"])
 
     def is_signed_into_site(self):
         sessions = SiteSession.objects.filter(user=self.user, signout_date=None)
