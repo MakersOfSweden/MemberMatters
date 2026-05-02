@@ -18,9 +18,14 @@ urlpatterns = [
         name="PaymentPlanSignup",
     ),
     path(
-        "api/billing/myplan/<str:resume>/",
-        views.PaymentPlanResumeCancel.as_view(),
-        name="PaymentPlanResumeCancel",
+        "api/billing/myplan/resume/",
+        views.PaymentPlanResume.as_view(),
+        name="PaymentPlanResume",
+    ),
+    path(
+        "api/billing/myplan/cancel/",
+        views.PaymentPlanCancel.as_view(),
+        name="PaymentPlanCancel",
     ),
     path(
         "api/billing/myplan/",
