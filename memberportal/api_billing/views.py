@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 import stripe
 import logging
+import uuid
 from services.canvas import Canvas
 from services.moodle_integration import (
     moodle_get_course_activity_completion_status,
@@ -18,8 +19,9 @@ from services.moodle_integration import (
 )
 from services.emails import send_email_to_admin
 from constance import config
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.utils import OperationalError
+from django.shortcuts import get_object_or_404
 from sentry_sdk import capture_exception
 from django.utils import timezone
 
@@ -39,7 +41,7 @@ def ensure_stripe_customer(user):
                 return True, None
         except stripe.error.InvalidRequestError:
             profile.stripe_customer_id = None
-            profile.save()
+            profile.save(update_fields=["stripe_customer_id"])
 
     try:
         user.log_event("Attempting to create stripe customer.", "stripe")
@@ -49,7 +51,7 @@ def ensure_stripe_customer(user):
             phone=profile.phone,
         )
         profile.stripe_customer_id = customer.id
-        profile.save()
+        profile.save(update_fields=["stripe_customer_id"])
         user.log_event(
             f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
             "stripe",
@@ -97,7 +99,7 @@ class MemberBucksAddCard(StripeAPIView):
                 # if the customer doesn't exist then remove the Stripe customer id
                 if error.http_status == 404:
                     profile.stripe_customer_id = None
-                    profile.save()
+                    profile.save(update_fields=["stripe_customer_id"])
 
                     customer_exists = False
 
@@ -116,7 +118,7 @@ class MemberBucksAddCard(StripeAPIView):
                 )
 
                 profile.stripe_customer_id = customer.id
-                profile.save()
+                profile.save(update_fields=["stripe_customer_id"])
 
                 request.user.log_event(
                     f"Created stripe customer {request.user.profile.get_full_name()} (Stripe ID: {customer.id}).",
@@ -172,7 +174,13 @@ class MemberBucksAddCard(StripeAPIView):
         profile.stripe_card_last_digits = payment_method["card"]["last4"]
         profile.stripe_card_expiry = f"{str(payment_method['card']['exp_month']).zfill(2)}/{str(payment_method['card']['exp_year'])}"
         profile.stripe_payment_method_id = payment_method_id
-        profile.save()
+        profile.save(
+            update_fields=[
+                "stripe_card_last_digits",
+                "stripe_card_expiry",
+                "stripe_payment_method_id",
+            ]
+        )
 
         # attached the payment method to the customer
         stripe.PaymentMethod.attach(
@@ -215,7 +223,13 @@ class MemberBucksAddCard(StripeAPIView):
         profile.stripe_payment_method_id = ""
         profile.stripe_card_last_digits = ""
         profile.stripe_card_expiry = ""
-        profile.save()
+        profile.save(
+            update_fields=[
+                "stripe_payment_method_id",
+                "stripe_card_last_digits",
+                "stripe_card_expiry",
+            ]
+        )
         return Response()
 
 
@@ -250,9 +264,20 @@ class PaymentPlanSignup(StripeAPIView):
         new_plan: PaymentPlan,
         billing_method: str = "card",
         attempts: int = 0,
+        idempotency_token: str = None,
     ):
-        """Returns (subscription, error_response); exactly one is None."""
+        """Returns (subscription, error_response); exactly one is None.
+
+        `idempotency_token` is generated per top-level call and reused
+        across this function's recursive retries. A genuinely new POST
+        from the member must pass a fresh token (or omit it so we
+        generate one) — otherwise Stripe replays the cached response
+        from the previous attempt for ~24h and the member is locked
+        out of retrying after a card decline / SCA failure.
+        """
         attempts += 1
+        if idempotency_token is None:
+            idempotency_token = uuid.uuid4().hex
 
         if attempts > 3:
             request.user.log_event(
@@ -277,11 +302,15 @@ class PaymentPlanSignup(StripeAPIView):
                 subscription_params["collection_method"] = "send_invoice"
                 subscription_params["days_until_due"] = config.INVOICE_DAYS_UNTIL_DUE
 
-            # `attempts` suffix lets the resource_missing retry below get a
-            # fresh key instead of Stripe's cached failure response.
+            # Token bounds idempotency to this request; `attempts` lets
+            # the resource_missing retry below get a fresh key inside
+            # the same request instead of Stripe's cached failure.
             subscription = stripe.Subscription.create(
                 **subscription_params,
-                idempotency_key=f"signup-{request.user.id}-{new_plan.id}-{attempts}",
+                idempotency_key=(
+                    f"signup-{request.user.id}-{new_plan.id}"
+                    f"-{idempotency_token}-{attempts}"
+                ),
             )
 
             # For send_invoice subscriptions, Stripe delays finalizing the first
@@ -332,7 +361,7 @@ class PaymentPlanSignup(StripeAPIView):
                 )
 
                 return self.create_subscription(
-                    request, new_plan, billing_method, attempts
+                    request, new_plan, billing_method, attempts, idempotency_token
                 )
 
             if (
@@ -384,7 +413,7 @@ class PaymentPlanSignup(StripeAPIView):
             )
 
     def post(self, request, plan_id):
-        new_plan = PaymentPlan.objects.get(pk=plan_id)
+        new_plan = get_object_or_404(PaymentPlan, pk=plan_id)
 
         billing_method = request.data.get("billingMethod", "card")
         if billing_method not in ("card", "invoice"):
@@ -454,6 +483,7 @@ class PaymentPlanSignup(StripeAPIView):
                     f"Failed to cancel orphaned subscription {new_subscription.id}.",
                     "stripe",
                 )
+                _email_admin_orphan_subscription(request.user, new_subscription.id)
 
             return Response({"success": False, "message": "signup.subscriptionFailed"})
 
@@ -519,10 +549,25 @@ class AssignAccessCard(APIView):
             )
 
         profile.rfid = access_card
-        profile.save(update_fields=["rfid"])
+        try:
+            profile.save(update_fields=["rfid"])
+        except IntegrityError:
+            # The pre-check above is racy — another concurrent request
+            # could have claimed the same RFID between the check and
+            # the save. The DB unique constraint is the authoritative
+            # gate; surface the same 409 the pre-check would have.
+            request.user.log_event(
+                "Member tried to bind an RFID already held by another member; "
+                "refused (race lost on unique constraint).",
+                "profile",
+            )
+            return Response(
+                {"success": False, "message": "accessCard.alreadyInUse"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         request.user.log_event(
-            f"Member self-bound RFID).",
+            "Member self-bound RFID.",
             "profile",
         )
 
@@ -746,6 +791,33 @@ def _no_plan_response(user):
     )
 
 
+def _email_admin_orphan_subscription(user, subscription_id):
+    """Stripe subscription was created but we couldn't clean it up — admin
+    needs to delete it manually so it doesn't keep billing the customer.
+    Deferred to on_commit so callers can invoke this from inside a
+    transaction without holding the row lock across Postmark I/O."""
+    subject = (
+        f"Action Required: orphan Stripe subscription {subscription_id} "
+        f"for {user.get_full_name()}"
+    )
+    message = (
+        f"A subscription signup for {user.get_full_name()} failed (the "
+        "subscription wasn't activated by Stripe), and our automatic "
+        f"cleanup of subscription {subscription_id} also failed. Please "
+        "delete it in Stripe so the customer isn't billed."
+    )
+
+    def _send(user=user, subject=subject, message=message):
+        send_email_to_admin(
+            subject=subject,
+            template_vars={"title": subject, "message": message},
+            user=user,
+            reply_to=user.email,
+        )
+
+    transaction.on_commit(_send)
+
+
 class PaymentPlanResume(StripeAPIView):
     """
     post: resumes a member's cancelling subscription, or re-creates one
@@ -832,6 +904,7 @@ class PaymentPlanResume(StripeAPIView):
                     f"Failed to cancel orphaned subscription {new_subscription.id}.",
                     "stripe",
                 )
+                _email_admin_orphan_subscription(request.user, new_subscription.id)
 
         return Response({"success": False, "message": "signup.subscriptionFailed"})
 
@@ -843,7 +916,13 @@ class PaymentPlanResume(StripeAPIView):
                 pk=request.user.profile.pk
             )
 
-            if not locked_profile.stripe_subscription_id:
+            # Status must actually be "cancelling" — otherwise we'd be
+            # sending the misleading "resumed cancelling plan" admin
+            # email on an already-active sub.
+            if (
+                not locked_profile.stripe_subscription_id
+                or locked_profile.subscription_status != "cancelling"
+            ):
                 return Response(
                     {"success": False, "message": "paymentPlan.notExists"},
                     status=status.HTTP_409_CONFLICT,
@@ -913,10 +992,13 @@ class PaymentPlanCancel(StripeAPIView):
         return self._cancel_active(request)
 
     def _cancel_pending(self, request):
-        # Pending invoice sub: void open invoices (Stripe doesn't auto-void
-        # them on cancel) and delete the sub immediately. Lock so this
-        # serialises with the customer.subscription.deleted webhook fired
-        # by Subscription.delete.
+        # Pending invoice sub: commit the DB cancel under the row lock,
+        # then push the Stripe-side cleanup (void open invoices + delete
+        # subscription) to on_commit. Mirrors the webhook handler — the
+        # row lock is only held for a DB UPDATE, not for ~3 round trips
+        # to Stripe. Trade-off: if the on_commit Stripe calls fail, our
+        # DB says cancelled before Stripe does, so we email admin asking
+        # for manual cleanup.
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(
                 pk=request.user.profile.pk
@@ -934,18 +1016,6 @@ class PaymentPlanCancel(StripeAPIView):
                 )
 
             subscription_id = locked_profile.stripe_subscription_id
-
-            open_invoices = stripe.Invoice.list(
-                subscription=subscription_id, status="open"
-            )
-            for invoice in open_invoices.auto_paging_iter():
-                stripe.Invoice.void_invoice(invoice.id)
-
-            # No period has elapsed and nothing was paid, so we explicitly
-            # don't want Stripe to generate a final/proration invoice.
-            stripe.Subscription.delete(
-                subscription_id, invoice_now=False, prorate=False
-            )
 
             # If this was a noob who never activated, drop the default
             # door/interlock access that CompleteSignup pre-staged so we
@@ -971,13 +1041,92 @@ class PaymentPlanCancel(StripeAPIView):
 
             request.user.log_event("Cancelled pending invoice subscription.", "stripe")
 
-        subject = f"{request.user.get_full_name()} cancelled their pending membership (no payment was made)."
-        send_email_to_admin(
-            subject=subject,
-            template_vars={"title": subject, "message": subject},
-            user=request.user,
-            reply_to=request.user.email,
-        )
+            cancelled_subject = (
+                f"{request.user.get_full_name()} cancelled their pending "
+                "membership (no payment was made)."
+            )
+
+            def _on_commit_stripe_cleanup(
+                subscription_id=subscription_id,
+                user=request.user,
+            ):
+                # No period has elapsed and nothing was paid, so we
+                # explicitly don't want Stripe to generate a
+                # final/proration invoice. Per-invoice voids are
+                # best-effort so a single bad invoice can't stop us
+                # reaching Subscription.delete. The deletion fires
+                # customer.subscription.deleted, but our DB already
+                # cleared stripe_subscription_id so the webhook's
+                # scope check bails — no double-cleanup.
+                try:
+                    open_invoices = stripe.Invoice.list(
+                        subscription=subscription_id, status="open"
+                    )
+                    for invoice in open_invoices.auto_paging_iter():
+                        try:
+                            stripe.Invoice.void_invoice(invoice.id)
+                        except stripe.error.StripeError as e:
+                            capture_exception(e)
+                    stripe.Subscription.delete(
+                        subscription_id, invoice_now=False, prorate=False
+                    )
+                except stripe.error.StripeError as e:
+                    capture_exception(e)
+                    user.log_event(
+                        f"Failed to delete pending subscription "
+                        f"{subscription_id} on Stripe after DB cancel; "
+                        "manual cleanup required.",
+                        "stripe",
+                    )
+                    failure_subject = (
+                        f"Action Required: clean up Stripe subscription "
+                        f"{subscription_id} for {user.get_full_name()}"
+                    )
+                    failure_message = (
+                        f"{user.get_full_name()} cancelled their pending "
+                        "membership in the portal, but the Stripe-side "
+                        f"cleanup failed. Subscription {subscription_id} "
+                        "and any open invoices may still be live in "
+                        "Stripe — please void/delete them manually."
+                    )
+                    send_email_to_admin(
+                        subject=failure_subject,
+                        template_vars={
+                            "title": failure_subject,
+                            "message": failure_message,
+                        },
+                        user=user,
+                        reply_to=user.email,
+                    )
+
+            transaction.on_commit(_on_commit_stripe_cleanup)
+
+            member_subject = "Your pending membership signup has been cancelled."
+            member_message = (
+                "We've cancelled your pending membership signup at your "
+                "request. No payment was taken. You can sign up again at "
+                "any time from the member portal."
+            )
+
+            def _on_commit_cancel_notifications(
+                admin_subject=cancelled_subject,
+                user=request.user,
+                member_subject=member_subject,
+                member_message=member_message,
+            ):
+                send_email_to_admin(
+                    subject=admin_subject,
+                    template_vars={
+                        "title": admin_subject,
+                        "message": admin_subject,
+                    },
+                    user=user,
+                    reply_to=user.email,
+                )
+                user.email_notification(member_subject, member_message)
+
+            transaction.on_commit(_on_commit_cancel_notifications)
+
         return Response({"success": True})
 
     def _cancel_active(self, request):
@@ -999,7 +1148,7 @@ class PaymentPlanCancel(StripeAPIView):
                 cancel_at_period_end=True,
             )
 
-            if modified_subscription.cancel_at_period_end == True:
+            if modified_subscription.cancel_at_period_end:
                 locked_profile.subscription_status = "cancelling"
                 locked_profile.save(update_fields=["subscription_status"])
 
@@ -1346,17 +1495,70 @@ class StripeWebhook(StripeAPIView):
 
                 # Void open invoices — Stripe doesn't auto-void on cancel.
                 # On on_commit so the Stripe call can't extend the row lock.
+                # If voiding fails, the deleted subscription's open invoices
+                # may still be visible to the customer in Stripe — email
+                # admin so they can void manually.
                 def _on_commit_void_open_invoices(
                     subscription_id=deleted_subscription_id,
+                    user=locked_profile.user,
+                    full_name=full_name,
                 ):
                     try:
                         open_invoices = stripe.Invoice.list(
                             subscription=subscription_id, status="open"
                         )
                         for invoice in open_invoices.auto_paging_iter():
-                            stripe.Invoice.void_invoice(invoice.id)
+                            try:
+                                stripe.Invoice.void_invoice(invoice.id)
+                            except stripe.error.StripeError as e:
+                                capture_exception(e)
+                                failure_subject = (
+                                    f"Action Required: void Stripe invoice "
+                                    f"{invoice.id} for {full_name}"
+                                )
+                                failure_message = (
+                                    f"The Stripe subscription "
+                                    f"{subscription_id} for {full_name} "
+                                    "was cancelled, but voiding open "
+                                    f"invoice {invoice.id} failed. Please "
+                                    "void it manually in Stripe so the "
+                                    "customer isn't shown an unpaid "
+                                    "invoice."
+                                )
+                                send_email_to_admin(
+                                    subject=failure_subject,
+                                    template_vars={
+                                        "title": failure_subject,
+                                        "message": failure_message,
+                                    },
+                                    user=user,
+                                    reply_to=user.email,
+                                )
                     except stripe.error.StripeError as e:
+                        # Couldn't even list invoices — don't know which
+                        # are open, so ask admin to audit the cancelled
+                        # sub.
                         capture_exception(e)
+                        failure_subject = (
+                            f"Action Required: audit cancelled Stripe "
+                            f"subscription {subscription_id} for {full_name}"
+                        )
+                        failure_message = (
+                            f"The Stripe subscription {subscription_id} "
+                            f"for {full_name} was cancelled, but we "
+                            "couldn't list its open invoices to void "
+                            "them. Please check Stripe and void any "
+                            "open invoices manually."
+                        )
+                        send_email_to_admin(
+                            subject=failure_subject,
+                            template_vars={
+                                "title": failure_subject,
+                                "message": failure_message,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
 
                 transaction.on_commit(_on_commit_void_open_invoices)
 

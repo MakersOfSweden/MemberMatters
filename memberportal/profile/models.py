@@ -724,4 +724,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         if not self.id:
             self.created = timezone.now()
         self.modified = timezone.now()
+        # Mirror Django's auto_now behavior: when the caller restricts
+        # the UPDATE to specific columns via update_fields, ensure
+        # `modified` rides along — otherwise targeted writes (e.g.
+        # save(update_fields=["state"])) would leave the timestamp
+        # stale.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "modified" not in update_fields:
+            kwargs["update_fields"] = list(update_fields) + ["modified"]
         return super(Profile, self).save(*args, **kwargs)
