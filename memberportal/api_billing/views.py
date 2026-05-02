@@ -469,13 +469,62 @@ class CanSignup(APIView):
 
 class AssignAccessCard(APIView):
     """
-    post: assigns the access card to the member.
+    post: assigns the access card to the member during first-time signup.
     """
 
     def post(self, request):
+        if not config.MEMBER_CAN_ENTER_ACCESS_CARD:
+            return Response(
+                {"success": False, "message": "accessCard.memberEntryDisabled"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        access_card = (request.data.get("accessCard") or "").strip()
+        if not access_card:
+            return Response(
+                {"success": False, "message": "accessCard.required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         profile = request.user.profile
-        profile.rfid = request.data["accessCard"]
-        profile.save()
+
+        if profile.state not in ("noob", "accountonly"):
+            request.user.log_event(
+                f"Member tried to self-rebind RFID while state={profile.state}; refused.",
+                "profile",
+            )
+            return Response(
+                {"success": False, "message": "accessCard.adminRebindRequired"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if profile.rfid:
+            request.user.log_event(
+                "Member tried to self-rebind RFID but one is already set; refused.",
+                "profile",
+            )
+            return Response(
+                {"success": False, "message": "accessCard.alreadyBound"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if Profile.objects.filter(rfid=access_card).exclude(pk=profile.pk).exists():
+            request.user.log_event(
+                "Member tried to bind an RFID already held by another member; refused.",
+                "profile",
+            )
+            return Response(
+                {"success": False, "message": "accessCard.alreadyInUse"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile.rfid = access_card
+        profile.save(update_fields=["rfid"])
+
+        request.user.log_event(
+            f"Member self-bound RFID).",
+            "profile",
+        )
 
         return Response({"success": True})
 

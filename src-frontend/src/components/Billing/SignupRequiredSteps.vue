@@ -290,11 +290,15 @@ export default defineComponent({
       }
     },
     inductionCompleted() {
+      // Step is only at 1 while waiting for induction. If can-signup
+      // already advanced us to 3, an in-flight induction poll must not
+      // increment further (would land on a non-existent step 4).
+      clearInterval(this.interval);
+      if (this.step !== 1) return;
       this.step++;
       if (this.accessCardComplete) {
         this.completeSignup();
       }
-      clearInterval(this.interval);
     },
     async completeSignup() {
       api
