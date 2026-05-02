@@ -864,9 +864,7 @@ class PaymentPlanResume(StripeAPIView):
                     "stripe",
                 )
 
-                def _on_commit_resume_admin_email(
-                    subject=subject, user=request.user
-                ):
+                def _on_commit_resume_admin_email(subject=subject, user=request.user):
                     send_email_to_admin(
                         subject=subject,
                         template_vars={
@@ -971,9 +969,7 @@ class PaymentPlanCancel(StripeAPIView):
                 ]
             )
 
-            request.user.log_event(
-                "Cancelled pending invoice subscription.", "stripe"
-            )
+            request.user.log_event("Cancelled pending invoice subscription.", "stripe")
 
         subject = f"{request.user.get_full_name()} cancelled their pending membership (no payment was made)."
         send_email_to_admin(
