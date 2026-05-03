@@ -688,6 +688,36 @@ class CompleteSignup(StripeAPIView):
             if locked_profile.subscription_status == "pending":
                 locked_profile.add_default_access()
 
+                # Card signups get the welcome/application emails from
+                # activate() below; invoice signups do not (they wait
+                # for invoice.paid). Without this, the only signal the
+                # member has that their portal signup landed is the
+                # frontend response — Stripe's invoice email is the
+                # only inbox touchpoint until payment clears.
+                pending_subject = (
+                    "Your signup has been received — awaiting payment"
+                )
+                pending_message = (
+                    f"Hi {locked_profile.first_name}, thanks for signing "
+                    f"up to {config.SITE_OWNER}! We've received your "
+                    "signup and you'll receive an invoice from Stripe "
+                    "shortly. Once it's paid, your access will be "
+                    "enabled automatically and we'll send you a welcome "
+                    "email."
+                )
+
+                def _on_commit_pending_signup(
+                    profile=locked_profile,
+                    subject=pending_subject,
+                    message=pending_message,
+                ):
+                    try:
+                        profile.user.email_notification(subject, message)
+                    except Exception as e:
+                        capture_exception(e)
+
+                transaction.on_commit(_on_commit_pending_signup)
+
                 return Response(
                     {
                         "success": True,
@@ -808,12 +838,15 @@ def _email_admin_orphan_subscription(user, subscription_id):
     )
 
     def _send(user=user, subject=subject, message=message):
-        send_email_to_admin(
-            subject=subject,
-            template_vars={"title": subject, "message": message},
-            user=user,
-            reply_to=user.email,
-        )
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": message},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
 
     transaction.on_commit(_send)
 
@@ -944,15 +977,18 @@ class PaymentPlanResume(StripeAPIView):
                 )
 
                 def _on_commit_resume_admin_email(subject=subject, user=request.user):
-                    send_email_to_admin(
-                        subject=subject,
-                        template_vars={
-                            "title": subject,
-                            "message": subject,
-                        },
-                        user=user,
-                        reply_to=user.email,
-                    )
+                    try:
+                        send_email_to_admin(
+                            subject=subject,
+                            template_vars={
+                                "title": subject,
+                                "message": subject,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
+                    except Exception as e:
+                        capture_exception(e)
 
                 transaction.on_commit(_on_commit_resume_admin_email)
                 return Response({"success": True})
@@ -1089,15 +1125,18 @@ class PaymentPlanCancel(StripeAPIView):
                         "and any open invoices may still be live in "
                         "Stripe — please void/delete them manually."
                     )
-                    send_email_to_admin(
-                        subject=failure_subject,
-                        template_vars={
-                            "title": failure_subject,
-                            "message": failure_message,
-                        },
-                        user=user,
-                        reply_to=user.email,
-                    )
+                    try:
+                        send_email_to_admin(
+                            subject=failure_subject,
+                            template_vars={
+                                "title": failure_subject,
+                                "message": failure_message,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
+                    except Exception as email_err:
+                        capture_exception(email_err)
 
             transaction.on_commit(_on_commit_stripe_cleanup)
 
@@ -1114,16 +1153,26 @@ class PaymentPlanCancel(StripeAPIView):
                 member_subject=member_subject,
                 member_message=member_message,
             ):
-                send_email_to_admin(
-                    subject=admin_subject,
-                    template_vars={
-                        "title": admin_subject,
-                        "message": admin_subject,
-                    },
-                    user=user,
-                    reply_to=user.email,
-                )
-                user.email_notification(member_subject, member_message)
+                # Each notification is wrapped independently so a
+                # Postmark blip on the admin email doesn't suppress the
+                # member's confirmation (or vice versa). on_commit
+                # raises are silently dropped post-2xx, so capture too.
+                try:
+                    send_email_to_admin(
+                        subject=admin_subject,
+                        template_vars={
+                            "title": admin_subject,
+                            "message": admin_subject,
+                        },
+                        user=user,
+                        reply_to=user.email,
+                    )
+                except Exception as e:
+                    capture_exception(e)
+                try:
+                    user.email_notification(member_subject, member_message)
+                except Exception as e:
+                    capture_exception(e)
 
             transaction.on_commit(_on_commit_cancel_notifications)
 
@@ -1162,20 +1211,28 @@ class PaymentPlanCancel(StripeAPIView):
                     admin_subject=cancel_subject,
                     user=request.user,
                 ):
+                    # Each notification wrapped independently — see
+                    # _cancel_pending's _on_commit_cancel_notifications.
                     description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
-                    send_email_to_admin(
-                        subject=admin_subject,
-                        template_vars={
-                            "title": admin_subject,
-                            "message": description,
-                        },
-                        user=user,
-                        reply_to=user.email,
-                    )
+                    try:
+                        send_email_to_admin(
+                            subject=admin_subject,
+                            template_vars={
+                                "title": admin_subject,
+                                "message": description,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
+                    except Exception as e:
+                        capture_exception(e)
 
                     member_subject = "You've requested to cancel your membership plan."
                     member_description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
-                    user.email_notification(member_subject, member_description)
+                    try:
+                        user.email_notification(member_subject, member_description)
+                    except Exception as e:
+                        capture_exception(e)
 
                 transaction.on_commit(_on_commit_cancel_notifications)
                 return Response({"success": True})
@@ -1341,8 +1398,18 @@ class StripeWebhook(StripeAPIView):
                         subject=paid_subject,
                         message=paid_message,
                     ):
-                        profile.user.email_notification(subject, message)
-                        profile.activate()
+                        # on_commit fires after the 200 has gone back to
+                        # Stripe, so any raise here is silently dropped
+                        # by Django and Stripe will not retry — capture
+                        # so a stuck activation is at least visible.
+                        try:
+                            profile.user.email_notification(subject, message)
+                        except Exception as e:
+                            capture_exception(e)
+                        try:
+                            profile.activate()
+                        except Exception as e:
+                            capture_exception(e)
 
                     transaction.on_commit(_on_commit_paid_activate)
 
@@ -1374,21 +1441,29 @@ class StripeWebhook(StripeAPIView):
                         message=paid_message,
                         notify_admin=notify_admin,
                     ):
-                        profile.user.email_notification(subject, message)
+                        # See _on_commit_paid_activate for why each call
+                        # is wrapped independently.
+                        try:
+                            profile.user.email_notification(subject, message)
+                        except Exception as e:
+                            capture_exception(e)
                         if notify_admin:
                             admin_subject = "Action Required: Verify returning member"
                             admin_message = (
                                 "An existing member (or someone who clicked 'skip signup I just want an account') "
                                 "has setup a membership subscription. You must now decide whether to enable their site access."
                             )
-                            send_email_to_admin(
-                                admin_subject,
-                                template_vars={
-                                    "title": admin_subject,
-                                    "message": admin_message,
-                                },
-                                reply_to=profile.user.email,
-                            )
+                            try:
+                                send_email_to_admin(
+                                    admin_subject,
+                                    template_vars={
+                                        "title": admin_subject,
+                                        "message": admin_message,
+                                    },
+                                    reply_to=profile.user.email,
+                                )
+                            except Exception as e:
+                                capture_exception(e)
 
                     transaction.on_commit(_on_commit_paid_no_activate)
 
@@ -1410,7 +1485,10 @@ class StripeWebhook(StripeAPIView):
                     subject=failed_subject,
                     message=failed_message,
                 ):
-                    profile.user.email_notification(subject, message)
+                    try:
+                        profile.user.email_notification(subject, message)
+                    except Exception as e:
+                        capture_exception(e)
 
                 transaction.on_commit(_on_commit_payment_failed)
 
@@ -1440,18 +1518,31 @@ class StripeWebhook(StripeAPIView):
                         admin_subject=admin_subject,
                         admin_message=admin_message,
                     ):
-                        # deactivate() sends its own access-disabled email/SMS.
-                        profile.deactivate()
-                        profile.user.email_notification(subject, message)
-                        send_email_to_admin(
-                            admin_subject,
-                            template_vars={
-                                "title": admin_subject,
-                                "message": admin_message,
-                            },
-                            reply_to=profile.user.email,
-                            user=profile.user,
-                        )
+                        # deactivate() sends its own access-disabled
+                        # email/SMS. Each step is wrapped so a Postmark
+                        # blip can't skip deactivate() (the access
+                        # revocation) or the admin alert. See
+                        # _on_commit_paid_activate for the rationale.
+                        try:
+                            profile.deactivate()
+                        except Exception as e:
+                            capture_exception(e)
+                        try:
+                            profile.user.email_notification(subject, message)
+                        except Exception as e:
+                            capture_exception(e)
+                        try:
+                            send_email_to_admin(
+                                admin_subject,
+                                template_vars={
+                                    "title": admin_subject,
+                                    "message": admin_message,
+                                },
+                                reply_to=profile.user.email,
+                                user=profile.user,
+                            )
+                        except Exception as e:
+                            capture_exception(e)
 
                     transaction.on_commit(_on_commit_active_cancel)
                 elif previous_state == "noob":
@@ -1472,7 +1563,10 @@ class StripeWebhook(StripeAPIView):
                         subject=subject,
                         message=message,
                     ):
-                        profile.user.email_notification(subject, message)
+                        try:
+                            profile.user.email_notification(subject, message)
+                        except Exception as e:
+                            capture_exception(e)
 
                     transaction.on_commit(_on_commit_noob_cancel)
                 # state in {"inactive", "accountonly"}: quiet cleanup, no notification.
@@ -1525,15 +1619,18 @@ class StripeWebhook(StripeAPIView):
                                     "customer isn't shown an unpaid "
                                     "invoice."
                                 )
-                                send_email_to_admin(
-                                    subject=failure_subject,
-                                    template_vars={
-                                        "title": failure_subject,
-                                        "message": failure_message,
-                                    },
-                                    user=user,
-                                    reply_to=user.email,
-                                )
+                                try:
+                                    send_email_to_admin(
+                                        subject=failure_subject,
+                                        template_vars={
+                                            "title": failure_subject,
+                                            "message": failure_message,
+                                        },
+                                        user=user,
+                                        reply_to=user.email,
+                                    )
+                                except Exception as email_err:
+                                    capture_exception(email_err)
                     except stripe.error.StripeError as e:
                         # Couldn't even list invoices — don't know which
                         # are open, so ask admin to audit the cancelled
@@ -1550,15 +1647,18 @@ class StripeWebhook(StripeAPIView):
                             "them. Please check Stripe and void any "
                             "open invoices manually."
                         )
-                        send_email_to_admin(
-                            subject=failure_subject,
-                            template_vars={
-                                "title": failure_subject,
-                                "message": failure_message,
-                            },
-                            user=user,
-                            reply_to=user.email,
-                        )
+                        try:
+                            send_email_to_admin(
+                                subject=failure_subject,
+                                template_vars={
+                                    "title": failure_subject,
+                                    "message": failure_message,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as email_err:
+                            capture_exception(email_err)
 
                 transaction.on_commit(_on_commit_void_open_invoices)
 

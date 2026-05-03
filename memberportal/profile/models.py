@@ -18,6 +18,7 @@ import uuid
 import logging
 from services.emails import send_single_email, send_email_to_admin
 from services import sms
+from sentry_sdk import capture_exception
 from django_prometheus.models import ExportModelOperationsMixin
 
 logger = logging.getLogger("profile")
@@ -472,11 +473,18 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             self.state = "inactive"
             self.save(update_fields=["state"])
 
-        # Best-effort notifications — DB state is already committed, so a
-        # Postmark/Twilio failure does not roll back the deactivation.
-        self.user.email_disable_member()
-        sms_message = sms.SMS()
-        sms_message.send_deactivated_access(self.phone)
+        # Each notification is wrapped independently so a single
+        # Postmark/Twilio failure does not skip later notifications or
+        # sync_access — leaving an "inactive" member with devices still
+        # holding their tag is worse than a missed email.
+        try:
+            self.user.email_disable_member()
+        except Exception as e:
+            capture_exception(e)
+        try:
+            sms.SMS().send_deactivated_access(self.phone)
+        except Exception as e:
+            capture_exception(e)
         self.sync_access()
         return True
 
@@ -516,15 +524,28 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # path that flips a member to active — CompleteSignup, the
         # invoice.paid webhook, admin MakeMember, admin MemberState —
         # sends the right notifications without the caller duplicating
-        # them. Best-effort: a Postmark/Twilio failure does not roll back
-        # the activation.
+        # them. Each notification is wrapped independently so a single
+        # Postmark/Twilio failure does not skip later notifications or
+        # sync_access — leaving an "active" member whose devices were
+        # never told their tag is worse than a missed email.
         if previous_state == "noob":
-            self.user.email_membership_application()
-            self.user.email_welcome()
+            try:
+                self.user.email_membership_application()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_welcome()
+            except Exception as e:
+                capture_exception(e)
         else:
-            sms_message = sms.SMS()
-            sms_message.send_activated_access(self.phone)
-            self.user.email_enable_member()
+            try:
+                sms.SMS().send_activated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_enable_member()
+            except Exception as e:
+                capture_exception(e)
 
         self.sync_access()
         return True
