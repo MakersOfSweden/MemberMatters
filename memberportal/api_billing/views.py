@@ -694,9 +694,7 @@ class CompleteSignup(StripeAPIView):
                 # member has that their portal signup landed is the
                 # frontend response — Stripe's invoice email is the
                 # only inbox touchpoint until payment clears.
-                pending_subject = (
-                    "Your signup has been received — awaiting payment"
-                )
+                pending_subject = "Your signup has been received — awaiting payment"
                 pending_message = (
                     f"Hi {locked_profile.first_name}, thanks for signing "
                     f"up to {config.SITE_OWNER}! We've received your "
