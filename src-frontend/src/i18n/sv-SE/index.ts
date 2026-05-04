@@ -348,7 +348,7 @@ export default {
     selectToContinue: 'Bekräfta din betalmetod',
     addCard: 'Lägg till kort',
     addCardDescription:
-      "Lägg till ditt kort nedan. Vi sparar inte info om ditt betalkort förutom de sista 4 siffrorna och datum för utgång. Vår säkra betal betallösning som vi använder sparar informationen åt oss.",
+      "Lägg till ditt kort nedan. Vi sparar inte info om ditt betalkort förutom de sista 4 siffrorna och datum för utgång. Vår säkra betallösning som vi använder sparar informationen åt oss.",
     addCardError:
       'Det uppstod ett fel med ditt kort. Försök igen senare.',
     saveCard: 'Spara betalkort',
