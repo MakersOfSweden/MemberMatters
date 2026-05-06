@@ -267,7 +267,10 @@ export default defineComponent({
 
     api.get('/api/billing/can-signup/').then((result) => {
       if (result.data.success) {
-        this.step = 3; // skip straight to the end
+        // Pre-reqs already met (re-signup, RFID + induction still valid,
+        // or relaxed config). Drive complete-signup now — without this the
+        // user sits on subscription_status=active|pending with state=noob.
+        this.completeSignup();
       } else {
         // if we don't need the access card, that step is complete
         this.accessCardComplete =
@@ -317,7 +320,11 @@ export default defineComponent({
           this.signupError = true;
         })
         .finally(() => {
-          this.step++;
+          // Land on the final "Submitted" step regardless of caller —
+          // submitAccessCard arrives from step 2, inductionCompleted (with
+          // accessCardComplete) from step 2, and the can-signup-success
+          // mount branch from step 1.
+          this.step = 3;
         });
     },
     async submitAccessCard() {

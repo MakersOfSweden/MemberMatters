@@ -1324,6 +1324,20 @@ class PaymentPlanCancel(StripeAPIView):
         return Response({"success": False})
 
 
+def _invoice_subscription_id(invoice_data):
+    # Stripe API 2025-03-31.basil moved Invoice.subscription to
+    # Invoice.parent.subscription_details.subscription. Pick whichever the
+    # payload actually exposes so a webhook endpoint signed with either API
+    # version works. The `in details` check (rather than truthiness) means an
+    # explicit `null` in the new schema is honored as "no subscription on this
+    # invoice" instead of silently falling back to the legacy field.
+    parent = invoice_data.get("parent") or {}
+    details = parent.get("subscription_details") or {}
+    if "subscription" in details:
+        return details["subscription"]
+    return invoice_data.get("subscription")
+
+
 class StripeWebhook(StripeAPIView):
     """
     post: processes a Stripe webhook event.
@@ -1370,17 +1384,6 @@ class StripeWebhook(StripeAPIView):
         # don't retry — a missed receipt email is better than a paid
         # member who never activates.
         with transaction.atomic():
-            # Idempotency: Stripe retries deliveries for up to ~3 days on non-2xx
-            # responses or timeouts. Skip any event id we've already processed so
-            # side effects (emails, SMS, state changes) don't fire twice.
-            if event_id:
-                _, created = ProcessedStripeEvent.objects.get_or_create(
-                    event_id=event_id,
-                    defaults={"event_type": event_type},
-                )
-                if not created:
-                    return Response()
-
             data = data["object"]
 
             # Some Stripe events (e.g. account-level ones) don't carry a customer
@@ -1407,9 +1410,12 @@ class StripeWebhook(StripeAPIView):
 
             # Scope events to the member's current sub — the customer may
             # have unrelated invoices/subs (admin one-offs, memberbucks,
-            # replayed cancelled subs) we must not act on.
+            # replayed cancelled subs) we must not act on. Run the scope
+            # check BEFORE the dedup insert so an out-of-scope event doesn't
+            # poison its own retries — fix it, redeliver, and processing
+            # picks up cleanly.
             if event_type in ("invoice.paid", "invoice.payment_failed"):
-                invoice_subscription = data.get("subscription")
+                invoice_subscription = _invoice_subscription_id(data)
                 if (
                     not invoice_subscription
                     or invoice_subscription != locked_profile.stripe_subscription_id
@@ -1417,6 +1423,17 @@ class StripeWebhook(StripeAPIView):
                     return Response()
             elif event_type == "customer.subscription.deleted":
                 if data.get("id") != locked_profile.stripe_subscription_id:
+                    return Response()
+
+            # Idempotency: Stripe retries deliveries for up to ~3 days on non-2xx
+            # responses or timeouts. Skip any event id we've already processed so
+            # side effects (emails, SMS, state changes) don't fire twice.
+            if event_id:
+                _, created = ProcessedStripeEvent.objects.get_or_create(
+                    event_id=event_id,
+                    defaults={"event_type": event_type},
+                )
+                if not created:
                     return Response()
 
             if event_type == "invoice.paid":
