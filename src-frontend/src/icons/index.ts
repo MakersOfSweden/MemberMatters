@@ -14,6 +14,7 @@ export default {
   manageMembers: 'mdi-account-cog',
   meetings: 'mdi-calendar-clock',
   plans: 'mdi-receipt',
+  pendingInvoices: 'mdi-invoice-text-clock',
   dollar: 'fas fa-dollar-sign',
   doors: 'mdi-door-closed-lock',
   interlocks: 'mdi-power-plug',

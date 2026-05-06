@@ -625,6 +625,17 @@ export default {
     moodleUnavailable:
       "We couldn't reach Moodle to check your induction progress. Please try again in a moment, or contact us if the problem persists.",
   },
+  accessCard: {
+    memberEntryDisabled:
+      'Self-service access card registration is currently disabled. Please contact us to have your card registered.',
+    required: 'Please enter an access card number.',
+    adminRebindRequired:
+      "You can't change your own access card after activation. Please contact us if your card needs to be replaced.",
+    alreadyBound:
+      'You already have an access card registered. Please contact us if it needs to be replaced.',
+    alreadyInUse:
+      "That access card is already registered to another member. Please double-check the number, or contact us if you think it's a mistake.",
+  },
   tiers: {
     disabledFeature:
       'WARNING: This feature is turned off. You should enable it before making any changes.',
@@ -740,11 +751,17 @@ export default {
       'You pay your membership by invoice — no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
     invoiceMethodNoCardNeeded:
       'You pay your membership by invoice — no card is needed. Your membership invoice will be emailed to you each billing cycle.',
+    invoiceDisabled:
+      'Invoice billing is not currently available. Please choose another payment method.',
+    stripeError:
+      "Something went wrong talking to our payment provider. Please try again in a moment, or contact us if it doesn't clear up.",
   },
   pendingInvoices: {
     title: 'Pending Invoices',
     description:
       'Members with an outstanding invoice for their membership subscription. Use this panel to record payments received outside of Stripe (bank transfer, cash, etc.).',
+    invoiceDisabledWarning:
+      'Invoice billing is currently disabled, so new members cannot sign up via invoice. Existing invoice subscriptions are still being billed by Stripe — use this page to record off-Stripe payments for those members.',
     noInvoices: 'No pending invoices.',
     columnMember: 'Member',
     columnEmail: 'Email',

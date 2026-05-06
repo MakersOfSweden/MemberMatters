@@ -242,7 +242,6 @@ export default defineComponent({
       inductionComplete: false,
       accessCardComplete: false,
       accessCard: null,
-      accessCardError: false,
       accessCardLoading: false,
       signupError: false,
       signupErrorMessage: 'Unknown',
@@ -290,11 +289,15 @@ export default defineComponent({
       }
     },
     inductionCompleted() {
+      // Step is only at 1 while waiting for induction. If can-signup
+      // already advanced us to 3, an in-flight induction poll must not
+      // increment further (would land on a non-existent step 4).
+      clearInterval(this.interval);
+      if (this.step !== 1) return;
       this.step++;
       if (this.accessCardComplete) {
         this.completeSignup();
       }
-      clearInterval(this.interval);
     },
     async completeSignup() {
       api
@@ -327,16 +330,23 @@ export default defineComponent({
           if (result.data.success) {
             this.completeSignup();
           } else {
-            this.accessCardError = true;
+            this.showAccessCardError(result.data?.message);
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          this.showAccessCardError(err.response?.data?.message);
+        })
+        .finally(() => {
           this.accessCardLoading = false;
-          this.$q.dialog({
-            title: this.$tc('error.error'),
-            message: this.$tc('error.contactUs'),
-          });
         });
+    },
+    showAccessCardError(messageKey) {
+      this.$q.dialog({
+        title: this.$tc('error.error'),
+        message: messageKey
+          ? this.$t(messageKey)
+          : this.$tc('error.contactUs'),
+      });
     },
   },
 });

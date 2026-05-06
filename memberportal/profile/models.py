@@ -18,6 +18,7 @@ import uuid
 import logging
 from services.emails import send_single_email, send_email_to_admin
 from services import sms
+from sentry_sdk import capture_exception
 from django_prometheus.models import ExportModelOperationsMixin
 
 logger = logging.getLogger("profile")
@@ -401,6 +402,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         choices=BILLING_METHODS,
     )
 
+    # One-shot guard for the "Signup received, awaiting payment" email
+    # sent by CompleteSignup on invoice signups.
+    pending_signup_email_sent = models.BooleanField(default=False)
+
     def __str__(self):
         return str(self.user)
 
@@ -467,14 +472,23 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
+            # update_fields so a stale `self` can't revert concurrent
+            # writes to other columns (e.g. webhook clearing stripe_*).
             self.state = "inactive"
-            self.save()
+            self.save(update_fields=["state"])
 
-        # Best-effort notifications — DB state is already committed, so a
-        # Postmark/Twilio failure does not roll back the deactivation.
-        self.user.email_disable_member()
-        sms_message = sms.SMS()
-        sms_message.send_deactivated_access(self.phone)
+        # Each notification is wrapped independently so a single
+        # Postmark/Twilio failure does not skip later notifications or
+        # sync_access — leaving an "inactive" member with devices still
+        # holding their tag is worse than a missed email.
+        try:
+            self.user.email_disable_member()
+        except Exception as e:
+            capture_exception(e)
+        try:
+            sms.SMS().send_deactivated_access(self.phone)
+        except Exception as e:
+            capture_exception(e)
         self.sync_access()
         return True
 
@@ -504,8 +518,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     "profile",
                 )
 
+            # See deactivate() for why update_fields is required here.
             self.state = "active"
-            self.save()
+            self.save(update_fields=["state"])
 
         # First-time activation (noob): send the welcome/applicant emails.
         # Re-activation (inactive/accountonly): send the access-enabled
@@ -513,15 +528,28 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # path that flips a member to active — CompleteSignup, the
         # invoice.paid webhook, admin MakeMember, admin MemberState —
         # sends the right notifications without the caller duplicating
-        # them. Best-effort: a Postmark/Twilio failure does not roll back
-        # the activation.
+        # them. Each notification is wrapped independently so a single
+        # Postmark/Twilio failure does not skip later notifications or
+        # sync_access — leaving an "active" member whose devices were
+        # never told their tag is worse than a missed email.
         if previous_state == "noob":
-            self.user.email_membership_application()
-            self.user.email_welcome()
+            try:
+                self.user.email_membership_application()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_welcome()
+            except Exception as e:
+                capture_exception(e)
         else:
-            sms_message = sms.SMS()
-            sms_message.send_activated_access(self.phone)
-            self.user.email_enable_member()
+            try:
+                sms.SMS().send_activated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_enable_member()
+            except Exception as e:
+                capture_exception(e)
 
         self.sync_access()
         return True
@@ -556,12 +584,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         return self.first_name
 
     def update_last_seen(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_seen = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_seen"])
 
     def update_last_induction(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_induction = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_induction"])
 
     def is_signed_into_site(self):
         sessions = SiteSession.objects.filter(user=self.user, signout_date=None)
@@ -719,4 +749,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         if not self.id:
             self.created = timezone.now()
         self.modified = timezone.now()
+        # Mirror Django's auto_now behavior: when the caller restricts
+        # the UPDATE to specific columns via update_fields, ensure
+        # `modified` rides along — otherwise targeted writes (e.g.
+        # save(update_fields=["state"])) would leave the timestamp
+        # stale.
+        # An explicitly-empty update_fields means "save nothing" — don't
+        # turn it into a modified-only UPDATE.
+        update_fields = kwargs.get("update_fields")
+        if update_fields and "modified" not in update_fields:
+            kwargs["update_fields"] = list(update_fields) + ["modified"]
         return super(Profile, self).save(*args, **kwargs)

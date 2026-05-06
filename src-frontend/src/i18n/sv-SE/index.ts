@@ -622,6 +622,17 @@ export default {
     moodleUnavailable:
       'Vi kunde inte nå Moodle för att kontrollera dina framsteg i introduktionen. Försök igen om en stund, eller kontakta oss om problemet kvarstår.',
   },
+  accessCard: {
+    memberEntryDisabled:
+      'Självregistrering av nyckelkort är för närvarande avstängd. Kontakta oss för att få ditt kort registrerat.',
+    required: 'Ange ett nyckelkortsnummer.',
+    adminRebindRequired:
+      'Du kan inte ändra ditt nyckelkort själv efter aktivering. Kontakta oss om ditt kort behöver bytas.',
+    alreadyBound:
+      'Du har redan ett nyckelkort registrerat. Kontakta oss om det behöver bytas.',
+    alreadyInUse:
+      'Det nyckelkortet är redan registrerat på en annan medlem. Dubbelkolla numret eller kontakta oss om du tror det är ett misstag.',
+  },
   tiers: {
     disabledFeature:
       'VARNING: Denna funktion är avstängd. Du borde aktivera den innan du gör några ändringar.',
@@ -737,11 +748,17 @@ export default {
       'Du betalar ditt medlemskap via faktura — inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
     invoiceMethodNoCardNeeded:
       'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
+    invoiceDisabled:
+      'Fakturabetalning är inte tillgänglig för närvarande. Välj en annan betalmetod.',
+    stripeError:
+      'Något gick fel i kommunikationen med vår betalleverantör. Försök igen om en stund eller kontakta oss om det inte löser sig.',
   },
   pendingInvoices: {
     title: 'Väntande fakturor',
     description:
       'Medlemmar med en utestående faktura för sitt medlemskapsabonnemang. Använd den här panelen för att registrera betalningar mottagna utanför Stripe (banköverföring, kontanter, etc.).',
+    invoiceDisabledWarning:
+      'Fakturabetalning är för närvarande inaktiverad, så nya medlemmar kan inte registrera sig via faktura. Befintliga fakturaabonnemang debiteras fortfarande av Stripe — använd den här sidan för att registrera betalningar utanför Stripe för dessa medlemmar.',
     noInvoices: 'Inga väntande fakturor.',
     columnMember: 'Medlem',
     columnEmail: 'E-post',
