@@ -242,7 +242,6 @@ export default defineComponent({
       inductionComplete: false,
       accessCardComplete: false,
       accessCard: null,
-      accessCardError: false,
       accessCardLoading: false,
       signupError: false,
       signupErrorMessage: 'Unknown',
@@ -331,16 +330,23 @@ export default defineComponent({
           if (result.data.success) {
             this.completeSignup();
           } else {
-            this.accessCardError = true;
+            this.showAccessCardError(result.data?.message);
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          this.showAccessCardError(err.response?.data?.message);
+        })
+        .finally(() => {
           this.accessCardLoading = false;
-          this.$q.dialog({
-            title: this.$tc('error.error'),
-            message: this.$tc('error.contactUs'),
-          });
         });
+    },
+    showAccessCardError(messageKey) {
+      this.$q.dialog({
+        title: this.$tc('error.error'),
+        message: messageKey
+          ? this.$t(messageKey)
+          : this.$tc('error.contactUs'),
+      });
     },
   },
 });

@@ -402,6 +402,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         choices=BILLING_METHODS,
     )
 
+    # One-shot guard for the "Signup received, awaiting payment" email
+    # sent by CompleteSignup on invoice signups.
+    pending_signup_email_sent = models.BooleanField(default=False)
+
     def __str__(self):
         return str(self.user)
 
@@ -750,7 +754,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # `modified` rides along — otherwise targeted writes (e.g.
         # save(update_fields=["state"])) would leave the timestamp
         # stale.
+        # An explicitly-empty update_fields means "save nothing" — don't
+        # turn it into a modified-only UPDATE.
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "modified" not in update_fields:
+        if update_fields and "modified" not in update_fields:
             kwargs["update_fields"] = list(update_fields) + ["modified"]
         return super(Profile, self).save(*args, **kwargs)

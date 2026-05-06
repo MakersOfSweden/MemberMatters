@@ -33,34 +33,40 @@ def ensure_stripe_customer(user):
     Ensures a Stripe customer exists for the given user, creating one if needed.
     Returns (True, None) on success, or (False, error_message) on failure.
     """
-    profile = user.profile
-    if profile.stripe_customer_id:
-        try:
-            customer = stripe.Customer.retrieve(profile.stripe_customer_id)
-            if not customer.get("deleted"):
-                return True, None
-        except stripe.error.InvalidRequestError:
-            profile.stripe_customer_id = None
-            profile.save(update_fields=["stripe_customer_id"])
+    with transaction.atomic():
+        # Lock so concurrent signups don't create duplicate Stripe customers.
+        profile = Profile.objects.select_for_update().get(pk=user.profile.pk)
 
-    try:
-        user.log_event("Attempting to create stripe customer.", "stripe")
-        customer = stripe.Customer.create(
-            email=user.email,
-            name=profile.get_full_name(),
-            phone=profile.phone,
-        )
-        profile.stripe_customer_id = customer.id
-        profile.save(update_fields=["stripe_customer_id"])
-        user.log_event(
-            f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
-            "stripe",
-        )
-        return True, None
-    except stripe.error.StripeError as e:
-        capture_exception(e)
-        user.log_event("Error while creating stripe customer.", "stripe")
-        return False, str(e)
+        if profile.stripe_customer_id:
+            try:
+                customer = stripe.Customer.retrieve(profile.stripe_customer_id)
+                if not customer.get("deleted"):
+                    user.profile.stripe_customer_id = profile.stripe_customer_id
+                    return True, None
+            except stripe.error.InvalidRequestError:
+                profile.stripe_customer_id = None
+                profile.save(update_fields=["stripe_customer_id"])
+
+        try:
+            user.log_event("Attempting to create stripe customer.", "stripe")
+            customer = stripe.Customer.create(
+                email=user.email,
+                name=profile.get_full_name(),
+                phone=profile.phone,
+            )
+            profile.stripe_customer_id = customer.id
+            profile.save(update_fields=["stripe_customer_id"])
+            # Mirror to caller's instance (read directly downstream).
+            user.profile.stripe_customer_id = customer.id
+            user.log_event(
+                f"Created stripe customer {profile.get_full_name()} (Stripe ID: {customer.id}).",
+                "stripe",
+            )
+            return True, None
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            user.log_event("Error while creating stripe customer.", "stripe")
+            return False, "billing.stripeError"
 
 
 class StripeAPIView(APIView):
@@ -82,121 +88,78 @@ class MemberBucksAddCard(StripeAPIView):
     """
 
     def get(self, request):
-        profile = request.user.profile
-        customer_exists = True
+        ok, err = ensure_stripe_customer(request.user)
+        if not ok:
+            return Response(
+                {"success": False, "message": err},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        # check that the customer exists and isn't deleted
-        if profile.stripe_customer_id:
-            try:
-                customer = stripe.Customer.retrieve(profile.stripe_customer_id)
-                if customer.get("deleted") or not customer:
-                    customer_exists = False
+        try:
+            intent = stripe.SetupIntent.create(
+                customer=request.user.profile.stripe_customer_id
+            )
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            request.user.log_event("Stripe error while creating SetupIntent.", "stripe")
+            return Response(
+                {"success": False, "message": "billing.stripeError"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-            except stripe.error.InvalidRequestError as error:
-                # Invalid parameters were supplied to Stripe's API
-                capture_exception(error)
-
-                # if the customer doesn't exist then remove the Stripe customer id
-                if error.http_status == 404:
-                    profile.stripe_customer_id = None
-                    profile.save(update_fields=["stripe_customer_id"])
-
-                    customer_exists = False
-
-        else:
-            customer_exists = False
-
-        if not customer_exists:
-            try:
-                request.user.log_event(
-                    "Attempting to create stripe customer.", "stripe"
-                )
-                customer = stripe.Customer.create(
-                    email=request.user.email,
-                    name=profile.get_full_name(),
-                    phone=profile.phone,
-                )
-
-                profile.stripe_customer_id = customer.id
-                profile.save(update_fields=["stripe_customer_id"])
-
-                request.user.log_event(
-                    f"Created stripe customer {request.user.profile.get_full_name()} (Stripe ID: {customer.id}).",
-                    "stripe",
-                )
-
-                intent = stripe.SetupIntent.create(customer=profile.stripe_customer_id)
-
-                return Response({"clientSecret": intent.client_secret})
-
-            except stripe.error.StripeError as e:
-                request.user.log_event(
-                    "Unknown stripe while saving payment details.",
-                    "stripe",
-                    request,
-                )
-                capture_exception(e)
-
-                return Response(
-                    {
-                        "success": False,
-                        "message": str(e),
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-
-            except Exception as e:
-                request.user.log_event(
-                    "Unknown other error while saving payment details.",
-                    "stripe",
-                    request,
-                )
-                capture_exception(e)
-                return Response(
-                    {
-                        "success": False,
-                        "message": "Unknown error (unrelated to stripe).",
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-
-        else:
-            intent = stripe.SetupIntent.create(customer=profile.stripe_customer_id)
-
-            return Response({"clientSecret": intent.client_secret})
+        return Response({"clientSecret": intent.client_secret})
 
     def post(self, request):
-        profile = request.user.profile
         payment_method_id = request.data.get("paymentMethodId")
 
-        payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+        with transaction.atomic():
+            # Lock so concurrent add-card requests serialize.
+            profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
+            )
 
-        profile.stripe_card_last_digits = payment_method["card"]["last4"]
-        profile.stripe_card_expiry = f"{str(payment_method['card']['exp_month']).zfill(2)}/{str(payment_method['card']['exp_year'])}"
-        profile.stripe_payment_method_id = payment_method_id
-        profile.save(
-            update_fields=[
-                "stripe_card_last_digits",
-                "stripe_card_expiry",
-                "stripe_payment_method_id",
-            ]
-        )
+            try:
+                # Attach + set default before persisting card metadata —
+                # if Stripe rejects the PM, the DB stays consistent.
+                stripe.PaymentMethod.attach(
+                    payment_method_id,
+                    customer=profile.stripe_customer_id,
+                )
+                payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+                stripe.Customer.modify(
+                    profile.stripe_customer_id,
+                    invoice_settings={"default_payment_method": payment_method_id},
+                )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                return Response(
+                    {"success": False, "message": "billing.stripeError"},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
 
-        # attached the payment method to the customer
-        stripe.PaymentMethod.attach(
-            payment_method_id,
-            customer=profile.stripe_customer_id,
-        )
-        # Set the default payment method on the customer
-        stripe.Customer.modify(
-            profile.stripe_customer_id,
-            invoice_settings={
-                "default_payment_method": payment_method_id,
-            },
-        )
+            profile.stripe_card_last_digits = payment_method["card"]["last4"]
+            profile.stripe_card_expiry = f"{str(payment_method['card']['exp_month']).zfill(2)}/{str(payment_method['card']['exp_year'])}"
+            profile.stripe_payment_method_id = payment_method_id
+            profile.save(
+                update_fields=[
+                    "stripe_card_last_digits",
+                    "stripe_card_expiry",
+                    "stripe_payment_method_id",
+                ]
+            )
 
+            # Mirror to caller's instance.
+            request.user.profile.stripe_card_last_digits = (
+                profile.stripe_card_last_digits
+            )
+            request.user.profile.stripe_card_expiry = profile.stripe_card_expiry
+            request.user.profile.stripe_payment_method_id = (
+                profile.stripe_payment_method_id
+            )
+
+        # Email outside the atomic — a Postmark blip mustn't roll back the
+        # successful card attachment.
         subject = f"You just added a payment card to your {config.SITE_OWNER} account."
-
         try:
             request.user.email_notification(
                 subject,
@@ -215,21 +178,41 @@ class MemberBucksAddCard(StripeAPIView):
         return Response()
 
     def delete(self, request):
-        profile = request.user.profile
+        with transaction.atomic():
+            # Lock so concurrent delete/add-card requests serialize.
+            profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
+            )
 
-        if profile.stripe_payment_method_id:
-            stripe.PaymentMethod.detach(profile.stripe_payment_method_id)
+            if profile.stripe_payment_method_id:
+                try:
+                    stripe.PaymentMethod.detach(profile.stripe_payment_method_id)
+                except stripe.error.InvalidRequestError:
+                    # Already detached / unknown — fall through to DB cleanup.
+                    pass
+                except stripe.error.StripeError as e:
+                    capture_exception(e)
+                    return Response(
+                        {"success": False, "message": "billing.stripeError"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
 
-        profile.stripe_payment_method_id = ""
-        profile.stripe_card_last_digits = ""
-        profile.stripe_card_expiry = ""
-        profile.save(
-            update_fields=[
-                "stripe_payment_method_id",
-                "stripe_card_last_digits",
-                "stripe_card_expiry",
-            ]
-        )
+            profile.stripe_payment_method_id = ""
+            profile.stripe_card_last_digits = ""
+            profile.stripe_card_expiry = ""
+            profile.save(
+                update_fields=[
+                    "stripe_payment_method_id",
+                    "stripe_card_last_digits",
+                    "stripe_card_expiry",
+                ]
+            )
+
+            # Mirror to caller's instance.
+            request.user.profile.stripe_payment_method_id = ""
+            request.user.profile.stripe_card_last_digits = ""
+            request.user.profile.stripe_card_expiry = ""
+
         return Response()
 
 
@@ -457,7 +440,16 @@ class PaymentPlanSignup(StripeAPIView):
                     "pending" if billing_method == "invoice" else "active"
                 )
                 locked_profile.billing_method = billing_method
-                locked_profile.save()
+                locked_profile.pending_signup_email_sent = False
+                locked_profile.save(
+                    update_fields=[
+                        "stripe_subscription_id",
+                        "membership_plan",
+                        "subscription_status",
+                        "billing_method",
+                        "pending_signup_email_sent",
+                    ]
+                )
 
                 request.user.log_event(
                     "Successfully created subscription in Stripe.",
@@ -475,15 +467,7 @@ class PaymentPlanSignup(StripeAPIView):
 
             # Cancel the non-active sub (e.g. incomplete from SCA) so it
             # doesn't dangle on the customer and trigger a duplicate next try.
-            try:
-                stripe.Subscription.delete(new_subscription.id)
-            except stripe.error.StripeError as e:
-                capture_exception(e)
-                request.user.log_event(
-                    f"Failed to cancel orphaned subscription {new_subscription.id}.",
-                    "stripe",
-                )
-                _email_admin_orphan_subscription(request.user, new_subscription.id)
+            _cancel_failed_subscription(request.user, new_subscription.id)
 
             return Response({"success": False, "message": "signup.subscriptionFailed"})
 
@@ -516,55 +500,67 @@ class AssignAccessCard(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        profile = request.user.profile
-
-        if profile.state not in ("noob", "accountonly"):
-            request.user.log_event(
-                f"Member tried to self-rebind RFID while state={profile.state}; refused.",
-                "profile",
-            )
-            return Response(
-                {"success": False, "message": "accessCard.adminRebindRequired"},
-                status=status.HTTP_403_FORBIDDEN,
+        # Lock + re-read so a concurrent admin (state/rfid mutation) or
+        # the same user double-submitting can't slip writes past these
+        # checks. The cross-profile RFID-collision case is still caught
+        # by the unique constraint below — locks on different rows don't
+        # help there.
+        with transaction.atomic():
+            locked_profile = Profile.objects.select_for_update().get(
+                pk=request.user.profile.pk
             )
 
-        if profile.rfid:
-            request.user.log_event(
-                "Member tried to self-rebind RFID but one is already set; refused.",
-                "profile",
-            )
-            return Response(
-                {"success": False, "message": "accessCard.alreadyBound"},
-                status=status.HTTP_409_CONFLICT,
-            )
+            if locked_profile.state not in ("noob", "accountonly"):
+                request.user.log_event(
+                    f"Member tried to self-rebind RFID while state={locked_profile.state}; refused.",
+                    "profile",
+                )
+                return Response(
+                    {"success": False, "message": "accessCard.adminRebindRequired"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
-        if Profile.objects.filter(rfid=access_card).exclude(pk=profile.pk).exists():
-            request.user.log_event(
-                "Member tried to bind an RFID already held by another member; refused.",
-                "profile",
-            )
-            return Response(
-                {"success": False, "message": "accessCard.alreadyInUse"},
-                status=status.HTTP_409_CONFLICT,
-            )
+            if locked_profile.rfid:
+                request.user.log_event(
+                    "Member tried to self-rebind RFID but one is already set; refused.",
+                    "profile",
+                )
+                return Response(
+                    {"success": False, "message": "accessCard.alreadyBound"},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
-        profile.rfid = access_card
-        try:
-            profile.save(update_fields=["rfid"])
-        except IntegrityError:
-            # The pre-check above is racy — another concurrent request
-            # could have claimed the same RFID between the check and
-            # the save. The DB unique constraint is the authoritative
-            # gate; surface the same 409 the pre-check would have.
-            request.user.log_event(
-                "Member tried to bind an RFID already held by another member; "
-                "refused (race lost on unique constraint).",
-                "profile",
-            )
-            return Response(
-                {"success": False, "message": "accessCard.alreadyInUse"},
-                status=status.HTTP_409_CONFLICT,
-            )
+            if (
+                Profile.objects.filter(rfid=access_card)
+                .exclude(pk=locked_profile.pk)
+                .exists()
+            ):
+                request.user.log_event(
+                    "Member tried to bind an RFID already held by another member; refused.",
+                    "profile",
+                )
+                return Response(
+                    {"success": False, "message": "accessCard.alreadyInUse"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            locked_profile.rfid = access_card
+            try:
+                locked_profile.save(update_fields=["rfid"])
+            except IntegrityError:
+                # Cross-profile race: another member's request committed
+                # the same RFID between our pre-check and our save. The
+                # DB unique constraint is the authoritative gate; surface
+                # the same 409 the pre-check would have.
+                request.user.log_event(
+                    "Member tried to bind an RFID already held by another member; "
+                    "refused (race lost on unique constraint).",
+                    "profile",
+                )
+                return Response(
+                    {"success": False, "message": "accessCard.alreadyInUse"},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         request.user.log_event(
             "Member self-bound RFID.",
@@ -688,33 +684,37 @@ class CompleteSignup(StripeAPIView):
             if locked_profile.subscription_status == "pending":
                 locked_profile.add_default_access()
 
-                # Card signups get the welcome/application emails from
-                # activate() below; invoice signups do not (they wait
-                # for invoice.paid). Without this, the only signal the
-                # member has that their portal signup landed is the
-                # frontend response — Stripe's invoice email is the
-                # only inbox touchpoint until payment clears.
-                pending_subject = "Your signup has been received — awaiting payment"
-                pending_message = (
-                    f"Hi {locked_profile.first_name}, thanks for signing "
-                    f"up to {config.SITE_OWNER}! We've received your "
-                    "signup and you'll receive an invoice from Stripe "
-                    "shortly. Once it's paid, your access will be "
-                    "enabled automatically and we'll send you a welcome "
-                    "email."
-                )
+                # Invoice signups don't hit activate() until invoice.paid,
+                # so they need their own "we got it" email. One-shot via
+                # pending_signup_email_sent (re-armed at signup/resume).
+                if not locked_profile.pending_signup_email_sent:
+                    pending_subject = "Your signup has been received — awaiting payment"
+                    pending_message = (
+                        f"Hi {locked_profile.first_name}, thanks for signing "
+                        f"up to {config.SITE_OWNER}! We've received your "
+                        "signup and you'll receive an invoice from Stripe "
+                        "shortly. Once it's paid, your access will be "
+                        "enabled automatically and we'll send you a welcome "
+                        "email."
+                    )
 
-                def _on_commit_pending_signup(
-                    profile=locked_profile,
-                    subject=pending_subject,
-                    message=pending_message,
-                ):
-                    try:
-                        profile.user.email_notification(subject, message)
-                    except Exception as e:
-                        capture_exception(e)
+                    def _on_commit_pending_signup(
+                        profile=locked_profile,
+                        subject=pending_subject,
+                        message=pending_message,
+                    ):
+                        try:
+                            profile.user.email_notification(subject, message)
+                        except Exception as e:
+                            capture_exception(e)
 
-                transaction.on_commit(_on_commit_pending_signup)
+                    transaction.on_commit(_on_commit_pending_signup)
+
+                    # Set pessimistically — if Postmark drops the email
+                    # we accept losing it this cycle rather than risking
+                    # a duplicate when the user re-enters this view.
+                    locked_profile.pending_signup_email_sent = True
+                    locked_profile.save(update_fields=["pending_signup_email_sent"])
 
                 return Response(
                     {
@@ -849,6 +849,71 @@ def _email_admin_orphan_subscription(user, subscription_id):
     transaction.on_commit(_send)
 
 
+def _cancel_failed_subscription(user, subscription_id):
+    """Best-effort cleanup of a Stripe subscription we just created but
+    that came back in a non-active status (e.g. SCA-incomplete). On
+    Stripe failure, alerts admin to delete it manually."""
+    try:
+        stripe.Subscription.delete(subscription_id, invoice_now=False, prorate=False)
+    except stripe.error.StripeError as e:
+        capture_exception(e)
+        user.log_event(
+            f"Failed to cancel orphaned subscription {subscription_id}.",
+            "stripe",
+        )
+        _email_admin_orphan_subscription(user, subscription_id)
+
+
+def _email_admin_resume_failed(user):
+    """Resume request didn't flip cancel_at_period_end — admin investigates.
+    Wrapped + on_commit so a Postmark blip can't 500 the user-facing call."""
+    subject = (
+        f"{user.get_full_name()} tried to resume their cancelling "
+        "membership plan but it failed."
+    )
+
+    def _send(user=user, subject=subject):
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": subject},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_send)
+    user.log_event(subject, "stripe")
+
+
+def _email_admin_cancel_failed(user):
+    """Cancel request didn't flip cancel_at_period_end — admin investigates.
+    Wrapped + on_commit so a Postmark blip can't 500 the user-facing call."""
+    subject = (
+        f"{user.get_full_name()} requested to cancel their membership "
+        "plan but it failed."
+    )
+    message = (
+        "We're not sure what happened, you should check Stripe and "
+        "contact the member."
+    )
+
+    def _send(user=user, subject=subject, message=message):
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": message},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_send)
+    user.log_event(subject, "stripe")
+
+
 class PaymentPlanResume(StripeAPIView):
     """
     post: resumes a member's cancelling subscription, or re-creates one
@@ -905,10 +970,12 @@ class PaymentPlanResume(StripeAPIView):
                 locked_profile.subscription_status = (
                     "pending" if billing_method == "invoice" else "active"
                 )
+                locked_profile.pending_signup_email_sent = False
                 locked_profile.save(
                     update_fields=[
                         "stripe_subscription_id",
                         "subscription_status",
+                        "pending_signup_email_sent",
                     ]
                 )
 
@@ -927,21 +994,14 @@ class PaymentPlanResume(StripeAPIView):
             )
 
             # Cancel the non-active sub so a retry doesn't duplicate it.
-            try:
-                stripe.Subscription.delete(new_subscription.id)
-            except stripe.error.StripeError as e:
-                capture_exception(e)
-                request.user.log_event(
-                    f"Failed to cancel orphaned subscription {new_subscription.id}.",
-                    "stripe",
-                )
-                _email_admin_orphan_subscription(request.user, new_subscription.id)
+            _cancel_failed_subscription(request.user, new_subscription.id)
 
-        return Response({"success": False, "message": "signup.subscriptionFailed"})
+            return Response({"success": False, "message": "signup.subscriptionFailed"})
 
     def _resume_cancelling(self, request):
         # Lock so a concurrent webhook can't null stripe_subscription_id
         # while we're in the middle of resuming.
+        failed = False
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(
                 pk=request.user.profile.pk
@@ -959,52 +1019,51 @@ class PaymentPlanResume(StripeAPIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            modified_subscription = stripe.Subscription.modify(
-                locked_profile.stripe_subscription_id,
-                cancel_at_period_end=False,
-            )
-
-            if not modified_subscription.cancel_at_period_end:
-                locked_profile.subscription_status = "active"
-                locked_profile.save(update_fields=["subscription_status"])
-
-                subject = f"{request.user.get_full_name()} resumed their cancelling membership plan."
-                request.user.log_event(
-                    subject,
-                    "stripe",
+            # StripeError must be caught (not raised) so the atomic
+            # commits cleanly and the failure-email helper outside this
+            # block can fire on_commit. Letting it propagate would roll
+            # back, drop pending on_commit callbacks, and 500 the user.
+            try:
+                modified_subscription = stripe.Subscription.modify(
+                    locked_profile.stripe_subscription_id,
+                    cancel_at_period_end=False,
                 )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                failed = True
+            else:
+                if modified_subscription.cancel_at_period_end:
+                    failed = True
+                else:
+                    locked_profile.subscription_status = "active"
+                    locked_profile.save(update_fields=["subscription_status"])
 
-                def _on_commit_resume_admin_email(subject=subject, user=request.user):
-                    try:
-                        send_email_to_admin(
-                            subject=subject,
-                            template_vars={
-                                "title": subject,
-                                "message": subject,
-                            },
-                            user=user,
-                            reply_to=user.email,
-                        )
-                    except Exception as e:
-                        capture_exception(e)
+                    subject = f"{request.user.get_full_name()} resumed their cancelling membership plan."
+                    request.user.log_event(subject, "stripe")
 
-                transaction.on_commit(_on_commit_resume_admin_email)
-                return Response({"success": True})
+                    def _on_commit_resume_admin_email(
+                        subject=subject, user=request.user
+                    ):
+                        try:
+                            send_email_to_admin(
+                                subject=subject,
+                                template_vars={
+                                    "title": subject,
+                                    "message": subject,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as e:
+                            capture_exception(e)
 
-        subject = f"{request.user.get_full_name()} tried to resume their cancelling membership plan but it failed."
-        send_email_to_admin(
-            subject=subject,
-            template_vars={
-                "title": subject,
-                "message": subject,
-            },
-            user=request.user,
-            reply_to=request.user.email,
-        )
-        request.user.log_event(
-            subject,
-            "stripe",
-        )
+                    transaction.on_commit(_on_commit_resume_admin_email)
+                    return Response({"success": True})
+
+        # Outside the atomic — failure email fires regardless of any
+        # rollback in the with block (there isn't one, but be explicit).
+        if failed:
+            _email_admin_resume_failed(request.user)
         return Response({"success": False})
 
 
@@ -1080,64 +1139,6 @@ class PaymentPlanCancel(StripeAPIView):
                 "membership (no payment was made)."
             )
 
-            def _on_commit_stripe_cleanup(
-                subscription_id=subscription_id,
-                user=request.user,
-            ):
-                # No period has elapsed and nothing was paid, so we
-                # explicitly don't want Stripe to generate a
-                # final/proration invoice. Per-invoice voids are
-                # best-effort so a single bad invoice can't stop us
-                # reaching Subscription.delete. The deletion fires
-                # customer.subscription.deleted, but our DB already
-                # cleared stripe_subscription_id so the webhook's
-                # scope check bails — no double-cleanup.
-                try:
-                    open_invoices = stripe.Invoice.list(
-                        subscription=subscription_id, status="open"
-                    )
-                    for invoice in open_invoices.auto_paging_iter():
-                        try:
-                            stripe.Invoice.void_invoice(invoice.id)
-                        except stripe.error.StripeError as e:
-                            capture_exception(e)
-                    stripe.Subscription.delete(
-                        subscription_id, invoice_now=False, prorate=False
-                    )
-                except stripe.error.StripeError as e:
-                    capture_exception(e)
-                    user.log_event(
-                        f"Failed to delete pending subscription "
-                        f"{subscription_id} on Stripe after DB cancel; "
-                        "manual cleanup required.",
-                        "stripe",
-                    )
-                    failure_subject = (
-                        f"Action Required: clean up Stripe subscription "
-                        f"{subscription_id} for {user.get_full_name()}"
-                    )
-                    failure_message = (
-                        f"{user.get_full_name()} cancelled their pending "
-                        "membership in the portal, but the Stripe-side "
-                        f"cleanup failed. Subscription {subscription_id} "
-                        "and any open invoices may still be live in "
-                        "Stripe — please void/delete them manually."
-                    )
-                    try:
-                        send_email_to_admin(
-                            subject=failure_subject,
-                            template_vars={
-                                "title": failure_subject,
-                                "message": failure_message,
-                            },
-                            user=user,
-                            reply_to=user.email,
-                        )
-                    except Exception as email_err:
-                        capture_exception(email_err)
-
-            transaction.on_commit(_on_commit_stripe_cleanup)
-
             member_subject = "Your pending membership signup has been cancelled."
             member_message = (
                 "We've cancelled your pending membership signup at your "
@@ -1172,13 +1173,84 @@ class PaymentPlanCancel(StripeAPIView):
                 except Exception as e:
                     capture_exception(e)
 
+            # Notifications first — Django fires on_commit callbacks in
+            # registration order and any uncaught raise stops the chain.
+            # The Stripe cleanup is the slow / failure-prone step, so
+            # putting the member email behind it would risk losing it.
             transaction.on_commit(_on_commit_cancel_notifications)
+
+            def _on_commit_stripe_cleanup(
+                subscription_id=subscription_id,
+                user=request.user,
+            ):
+                # No period has elapsed and nothing was paid, so we
+                # explicitly don't want Stripe to generate a
+                # final/proration invoice. Per-invoice voids are
+                # best-effort so a single bad invoice can't stop us
+                # reaching Subscription.delete. The deletion fires
+                # customer.subscription.deleted, but our DB already
+                # cleared stripe_subscription_id so the webhook's
+                # scope check bails — no double-cleanup.
+                #
+                # Outer broad try/except: an unexpected exception type
+                # (network library raising outside StripeError, JSON
+                # decode errors during pagination, etc.) here would
+                # otherwise abort any later on_commit handler.
+                try:
+                    try:
+                        open_invoices = stripe.Invoice.list(
+                            subscription=subscription_id, status="open"
+                        )
+                        for invoice in open_invoices.auto_paging_iter():
+                            try:
+                                stripe.Invoice.void_invoice(invoice.id)
+                            except stripe.error.StripeError as e:
+                                capture_exception(e)
+                        stripe.Subscription.delete(
+                            subscription_id, invoice_now=False, prorate=False
+                        )
+                    except stripe.error.StripeError as e:
+                        capture_exception(e)
+                        user.log_event(
+                            f"Failed to delete pending subscription "
+                            f"{subscription_id} on Stripe after DB cancel; "
+                            "manual cleanup required.",
+                            "stripe",
+                        )
+                        failure_subject = (
+                            f"Action Required: clean up Stripe subscription "
+                            f"{subscription_id} for {user.get_full_name()}"
+                        )
+                        failure_message = (
+                            f"{user.get_full_name()} cancelled their pending "
+                            "membership in the portal, but the Stripe-side "
+                            f"cleanup failed. Subscription {subscription_id} "
+                            "and any open invoices may still be live in "
+                            "Stripe — please void/delete them manually."
+                        )
+                        try:
+                            send_email_to_admin(
+                                subject=failure_subject,
+                                template_vars={
+                                    "title": failure_subject,
+                                    "message": failure_message,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as email_err:
+                            capture_exception(email_err)
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_on_commit_stripe_cleanup)
 
         return Response({"success": True})
 
     def _cancel_active(self, request):
         # Cancel-active: schedule cancellation at period end. Lock so a
         # concurrent webhook can't interleave with our save.
+        failed = False
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(
                 pk=request.user.profile.pk
@@ -1190,67 +1262,65 @@ class PaymentPlanCancel(StripeAPIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            modified_subscription = stripe.Subscription.modify(
-                locked_profile.stripe_subscription_id,
-                cancel_at_period_end=True,
-            )
-
-            if modified_subscription.cancel_at_period_end:
-                locked_profile.subscription_status = "cancelling"
-                locked_profile.save(update_fields=["subscription_status"])
-
-                cancel_subject = f"{request.user.get_full_name()} requested to cancel their membership plan."
-                request.user.log_event(
-                    "You've requested to cancel your membership plan.",
-                    "stripe",
+            # StripeError must be caught (not raised) so the atomic
+            # commits cleanly and the failure-email helper outside this
+            # block can fire on_commit. Letting it propagate would roll
+            # back, drop pending on_commit callbacks, and 500 the user.
+            try:
+                modified_subscription = stripe.Subscription.modify(
+                    locked_profile.stripe_subscription_id,
+                    cancel_at_period_end=True,
                 )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                failed = True
+            else:
+                if not modified_subscription.cancel_at_period_end:
+                    failed = True
+                else:
+                    locked_profile.subscription_status = "cancelling"
+                    locked_profile.save(update_fields=["subscription_status"])
 
-                def _on_commit_cancel_notifications(
-                    admin_subject=cancel_subject,
-                    user=request.user,
-                ):
-                    # Each notification wrapped independently — see
-                    # _cancel_pending's _on_commit_cancel_notifications.
-                    description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
-                    try:
-                        send_email_to_admin(
-                            subject=admin_subject,
-                            template_vars={
-                                "title": admin_subject,
-                                "message": description,
-                            },
-                            user=user,
-                            reply_to=user.email,
+                    cancel_subject = f"{request.user.get_full_name()} requested to cancel their membership plan."
+                    request.user.log_event(
+                        "You've requested to cancel your membership plan.",
+                        "stripe",
+                    )
+
+                    def _on_commit_cancel_notifications(
+                        admin_subject=cancel_subject,
+                        user=request.user,
+                    ):
+                        # Each notification wrapped independently — see
+                        # _cancel_pending's _on_commit_cancel_notifications.
+                        description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
+                        try:
+                            send_email_to_admin(
+                                subject=admin_subject,
+                                template_vars={
+                                    "title": admin_subject,
+                                    "message": description,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                        member_subject = (
+                            "You've requested to cancel your membership plan."
                         )
-                    except Exception as e:
-                        capture_exception(e)
+                        member_description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
+                        try:
+                            user.email_notification(member_subject, member_description)
+                        except Exception as e:
+                            capture_exception(e)
 
-                    member_subject = "You've requested to cancel your membership plan."
-                    member_description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
-                    try:
-                        user.email_notification(member_subject, member_description)
-                    except Exception as e:
-                        capture_exception(e)
+                    transaction.on_commit(_on_commit_cancel_notifications)
+                    return Response({"success": True})
 
-                transaction.on_commit(_on_commit_cancel_notifications)
-                return Response({"success": True})
-
-        subject = f"{request.user.get_full_name()} requested to cancel their membership plan but it failed."
-
-        send_email_to_admin(
-            subject=subject,
-            template_vars={
-                "title": subject,
-                "message": "We're not sure what happened, you should check Stripe and contact the member.",
-            },
-            user=request.user,
-            reply_to=request.user.email,
-        )
-        request.user.log_event(
-            subject,
-            "stripe",
-        )
-
+        if failed:
+            _email_admin_cancel_failed(request.user)
         return Response({"success": False})
 
 
