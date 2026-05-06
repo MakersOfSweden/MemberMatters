@@ -29,6 +29,9 @@ export default {
     validateMax30(value: string | number | null) {
       return value == null || value.toString().length <= 30;
     },
+    requiredLabel(label: string, required = true): string {
+      return required ? `${label} *` : label;
+    },
   },
   computed: {
     debounceLength() {

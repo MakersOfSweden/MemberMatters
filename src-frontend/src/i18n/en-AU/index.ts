@@ -247,6 +247,8 @@ export default {
       'Edit any of the fields below and they will be automatically saved.',
     noResults: 'No Results',
     allFieldsRequired: 'All fields marked * are required.',
+    basicDetailsLocked:
+      'Your email, name, and phone number cannot be changed here. Please contact an admin if you need to update these.',
     featured: 'Featured?',
     email: 'Email',
     rfidCard: 'RFID Card',

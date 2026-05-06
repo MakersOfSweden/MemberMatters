@@ -26,7 +26,7 @@
               autofocus
               filled
               type="email"
-              :label="emailLabel"
+              :label="requiredLabel($t('form.email'))"
               lazy-rules
               :rules="[
                 (val) => validateEmail(val) || $t('validation.invalidEmail'),
@@ -37,7 +37,7 @@
               v-model="form.firstName"
               class="col-12 col-sm-6"
               filled
-              :label="firstNameLabel"
+              :label="requiredLabel($t('form.firstName'))"
               lazy-rules
               :rules="[
                 (val) =>
@@ -48,7 +48,7 @@
               v-model="form.lastName"
               class="col-12 col-sm-6"
               filled
-              :label="lastNameLabel"
+              :label="requiredLabel($t('form.lastName'))"
               lazy-rules
               :rules="[
                 (val) =>
@@ -60,7 +60,12 @@
               v-model="form.screenName"
               class="col-12 col-sm-6"
               filled
-              :label="screenNameLabel"
+              :label="
+                requiredLabel(
+                  $t('form.screenName'),
+                  features?.signup?.requireScreenName !== false,
+                )
+              "
               lazy-rules
               :rules="
                 features?.signup?.requireScreenName !== false
@@ -77,7 +82,7 @@
               class="col-12 col-sm-6"
               filled
               type="tel"
-              :label="mobileLabel"
+              :label="requiredLabel($t('form.mobile'))"
               lazy-rules
               :rules="[
                 (val) =>
@@ -100,7 +105,7 @@
             <q-input
               class="col-12"
               v-model="form.password"
-              :label="passwordLabel"
+              :label="requiredLabel($t('form.password'))"
               filled
               :type="isPwd ? 'password' : 'text'"
               lazy-rules
@@ -251,27 +256,6 @@ export default defineComponent({
     ...mapGetters('config', ['features', 'images']),
     icons() {
       return icons;
-    },
-    emailLabel(): string {
-      return `${this.$t('form.email')} *`;
-    },
-    firstNameLabel(): string {
-      return `${this.$t('form.firstName')} *`;
-    },
-    lastNameLabel(): string {
-      return `${this.$t('form.lastName')} *`;
-    },
-    mobileLabel(): string {
-      return `${this.$t('form.mobile')} *`;
-    },
-    passwordLabel(): string {
-      return `${this.$t('form.password')} *`;
-    },
-    screenNameLabel(): string {
-      const label = this.$t('form.screenName');
-      return this.features?.signup?.requireScreenName !== false
-        ? `${label} *`
-        : label;
     },
   },
   methods: {
