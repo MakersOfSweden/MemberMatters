@@ -288,13 +288,23 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
         return self.email_notification(subject, message)
 
     def reset_password(self):
-        self.log_event("Password reset requested", "profile")
-        self.password_reset_key = uuid.uuid4()
-        self.password_reset_expire = timezone.now() + timedelta(hours=24)
-        self.save()
-        self.email_password_reset(
-            f"{config.SITE_URL}/profile/password/reset/{self.password_reset_key}"
-        )
+        with transaction.atomic():
+            self.log_event("Password reset requested", "profile")
+            self.password_reset_key = uuid.uuid4()
+            self.password_reset_expire = timezone.now() + timedelta(hours=24)
+            self.save(update_fields=["password_reset_key", "password_reset_expire"])
+            url = (
+                f"{config.SITE_URL}/profile/password/reset/"
+                f"{self.password_reset_key}"
+            )
+
+            def _send_reset_email(user=self, url=url):
+                try:
+                    user.email_password_reset(url)
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_send_reset_email)
 
         return True
 
