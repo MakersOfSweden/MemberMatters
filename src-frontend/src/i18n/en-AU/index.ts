@@ -67,6 +67,8 @@ export default {
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
     screenNameRequired: 'Please enter a screen name.',
+    registrationClosed:
+      'Registrations are currently closed.',
     downloadFailed: 'Failed to download the file.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",

@@ -75,6 +75,7 @@
               <router-link
                 :to="{ name: 'register' }"
                 :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+                @click="onRegisterClick"
               >
                 {{ $t('loginCard.registerHere') }}
               </router-link>
@@ -308,6 +309,17 @@ export default defineComponent({
     ...mapActions('auth', ['retrieveAuth']),
     ...mapMutations('profile', ['setLoggedIn']),
     ...mapMutations('auth', ['setAuth']),
+    onRegisterClick(event) {
+      if (this.features?.enableRegistration === false) {
+        event.preventDefault();
+        this.$q.dialog({
+          title: this.$t('error.registrationClosed'),
+          message:
+            this.features?.registrationDisabledMessage ||
+            this.$t('error.registrationClosed'),
+        });
+      }
+    },
     /**
      * Redirects to the dashboard page on successful login.
      */

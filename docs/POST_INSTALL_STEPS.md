@@ -92,6 +92,8 @@ However, as noted below, currencies will use a hardcoded value set by a configur
   * "GOOGLE_ANALYTICS_MEASUREMENT_ID" - Enter your measurement ID to enable Google analytics. Only the new GA4 measurement IDs are supported. It should look something like G-XXXXXXXXXX.
 
 ### Signup
+  * "ENABLE_REGISTRATION" - master kill-switch for new account creation. When `False`, `POST /api/register/` returns 503 and the registration page shows the disabled message instead of the form. Existing accounts and the login flow are unaffected. Defaults to `True`.
+  * "REGISTRATION_DISABLED_MESSAGE" - message shown to members on the registration page (and as a popup if they click "Register Here" on the login page) when `ENABLE_REGISTRATION` is `False`. Use this for an "at capacity" / "scheduled outage" / "membership is invite-only" message without needing a deploy.
   * "INDUCTION_ENROL_LINK" - URL to enrol in the Canvas LMS induction course.
   * "INDUCTION_COURSE_ID" - ID of the Canvas LMS induction course (usually found in the course URL on the settings page).
   * "MAX_INDUCTION_DAYS" -  Maximum number of days since they were inducted before they require another induction. Set 

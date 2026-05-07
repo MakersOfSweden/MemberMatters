@@ -67,6 +67,8 @@ export default {
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
     screenNameRequired: 'Ange ett användarnamn.',
+    registrationClosed:
+      'Registrering är just nu stängd.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
     requestFailed:
       "Det har uppstått ett fel. Försök igen senare.",

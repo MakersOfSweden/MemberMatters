@@ -48,6 +48,8 @@ class GetConfig(APIView):
             "enableMembershipPayments": config.ENABLE_STRIPE
             and config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS,
             "enableMemberBucks": config.ENABLE_MEMBERBUCKS,
+            "enableRegistration": config.ENABLE_REGISTRATION,
+            "registrationDisabledMessage": config.REGISTRATION_DISABLED_MESSAGE,
             "signup": {
                 "inductionLink": config.INDUCTION_ENROL_LINK,
                 "enableInduction": config.MOODLE_INDUCTION_ENABLED
@@ -859,6 +861,15 @@ class Register(APIView):
     # fresh installs and CI work without configuration. See PR follow-ups.
 
     def post(self, request):
+        if not config.ENABLE_REGISTRATION:
+            return Response(
+                {
+                    "message": "error.registrationClosed",
+                    "detail": config.REGISTRATION_DISABLED_MESSAGE,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         serializer = RegisterSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -357,6 +357,14 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
     ),
+    "ENABLE_REGISTRATION": (
+        True,
+        "Allow new user registration. When false, the Register endpoint returns 503 and the registration page shows REGISTRATION_DISABLED_MESSAGE.",
+    ),
+    "REGISTRATION_DISABLED_MESSAGE": (
+        "",
+        "Message shown on the registration page (and as a popup from the login page) when ENABLE_REGISTRATION is false.",
+    ),
     "MEMBER_CAN_EDIT_BASIC_DETAILS": (
         True,
         "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
@@ -480,6 +488,8 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
         (
             "Features",
             (
+                "ENABLE_REGISTRATION",
+                "REGISTRATION_DISABLED_MESSAGE",
                 "ENABLE_WEBCAMS",
                 "ENABLE_PROXY_VOTING",
                 "ENABLE_MEMBERSHIP_STATUS_CARD",
