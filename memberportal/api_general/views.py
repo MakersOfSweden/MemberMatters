@@ -933,44 +933,61 @@ class VerifyEmail(APIView):
             verification_token = EmailVerificationToken.objects.get(
                 verification_token=verify_token
             )
-
-        except EmailVerificationToken.DoesNotExist:
+        except (EmailVerificationToken.DoesNotExist, ValueError):
             return Response(
                 {"message": "error.emailVerificationFailed"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if utc.localize(
-            datetime.datetime.now()
-        ) < verification_token.creation_date + datetime.timedelta(hours=24):
-            verification_token.user.email_verified = True
-            verification_token.user.save()
+        user = verification_token.user
+        is_fresh = (
+            utc.localize(datetime.datetime.now())
+            < verification_token.creation_date + datetime.timedelta(hours=24)
+        )
 
-            # auto log the user in after verifying their email
-            login(request, verification_token.user)
+        with transaction.atomic():
+            # Compare-and-delete: only one concurrent request can claim
+            # the token. The loser gets affected_rows=0 and a clean 401.
+            deleted_count, _ = EmailVerificationToken.objects.filter(
+                pk=verification_token.pk
+            ).delete()
+            if deleted_count == 0:
+                return Response(
+                    {"message": "error.emailVerificationFailed"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
-            # delete the verification token so it can't be used again
-            verification_token.delete()
+            if is_fresh:
+                user.email_verified = True
+                user.save(update_fields=["email_verified"])
+            else:
+                new_token = EmailVerificationToken.objects.create(user=user)
+                resend_url = (
+                    f"{config.SITE_URL}/profile/email/"
+                    f"{new_token.verification_token}/verify/"
+                )
 
+                def _send_resend_email(user=user, url=resend_url):
+                    try:
+                        user.email_link(
+                            "Action Required: Verify Email",
+                            "Verify Email",
+                            "Please verify your email address to activate your account.",
+                            url,
+                            "Verify Now",
+                        )
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+
+                transaction.on_commit(_send_resend_email)
+
+        if is_fresh:
+            # Session login runs after the DB commit so a session-store
+            # write cannot extend the transaction's row-lock window.
+            login(request, user)
             return Response()
 
-        else:
-            new_token = EmailVerificationToken.objects.create(
-                user=verification_token.user
-            )
-
-            url = f"{config.SITE_URL}/profile/email/{new_token.verification_token}/verify/"
-            new_token.user.email_link(
-                "Action Required: Verify Email",
-                "Verify Email",
-                "Please verify your email address to activate your account.",
-                url,
-                "Verify Now",
-            )
-
-            verification_token.delete()
-
-            return Response(
-                {"message": "error.emailVerificationExpired"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        return Response(
+            {"message": "error.emailVerificationExpired"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
