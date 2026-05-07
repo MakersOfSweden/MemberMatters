@@ -26,6 +26,8 @@ def send_single_email(
         template_vars["message"] = escape(template_vars["message"]).replace(
             "~br~", "<br>"
         )
+    if template_vars.get("title"):
+        template_vars["title"] = escape(template_vars["title"])
 
     email_string = render_to_string(
         template_to_use, {"email": template_vars, "config": config}

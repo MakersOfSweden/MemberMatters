@@ -255,7 +255,7 @@
         </div>
       </q-step>
     </q-stepper>
-    <div class="text-center">
+    <div v-if="profile.memberStatus === 'noob'" class="text-center">
       <p
         @click="skipSignup"
         style="text-decoration: underline; cursor: pointer"

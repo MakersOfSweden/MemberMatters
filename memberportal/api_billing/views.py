@@ -1119,11 +1119,11 @@ class PaymentPlanCancel(StripeAPIView):
 
             subscription_id = locked_profile.stripe_subscription_id
 
-            # If this was a noob who never activated, drop the default
-            # door/interlock access that CompleteSignup pre-staged so we
-            # don't leave dangling M2M links. For returning members
+            # If this was a noob/accountonly who never activated, drop the
+            # default door/interlock access that CompleteSignup pre-staged
+            # so we don't leave dangling M2M links. For returning members
             # (state="inactive"), leave their historical access intact.
-            if locked_profile.state == "noob":
+            if locked_profile.state in ("noob", "accountonly"):
                 locked_profile.doors.clear()
                 locked_profile.interlocks.clear()
 
@@ -1639,31 +1639,35 @@ class StripeWebhook(StripeAPIView):
                             capture_exception(e)
 
                     transaction.on_commit(_on_commit_active_cancel)
-                elif previous_state == "noob":
+                elif previous_state in ("noob", "accountonly"):
                     # Signup lapsed before activation — drop the default M2M
                     # rows CompleteSignup pre-staged so they don't linger.
                     locked_profile.doors.clear()
                     locked_profile.interlocks.clear()
 
-                    subject = "Your membership signup has lapsed"
-                    message = (
-                        "We weren't able to collect your membership payment in time, "
-                        "so your pending signup has been cancelled. You can sign up "
-                        "again at any time from the member portal."
-                    )
+                    if previous_state == "noob":
+                        # Only noobs get the "signup lapsed" email; an
+                        # accountonly member explicitly chose not to sign up
+                        # in the first place, so the message would confuse.
+                        subject = "Your membership signup has lapsed"
+                        message = (
+                            "We weren't able to collect your membership payment in time, "
+                            "so your pending signup has been cancelled. You can sign up "
+                            "again at any time from the member portal."
+                        )
 
-                    def _on_commit_noob_cancel(
-                        profile=locked_profile,
-                        subject=subject,
-                        message=message,
-                    ):
-                        try:
-                            profile.user.email_notification(subject, message)
-                        except Exception as e:
-                            capture_exception(e)
+                        def _on_commit_noob_cancel(
+                            profile=locked_profile,
+                            subject=subject,
+                            message=message,
+                        ):
+                            try:
+                                profile.user.email_notification(subject, message)
+                            except Exception as e:
+                                capture_exception(e)
 
-                    transaction.on_commit(_on_commit_noob_cancel)
-                # state in {"inactive", "accountonly"}: quiet cleanup, no notification.
+                        transaction.on_commit(_on_commit_noob_cancel)
+                # state == "inactive": quiet cleanup, no notification.
 
                 locked_profile.membership_plan = None
                 locked_profile.stripe_subscription_id = None
