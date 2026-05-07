@@ -15,6 +15,7 @@ from profile.models import User, Profile
 
 from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from .models import Kiosk, SiteSession, EmailVerificationToken
 from services.discord import post_kiosk_swipe_to_discord
@@ -340,6 +341,8 @@ class ResetPassword(APIView):
     """
 
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "password_reset"
 
     def post(self, request):
         body = request.data
@@ -847,6 +850,8 @@ class Register(APIView):
     """
 
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "register"
 
     # TODO: layer CAPTCHA (e.g. Cloudflare Turnstile) on top of throttling.
     # Throttling covers per-IP abuse but a distributed bot can still drift
@@ -940,10 +945,9 @@ class VerifyEmail(APIView):
             )
 
         user = verification_token.user
-        is_fresh = (
-            utc.localize(datetime.datetime.now())
-            < verification_token.creation_date + datetime.timedelta(hours=24)
-        )
+        is_fresh = utc.localize(
+            datetime.datetime.now()
+        ) < verification_token.creation_date + datetime.timedelta(hours=24)
 
         with transaction.atomic():
             # Compare-and-delete: only one concurrent request can claim
@@ -960,26 +964,6 @@ class VerifyEmail(APIView):
             if is_fresh:
                 user.email_verified = True
                 user.save(update_fields=["email_verified"])
-            else:
-                new_token = EmailVerificationToken.objects.create(user=user)
-                resend_url = (
-                    f"{config.SITE_URL}/profile/email/"
-                    f"{new_token.verification_token}/verify/"
-                )
-
-                def _send_resend_email(user=user, url=resend_url):
-                    try:
-                        user.email_link(
-                            "Action Required: Verify Email",
-                            "Verify Email",
-                            "Please verify your email address to activate your account.",
-                            url,
-                            "Verify Now",
-                        )
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-
-                transaction.on_commit(_send_resend_email)
 
         if is_fresh:
             # Session login runs after the DB commit so a session-store
@@ -987,6 +971,10 @@ class VerifyEmail(APIView):
             login(request, user)
             return Response()
 
+        # Expired tokens do not auto-resend. Logging in with valid
+        # credentials + an unverified email already triggers a fresh
+        # verification email (see Login.post), so the explicit resend
+        # path exists without an unauthenticated amplifier here.
         return Response(
             {"message": "error.emailVerificationExpired"},
             status=status.HTTP_403_FORBIDDEN,
