@@ -346,7 +346,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     )
     created = models.DateTimeField(editable=False)
     modified = models.DateTimeField()
-    screen_name = models.CharField("Screen Name", max_length=30, blank=True, default="")
+    screen_name = models.CharField(
+        "Screen Name",
+        max_length=30,
+        blank=True,
+        null=True,
+        unique=True,
+        default=None,
+    )
     first_name = models.CharField("First Name", max_length=30)
     last_name = models.CharField("Last Name", max_length=30)
     phone_regex = RegexValidator(

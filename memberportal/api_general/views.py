@@ -463,7 +463,9 @@ class ProfileDetail(generics.GenericAPIView):
         p = request.user.profile
         body = json.loads(request.body)
         can_edit_basic = config.MEMBER_CAN_EDIT_BASIC_DETAILS
-        screen_name = (body.get("screenName") or "").strip()
+        # Empty string maps to NULL so unset handles don't collide on the
+        # case-insensitive unique constraint.
+        screen_name = (body.get("screenName") or "").strip() or None
 
         if can_edit_basic:
             email = (body.get("email") or "").lower()
@@ -715,7 +717,11 @@ class RegisterSerializer(serializers.Serializer):
     firstName = serializers.CharField(required=True, max_length=30, allow_blank=False)
     lastName = serializers.CharField(required=True, max_length=30, allow_blank=False)
     screenName = serializers.CharField(
-        required=False, max_length=30, allow_blank=True, default=""
+        required=False,
+        max_length=30,
+        allow_blank=True,
+        allow_null=True,
+        default=None,
     )
     mobile = serializers.CharField(
         required=False, max_length=12, allow_blank=True, default=""
@@ -728,7 +734,7 @@ class RegisterSerializer(serializers.Serializer):
         return value.lower()
 
     def validate_screenName(self, value):
-        return (value or "").strip()
+        return (value or "").strip() or None
 
     def validate(self, attrs):
         if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
