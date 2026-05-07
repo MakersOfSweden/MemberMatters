@@ -757,6 +757,8 @@ export default {
       'You pay your membership by invoice — no card is needed. Your membership invoice will be emailed to you each billing cycle.',
     invoiceDisabled:
       'Invoice billing is not currently available. Please choose another payment method.',
+    newSubscriptionsDisabled:
+      'New membership subscriptions are currently closed.',
     stripeError:
       "Something went wrong talking to our payment provider. Please try again in a moment, or contact us if it doesn't clear up.",
   },

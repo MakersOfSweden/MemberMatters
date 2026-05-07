@@ -47,6 +47,7 @@ class GetConfig(APIView):
             and len(config.STRIPE_SECRET_KEY) > 0,
             "enableMembershipPayments": config.ENABLE_STRIPE
             and config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS,
+            "enableNewSubscriptions": config.ENABLE_NEW_SUBSCRIPTIONS,
             "enableMemberBucks": config.ENABLE_MEMBERBUCKS,
             "enableRegistration": config.ENABLE_REGISTRATION,
             "registrationDisabledMessage": config.REGISTRATION_DISABLED_MESSAGE,

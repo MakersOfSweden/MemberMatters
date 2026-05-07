@@ -120,6 +120,14 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    "ENABLE_NEW_SUBSCRIPTIONS": (
+        True,
+        "Allow members to start NEW membership subscriptions. Renewals (Stripe "
+        "invoice.paid webhook), pending invoices being paid, and "
+        "PaymentPlanResume for cancelling members are NOT affected by this "
+        "toggle. Use this to pause new signups (e.g. capacity freeze) without "
+        "breaking existing members.",
+    ),
     "ENABLE_INVOICE_BILLING": (
         False,
         "Enable the 'Pay by Invoice' option during membership signup. "
@@ -496,6 +504,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_REPORT_ISSUE",
                 "ENABLE_STRIPE",
                 "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS",
+                "ENABLE_NEW_SUBSCRIPTIONS",
                 "ENABLE_MEMBERBUCKS",
                 "ENABLE_DISCOURSE_SSO_PROTOCOL",
                 "ENABLE_DISCORD_INTEGRATION",

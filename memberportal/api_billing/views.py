@@ -396,6 +396,15 @@ class PaymentPlanSignup(StripeAPIView):
             )
 
     def post(self, request, plan_id):
+        # Gate ONLY on this view: renewals (invoice.paid webhook), pending
+        # invoices being paid, CompleteSignup for already-created subs, and
+        # PaymentPlanResume for cancelling members must all keep working.
+        if not config.ENABLE_NEW_SUBSCRIPTIONS:
+            return Response(
+                {"success": False, "message": "billing.newSubscriptionsDisabled"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         new_plan = get_object_or_404(PaymentPlan, pk=plan_id)
 
         billing_method = request.data.get("billingMethod", "card")
