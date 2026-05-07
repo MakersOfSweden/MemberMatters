@@ -571,10 +571,9 @@ class MemberProfile(APIView):
 
         body = json.loads(request.body)
         member = User.objects.get(id=member_id)
-        rfid_changed = False
 
-        if member.profile.rfid != body.get("rfidCard"):
-            rfid_changed = True
+        rfid = (body.get("rfidCard") or "").strip() or None
+        rfid_changed = member.profile.rfid != rfid
 
         screen_name = (body.get("screenName") or "").strip()
 
@@ -593,7 +592,7 @@ class MemberProfile(APIView):
         member.email = body.get("email")
         member.profile.first_name = body.get("firstName")
         member.profile.last_name = body.get("lastName")
-        member.profile.rfid = body.get("rfidCard")
+        member.profile.rfid = rfid
         member.profile.phone = body.get("phone")
         member.profile.screen_name = screen_name
         member.profile.vehicle_registration_plate = body.get("vehicleRegistrationPlate")

@@ -155,12 +155,7 @@
                 <q-input
                   v-model="profileForm.rfidCard"
                   outlined
-                  :label="requiredLabel($t('form.rfidCard'))"
-                  lazy-rules
-                  :rules="[
-                    (val) =>
-                      validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-                  ]"
+                  :label="$t('form.rfidCard')"
                 />
 
                 <q-input
@@ -200,12 +195,22 @@
                 <q-input
                   v-model="profileForm.screenName"
                   outlined
-                  :label="requiredLabel($t('form.screenName'))"
+                  :label="
+                    requiredLabel(
+                      $t('form.screenName'),
+                      features?.signup?.requireScreenName !== false,
+                    )
+                  "
                   lazy-rules
-                  :rules="[
-                    (val) =>
-                      validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-                  ]"
+                  :rules="
+                    features?.signup?.requireScreenName !== false
+                      ? [
+                          (val) =>
+                            validateNotEmpty(val) ||
+                            $t('validation.cannotBeEmpty'),
+                        ]
+                      : []
+                  "
                 />
 
                 <q-input

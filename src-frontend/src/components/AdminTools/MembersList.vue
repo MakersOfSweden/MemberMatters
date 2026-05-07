@@ -171,7 +171,7 @@ export default defineComponent({
           field: (row: MemberProfile) => row.name.full,
           sortable: true,
           format: (val: string, row: MemberProfile) =>
-            `${val} (${row.screenName})`,
+            row.screenName ? `${val} (${row.screenName})` : val,
         },
         {
           name: 'rfid',
