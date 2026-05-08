@@ -354,7 +354,11 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {
         "register": "5/hour",
-        "password_reset": "5/hour",
+        # Split so a legitimate user clicking a reset email (validate +
+        # submit, possibly with a refresh) doesn't share the same bucket
+        # as the abuse path (unauthenticated "send me a reset email").
+        "password_reset_request": "5/hour",
+        "password_reset_use": "20/hour",
     },
 }
 

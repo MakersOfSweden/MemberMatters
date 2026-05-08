@@ -345,7 +345,17 @@ class ResetPassword(APIView):
 
     permission_classes = (permissions.AllowAny,)
     throttle_classes = (ScopedRateThrottle,)
-    throttle_scope = "password_reset"
+
+    def get_throttles(self):
+        # Per-branch scope: the "send me a reset email" path is the abuse
+        # vector and stays at 5/hour; the post-email validate + submit
+        # paths are gated by knowing the token, so they get a roomier
+        # bucket so legitimate retries don't lock the user out.
+        if self.request.data.get("token"):
+            self.throttle_scope = "password_reset_use"
+        else:
+            self.throttle_scope = "password_reset_request"
+        return super().get_throttles()
 
     def post(self, request):
         body = request.data
@@ -398,6 +408,14 @@ class ResetPassword(APIView):
                             ]
                         )
                         return Response({"success": True})
+
+                    # Expired — clear so the row stops matching the stale
+                    # token. Mirrors the validate-only branch above.
+                    user.password_reset_key = None
+                    user.password_reset_expire = None
+                    user.save(
+                        update_fields=["password_reset_key", "password_reset_expire"]
+                    )
             except (User.DoesNotExist, ValueError):
                 pass
             return Response({"success": False})
