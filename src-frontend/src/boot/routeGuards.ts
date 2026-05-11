@@ -1,6 +1,6 @@
-import { Platform, Dialog } from 'quasar';
-import { i18n } from 'boot/i18n';
+import { Platform } from 'quasar';
 import { boot } from 'quasar/wrappers';
+import type { MemberState } from '../pages/pageAndRouteConfig';
 
 export default boot(({ router, store }) => {
   router.beforeEach((to, from, next) => {
@@ -11,23 +11,8 @@ export default boot(({ router, store }) => {
       }
     }
 
-    if (
-      store.getters['profile/profile']?.memberStatus === 'noob' &&
-      to.name !== 'membershipPlan' &&
-      to.name !== 'webcams' &&
-      to.name !== 'billing' &&
-      store.getters['config/features']?.enableMembershipPayments === true &&
-      to.meta.admin !== true
-    ) {
-      Dialog.create({
-        title: i18n.global.t('error.error'),
-        message: i18n.global.t('error.403MemberOnly'),
-      });
-      return;
-    }
-
     // Check if the user must be logged in to access the route
-    if (to.meta.loggedIn === true && to.name !== 'webcams') {
+    if (to.meta.loggedIn === true) {
       if (store.getters['profile/loggedIn'] === true) return next();
       else {
         return next({
@@ -48,13 +33,17 @@ export default boot(({ router, store }) => {
       }
     }
 
-    // check if the user must be a member
+    // Check the route's allowedStates (member state gating). Staff bypass.
+    const profile = store.getters['profile/profile'];
+    const allowedStates = to.meta.allowedStates as MemberState[] | undefined;
     if (
-      to.meta.memberOnly &&
-      to.name !== 'webcams' &&
-      store.getters['profile/profile'].memberStatus !== 'active'
-    )
+      allowedStates &&
+      profile?.memberStatus &&
+      !profile.permissions?.staff &&
+      !allowedStates.includes(profile.memberStatus)
+    ) {
       return next({ name: 'Error403MemberOnly' });
+    }
 
     // if we are authenticating via SSO then don't update the route unless we're registering
     if (!from.query.sso || to.name === 'register') {

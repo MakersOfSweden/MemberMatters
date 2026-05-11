@@ -80,7 +80,7 @@ export default {
     },
   },
   computed: {
-    ...mapGetters('profile', ['loggedIn']),
+    ...mapGetters('profile', ['loggedIn', 'profile']),
     ...mapGetters('config', ['features']),
     linkVisible() {
       return !(
@@ -104,6 +104,15 @@ export default {
         if (
           link.featureEnabledFlag &&
           !this.features[link.featureEnabledFlag]
+        ) {
+          return false;
+        }
+
+        // member-state gating; staff bypass
+        if (
+          link.allowedStates &&
+          !this.profile?.permissions?.staff &&
+          !link.allowedStates.includes(this.profile?.memberStatus)
         ) {
           return false;
         }

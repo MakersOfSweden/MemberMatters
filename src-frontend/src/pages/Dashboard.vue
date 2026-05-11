@@ -80,13 +80,6 @@ export default {
   },
   async mounted() {
     await this.getProfile();
-    if (
-      this.profile.memberStatus === 'noob' &&
-      this.$route.name !== 'membershipPlan' &&
-      this.features.enableMembershipPayments
-    ) {
-      this.$router.push({ name: 'membershipPlan' });
-    }
   },
 };
 </script>

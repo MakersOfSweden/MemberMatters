@@ -208,7 +208,11 @@ export default defineComponent({
         if (!link.loggedIn) {
           if (this.loggedIn) displayLink = false;
         }
-        if (link.memberOnly && this.profile.memberStatus !== 'active')
+        if (
+          link.allowedStates &&
+          !this.profile?.permissions?.staff &&
+          !link.allowedStates.includes(this.profile.memberStatus)
+        )
           displayLink = false;
         if (this.$q.platform.is.electron && !link.kiosk) displayLink = false;
         if (link.admin && !this.profile?.permissions?.staff) {
@@ -222,13 +226,6 @@ export default defineComponent({
   async mounted() {
     if (this.loggedIn) {
       await this.getProfile();
-      if (
-        this.profile.memberStatus === 'noob' &&
-        this.$route.name !== 'membershipPlan' &&
-        this.features.enableMembershipPayments
-      ) {
-        this.$router.push({ name: 'membershipPlan' });
-      }
     }
   },
 });
