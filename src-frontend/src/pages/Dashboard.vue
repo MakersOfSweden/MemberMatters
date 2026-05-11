@@ -30,11 +30,10 @@
       <h5 class="q-ma-md">
         {{ $t('dashboard.usefulResources') }}
       </h5>
-      <div class="row flex items-stretch justify-start">
+      <div class="dashboard-cards">
         <dashboard-card
           v-for="card in homepageCards"
           :key="card.title"
-          class="col-12 col-sm-4"
           :title="card.title"
           :icon="card.icon"
           :description="card.description"
@@ -96,4 +95,13 @@ export default {
   width: 100%
   max-width: $maxWidth
   margin: auto
+
+.dashboard-cards
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr))
+  gap: 16px
+  width: 100%
+  max-width: $maxWidth
+  margin: auto
+  align-items: stretch
 </style>
