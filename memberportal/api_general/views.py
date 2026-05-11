@@ -7,6 +7,8 @@ from django.contrib.auth import (
 import logging
 from constance import config
 import json
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction, IntegrityError
 from django.utils.timezone import make_aware
 import datetime
@@ -347,10 +349,10 @@ class ResetPassword(APIView):
     throttle_classes = (ScopedRateThrottle,)
 
     def get_throttles(self):
-        # Per-branch scope: the "send me a reset email" path is the abuse
-        # vector and stays at 5/hour; the post-email validate + submit
-        # paths are gated by knowing the token, so they get a roomier
-        # bucket so legitimate retries don't lock the user out.
+        # request-reset issues an email on every match — abuse vector,
+        # stays at 5/hour. validate/submit are also IP-throttled (token
+        # isn't checked before this point), but they have no email
+        # side-effect, so a roomier bucket for legitimate retries.
         if self.request.data.get("token"):
             self.throttle_scope = "password_reset_use"
         else:
@@ -376,13 +378,15 @@ class ResetPassword(APIView):
             ):
                 return Response({"success": True})
 
-            # Token expired — clear it. Restrict the UPDATE to the
-            # columns this view actually owns so a concurrent profile
-            # save can't be reverted via a stale full-row write.
-            with transaction.atomic():
-                user.password_reset_key = None
-                user.password_reset_expire = None
-                user.save(update_fields=["password_reset_key", "password_reset_expire"])
+            # Token expired — clear it. Conditional UPDATE keyed on the
+            # original token so a concurrent reset_password() that
+            # rotated the key between our get() and now isn't clobbered:
+            # the filter no longer matches the new key, so zero rows
+            # update and the fresh reset stays intact.
+            User.objects.filter(pk=user.pk, password_reset_key=token).update(
+                password_reset_key=None,
+                password_reset_expire=None,
+            )
             return Response({"success": False})
 
         # If we get a reset token and password, the password should be reset
@@ -397,6 +401,13 @@ class ResetPassword(APIView):
                         user.password_reset_expire is not None
                         and now < user.password_reset_expire
                     ):
+                        try:
+                            validate_password(password, user=user)
+                        except DjangoValidationError as e:
+                            return Response(
+                                {"success": False, "errors": list(e.messages)},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
                         user.set_password(password)
                         user.password_reset_key = None
                         user.password_reset_expire = None
@@ -490,6 +501,7 @@ class ProfileDetail(generics.GenericAPIView):
         # Empty string maps to NULL so unset handles don't collide on the
         # case-insensitive unique constraint.
         screen_name = (body.get("screenName") or "").strip() or None
+        email = None
 
         if can_edit_basic:
             email = (body.get("email") or "").lower()
@@ -498,10 +510,11 @@ class ProfileDetail(generics.GenericAPIView):
             if not email:
                 return Response(status=status.HTTP_400_BAD_REQUEST)
 
-            # check if email is already in use
+            # check if email is already in use (case-insensitive, excluding self)
             if (
-                User.objects.filter(email=email).exists()
-                and email != request.user.email
+                User.objects.filter(email__iexact=email)
+                .exclude(pk=request.user.pk)
+                .exists()
             ):
                 return Response(
                     {"message": "error.accountAlreadyExists"},
@@ -522,23 +535,30 @@ class ProfileDetail(generics.GenericAPIView):
 
         try:
             with transaction.atomic():
+                p.screen_name = screen_name
+                p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
+                profile_fields = ["screen_name", "vehicle_registration_plate"]
+
                 if can_edit_basic:
-                    request.user.email = body.get("email")
+                    request.user.email = email
                     p.first_name = body.get("firstName")
                     p.last_name = body.get("lastName")
                     p.phone = body.get("phone")
+                    profile_fields += ["first_name", "last_name", "phone"]
+                    request.user.save(update_fields=["email"])
 
-                p.screen_name = screen_name
-                p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
-
-                request.user.save()
-                p.save()
+                # update_fields restricts UPDATE to columns this view
+                # owns — concurrent writes elsewhere on the row (Stripe
+                # webhook, admin, access events) aren't reverted by a
+                # stale full-row save. Profile.save() rides `modified`
+                # along automatically.
+                p.save(update_fields=profile_fields)
         except IntegrityError:
             # Race with a concurrent register/update: pre-checks passed
             # but a unique constraint tripped on insert. Re-check to
             # identify which collision occurred.
             if can_edit_basic and (
-                User.objects.filter(email=(body.get("email") or "").lower())
+                User.objects.filter(email__iexact=email)
                 .exclude(pk=request.user.pk)
                 .exists()
             ):
@@ -765,6 +785,23 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"screenName": "error.screenNameRequired"}
             )
+
+        # Run Django's AUTH_PASSWORD_VALIDATORS — min-length is already
+        # covered by the field's min_length=8, but this also picks up
+        # CommonPassword / NumericPassword / PwnedPasswords from
+        # settings.py, plus UserAttributeSimilarity against the email
+        # and names on this signup. first_name / last_name aren't real
+        # User fields (they live on Profile), but the similarity
+        # validator just getattrs them, so setting them on an unsaved
+        # User instance is enough.
+        pseudo_user = User(email=attrs["email"])
+        pseudo_user.first_name = attrs["firstName"]
+        pseudo_user.last_name = attrs["lastName"]
+        try:
+            validate_password(attrs["password"], user=pseudo_user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+
         return attrs
 
 
@@ -901,7 +938,9 @@ class Register(APIView):
         # deliberate UX trade-off (account-existence enumeration); the
         # alternative — silently emailing "you already have an account" —
         # was considered worse for the typical signup mistake.
-        if User.objects.filter(email=data["email"]).exists():
+        # __iexact rather than = catches any mixed-case rows already in
+        # the DB (Postgres email column is case-sensitive by default).
+        if User.objects.filter(email__iexact=data["email"]).exists():
             return Response(
                 {"message": "error.accountAlreadyExists"},
                 status=status.HTTP_409_CONFLICT,
@@ -943,7 +982,7 @@ class Register(APIView):
             # Race with another concurrent register: pre-checks passed but
             # a unique constraint tripped on insert. Re-check to identify
             # which collision occurred.
-            if User.objects.filter(email=data["email"]).exists():
+            if User.objects.filter(email__iexact=data["email"]).exists():
                 return Response(
                     {"message": "error.accountAlreadyExists"},
                     status=status.HTTP_409_CONFLICT,
