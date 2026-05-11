@@ -11,22 +11,25 @@ export default boot(({ router, store }) => {
       }
     }
 
-    // Check if the user must be logged in to access the route
-    if (to.meta.loggedIn === true) {
-      if (store.getters['profile/loggedIn'] === true) return next();
-      else {
-        return next({
-          name: 'login',
-          query: {
-            nextUrl: to.fullPath,
-          },
-        });
-      }
+    // Check if the user must be logged in to access the route. Fall
+    // through on the happy path so later checks (admin, allowedStates)
+    // still run — every allowedStates route also sets loggedIn:true,
+    // so short-circuiting here would skip member-state gating entirely.
+    if (
+      to.meta.loggedIn === true &&
+      store.getters['profile/loggedIn'] !== true
+    ) {
+      return next({
+        name: 'login',
+        query: {
+          nextUrl: to.fullPath,
+        },
+      });
     }
 
     // Check if the user must be an admin to access the route
     if (to.meta.admin === true) {
-      if (store.getters['profile/profile'].permissions.staff === true)
+      if (store.getters['profile/profile']?.permissions?.staff === true)
         return next();
       else {
         return next({ name: 'Error403' });
@@ -34,15 +37,17 @@ export default boot(({ router, store }) => {
     }
 
     // Check the route's allowedStates (member state gating). Staff bypass.
+    // Fails closed: a missing profile / memberStatus on a gated route is
+    // treated as not-allowed so a not-yet-loaded profile can't slip past.
     const profile = store.getters['profile/profile'];
     const allowedStates = to.meta.allowedStates as MemberState[] | undefined;
-    if (
-      allowedStates &&
-      profile?.memberStatus &&
-      !profile.permissions?.staff &&
-      !allowedStates.includes(profile.memberStatus)
-    ) {
-      return next({ name: 'Error403MemberOnly' });
+    if (allowedStates && profile?.permissions?.staff !== true) {
+      if (
+        !profile?.memberStatus ||
+        !allowedStates.includes(profile.memberStatus)
+      ) {
+        return next({ name: 'Error403MemberOnly' });
+      }
     }
 
     // if we are authenticating via SSO then don't update the route unless we're registering
