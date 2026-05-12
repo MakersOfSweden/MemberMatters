@@ -20,7 +20,7 @@ const menuRoutes: RouteRecordRaw[] = mainMenu.map(
             loggedIn: child.loggedIn,
             kiosk: child.kiosk,
             backButton: child.backButton,
-            memberOnly: child.memberOnly,
+            allowedStates: child.allowedStates,
             bgGradient: child.bgGradient,
           },
         });
@@ -39,7 +39,7 @@ const menuRoutes: RouteRecordRaw[] = mainMenu.map(
           loggedIn: menuItem.loggedIn,
           kiosk: menuItem.kiosk,
           backButton: menuItem.backButton,
-          memberOnly: menuItem.memberOnly,
+          allowedStates: menuItem.allowedStates,
           bgGradient: menuItem.bgGradient,
         },
       };
@@ -58,7 +58,7 @@ const menuRoutes: RouteRecordRaw[] = mainMenu.map(
         loggedIn: menuItem.loggedIn,
         kiosk: menuItem.kiosk,
         backButton: menuItem.backButton,
-        memberOnly: menuItem.memberOnly,
+        allowedStates: menuItem.allowedStates,
         bgGradient: menuItem.bgGradient,
       },
     };
