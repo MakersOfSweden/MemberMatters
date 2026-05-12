@@ -10,6 +10,7 @@ import json
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction, IntegrityError
+from django.utils import timezone
 from django.utils.timezone import make_aware
 import datetime
 from pytz import UTC as utc
@@ -368,10 +369,14 @@ class ResetPassword(APIView):
         if token and not password:
             try:
                 user = User.objects.get(password_reset_key=token)
-            except (User.DoesNotExist, ValueError):
+            except (User.DoesNotExist, DjangoValidationError, ValueError, TypeError):
+                # DoesNotExist: no such token. (Django)ValidationError /
+                # ValueError / TypeError: `token` isn't a parseable UUID
+                # (UUIDField re-raises bad input as ValidationError) — a
+                # garbage token is just an invalid one, not a 500.
                 return Response({"success": False})
 
-            now = utc.localize(datetime.datetime.now())
+            now = timezone.now()
             if (
                 user.password_reset_expire is not None
                 and now < user.password_reset_expire
@@ -396,7 +401,7 @@ class ResetPassword(APIView):
                     user = User.objects.select_for_update().get(
                         password_reset_key=token
                     )
-                    now = utc.localize(datetime.datetime.now())
+                    now = timezone.now()
                     if (
                         user.password_reset_expire is not None
                         and now < user.password_reset_expire
@@ -427,7 +432,9 @@ class ResetPassword(APIView):
                     user.save(
                         update_fields=["password_reset_key", "password_reset_expire"]
                     )
-            except (User.DoesNotExist, ValueError):
+            except (User.DoesNotExist, DjangoValidationError, ValueError, TypeError):
+                # See the validate-only branch above: an unparseable token
+                # is an invalid token, not an internal error.
                 pass
             return Response({"success": False})
 
