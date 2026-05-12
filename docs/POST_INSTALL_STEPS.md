@@ -92,6 +92,8 @@ However, as noted below, currencies will use a hardcoded value set by a configur
   * "GOOGLE_ANALYTICS_MEASUREMENT_ID" - Enter your measurement ID to enable Google analytics. Only the new GA4 measurement IDs are supported. It should look something like G-XXXXXXXXXX.
 
 ### Signup
+  * "ENABLE_REGISTRATION" - master kill-switch for new account creation. When `False`, `POST /api/register/` returns 503 and the registration page shows the disabled message instead of the form. Existing accounts and the login flow are unaffected. Defaults to `True`.
+  * "REGISTRATION_DISABLED_MESSAGE" - message shown to members on the registration page (and as a popup if they click "Register Here" on the login page) when `ENABLE_REGISTRATION` is `False`. Use this for an "at capacity" / "scheduled outage" / "membership is invite-only" message without needing a deploy.
   * "INDUCTION_ENROL_LINK" - URL to enrol in the Canvas LMS induction course.
   * "INDUCTION_COURSE_ID" - ID of the Canvas LMS induction course (usually found in the course URL on the settings page).
   * "MAX_INDUCTION_DAYS" -  Maximum number of days since they were inducted before they require another induction. Set 
@@ -182,6 +184,7 @@ You cannot currently enable specific events, you either get "all or nothing".
   * "STRIPE_SECRET_KEY" - the secret Stripe key. You should create a restricted key - see info below on what permissions you need.
   * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe.
   * "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS" - enable the "Membership Plan" menu page on the front end so members can sign up with the Stripe billing integration. NOTE: make sure you configure these first from the "Admin Tools" > "Membership Plans" page.
+  * "ENABLE_NEW_SUBSCRIPTIONS" - allow members without an existing subscription to start a new one. When `False`, `POST /api/billing/signup/<plan>/` returns 503 and the membership-plan page shows a "new subscriptions closed" banner. **Renewals (Stripe `invoice.paid` webhook), pending invoices being paid, and `PaymentPlanResume` for cancelling members are NOT affected** — existing members keep working normally. Use this for capacity freezes / scheduled outages without breaking renewals. Defaults to `True`.
   * "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS" - the options a member can see when on the MemberBucks top up page (in cents).
   * "ENABLE_INVOICE_BILLING" - enable the "Pay by Invoice" option during membership signup so members can receive a Stripe invoice instead of paying by card. See the [Pay by Invoice setup](#pay-by-invoice-setup) section below — there is required Stripe Dashboard configuration, without which members can get stuck in the `pending` state indefinitely.
   * "INVOICE_DAYS_UNTIL_DUE" - number of days before a Stripe invoice for invoice-billed membership becomes due.

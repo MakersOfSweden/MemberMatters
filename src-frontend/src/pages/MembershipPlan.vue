@@ -5,7 +5,13 @@
     </template>
 
     <template v-else-if="!currentPlan">
-      <select-tier />
+      <q-banner
+        v-if="features.enableNewSubscriptions === false"
+        class="bg-info text-white q-pa-md"
+      >
+        {{ $t('billing.newSubscriptionsDisabled') }}
+      </q-banner>
+      <select-tier v-else />
     </template>
 
     <template v-else>
@@ -152,6 +158,7 @@ export default defineComponent({
   },
   computed: {
     ...mapGetters('profile', ['profile']),
+    ...mapGetters('config', ['features']),
     currentPlan() {
       if (Object.keys(this.profile).length) {
         return this.profile.financial.membershipPlan;

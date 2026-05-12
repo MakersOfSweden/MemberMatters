@@ -120,6 +120,14 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    "ENABLE_NEW_SUBSCRIPTIONS": (
+        True,
+        "Allow members to start NEW membership subscriptions. Renewals (Stripe "
+        "invoice.paid webhook), pending invoices being paid, and "
+        "PaymentPlanResume for cancelling members are NOT affected by this "
+        "toggle. Use this to pause new signups (e.g. capacity freeze) without "
+        "breaking existing members.",
+    ),
     "ENABLE_INVOICE_BILLING": (
         False,
         "Enable the 'Pay by Invoice' option during membership signup. "
@@ -357,6 +365,14 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
     ),
+    "ENABLE_REGISTRATION": (
+        True,
+        "Allow new user registration. When false, the Register endpoint returns 503 and the registration page shows REGISTRATION_DISABLED_MESSAGE.",
+    ),
+    "REGISTRATION_DISABLED_MESSAGE": (
+        "",
+        "Message shown on the registration page (and as a popup from the login page) when ENABLE_REGISTRATION is false.",
+    ),
     "MEMBER_CAN_EDIT_BASIC_DETAILS": (
         True,
         "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
@@ -480,12 +496,15 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
         (
             "Features",
             (
+                "ENABLE_REGISTRATION",
+                "REGISTRATION_DISABLED_MESSAGE",
                 "ENABLE_WEBCAMS",
                 "ENABLE_PROXY_VOTING",
                 "ENABLE_MEMBERSHIP_STATUS_CARD",
                 "ENABLE_REPORT_ISSUE",
                 "ENABLE_STRIPE",
                 "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS",
+                "ENABLE_NEW_SUBSCRIPTIONS",
                 "ENABLE_MEMBERBUCKS",
                 "ENABLE_DISCOURSE_SSO_PROTOCOL",
                 "ENABLE_DISCORD_INTEGRATION",

@@ -67,6 +67,8 @@ export default {
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
     screenNameRequired: 'Ange ett användarnamn.',
+    registrationClosed:
+      'Registrering är just nu stängd.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
     requestFailed:
       "Det har uppstått ett fel. Försök igen senare.",
@@ -750,6 +752,8 @@ export default {
       'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
     invoiceDisabled:
       'Fakturabetalning är inte tillgänglig för närvarande. Välj en annan betalmetod.',
+    newSubscriptionsDisabled:
+      'Registrering av nya medlemskap är stängda.',
     stripeError:
       'Något gick fel i kommunikationen med vår betalleverantör. Försök igen om en stund eller kontakta oss om det inte löser sig.',
   },

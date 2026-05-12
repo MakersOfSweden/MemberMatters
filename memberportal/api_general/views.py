@@ -7,13 +7,18 @@ from django.contrib.auth import (
 import logging
 from constance import config
 import json
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction, IntegrityError
+from django.utils import timezone
 from django.utils.timezone import make_aware
 import datetime
 from pytz import UTC as utc
 from profile.models import User, Profile
 
-from rest_framework import status, permissions, generics
+from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from .models import Kiosk, SiteSession, EmailVerificationToken
 from services.discord import post_kiosk_swipe_to_discord
@@ -45,7 +50,10 @@ class GetConfig(APIView):
             and len(config.STRIPE_SECRET_KEY) > 0,
             "enableMembershipPayments": config.ENABLE_STRIPE
             and config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS,
+            "enableNewSubscriptions": config.ENABLE_NEW_SUBSCRIPTIONS,
             "enableMemberBucks": config.ENABLE_MEMBERBUCKS,
+            "enableRegistration": config.ENABLE_REGISTRATION,
+            "registrationDisabledMessage": config.REGISTRATION_DISABLED_MESSAGE,
             "signup": {
                 "inductionLink": config.INDUCTION_ENROL_LINK,
                 "enableInduction": config.MOODLE_INDUCTION_ENABLED
@@ -243,16 +251,26 @@ class Login(APIView):
                     return Response(status=status.HTTP_200_OK)
 
             else:
-                new_token = EmailVerificationToken.objects.create(user=user)
+                with transaction.atomic():
+                    new_token = EmailVerificationToken.objects.create(user=user)
+                    verify_url = (
+                        f"{config.SITE_URL}/profile/email/"
+                        f"{new_token.verification_token}/verify/"
+                    )
 
-                url = f"{config.SITE_URL}/profile/email/{new_token.verification_token}/verify/"
-                new_token.user.email_link(
-                    "Action Required: Verify Email",
-                    "Verify Email",
-                    "Please verify your email address to activate your account.",
-                    url,
-                    "Verify Now",
-                )
+                    def _send_verification_email(user=user, url=verify_url):
+                        try:
+                            user.email_link(
+                                "Action Required: Verify Email",
+                                "Verify Email",
+                                "Please verify your email address to activate your account.",
+                                url,
+                                "Verify Now",
+                            )
+                        except Exception as e:
+                            sentry_sdk.capture_exception(e)
+
+                    transaction.on_commit(_send_verification_email)
 
                 return Response(
                     {"message": "loginCard.emailNotVerified"},
@@ -329,56 +347,109 @@ class ResetPassword(APIView):
     """
 
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+
+    def get_throttles(self):
+        # request-reset issues an email on every match — abuse vector,
+        # stays at 5/hour. validate/submit are also IP-throttled (token
+        # isn't checked before this point), but they have no email
+        # side-effect, so a roomier bucket for legitimate retries.
+        if self.request.data.get("token"):
+            self.throttle_scope = "password_reset_use"
+        else:
+            self.throttle_scope = "password_reset_request"
+        return super().get_throttles()
 
     def post(self, request):
         body = request.data
+        token = body.get("token")
+        password = body.get("password")
 
         # If we get a reset token and no password, the token is being validated
-        if body.get("token") and not body.get("password"):
+        if token and not password:
             try:
-                user = User.objects.get(password_reset_key=body.get("token"))
-
-            except User.DoesNotExist:
+                user = User.objects.get(password_reset_key=token)
+            except (User.DoesNotExist, DjangoValidationError, ValueError, TypeError):
+                # DoesNotExist: no such token. (Django)ValidationError /
+                # ValueError / TypeError: `token` isn't a parseable UUID
+                # (UUIDField re-raises bad input as ValidationError) — a
+                # garbage token is just an invalid one, not a 500.
                 return Response({"success": False})
 
+            now = timezone.now()
             if (
-                user
-                and utc.localize(datetime.datetime.now()) < user.password_reset_expire
+                user.password_reset_expire is not None
+                and now < user.password_reset_expire
             ):
                 return Response({"success": True})
 
-            else:
-                user.password_reset_key = None
-                user.password_reset_expire = None
-                user.save()
-                return Response({"success": False})
-
-        # If we get a reset token and email, the password should be reset
-        if body.get("token") and body.get("password"):
-            user = User.objects.get(password_reset_key=body.get("token"))
-
-            if (
-                user
-                and utc.localize(datetime.datetime.now()) < user.password_reset_expire
-            ):
-                user.set_password(body.get("password"))
-                user.password_reset_key = None
-                user.password_reset_expire = None
-                user.save()
-
-                if user:
-                    return Response({"success": True})
-
+            # Token expired — clear it. Conditional UPDATE keyed on the
+            # original token so a concurrent reset_password() that
+            # rotated the key between our get() and now isn't clobbered:
+            # the filter no longer matches the new key, so zero rows
+            # update and the fresh reset stays intact.
+            User.objects.filter(pk=user.pk, password_reset_key=token).update(
+                password_reset_key=None,
+                password_reset_expire=None,
+            )
             return Response({"success": False})
 
-        else:
+        # If we get a reset token and password, the password should be reset
+        if token and password:
             try:
-                user = User.objects.get(email=body.get("email"))
-                user.reset_password()
-                return Response({"success": True})
+                with transaction.atomic():
+                    user = User.objects.select_for_update().get(
+                        password_reset_key=token
+                    )
+                    now = timezone.now()
+                    if (
+                        user.password_reset_expire is not None
+                        and now < user.password_reset_expire
+                    ):
+                        try:
+                            validate_password(password, user=user)
+                        except DjangoValidationError as e:
+                            return Response(
+                                {"success": False, "errors": list(e.messages)},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        user.set_password(password)
+                        user.password_reset_key = None
+                        user.password_reset_expire = None
+                        user.save(
+                            update_fields=[
+                                "password",
+                                "password_reset_key",
+                                "password_reset_expire",
+                            ]
+                        )
+                        return Response({"success": True})
 
-            except:
-                return Response({"success": False})
+                    # Expired — clear so the row stops matching the stale
+                    # token. Mirrors the validate-only branch above.
+                    user.password_reset_key = None
+                    user.password_reset_expire = None
+                    user.save(
+                        update_fields=["password_reset_key", "password_reset_expire"]
+                    )
+            except (User.DoesNotExist, DjangoValidationError, ValueError, TypeError):
+                # See the validate-only branch above: an unparseable token
+                # is an invalid token, not an internal error.
+                pass
+            return Response({"success": False})
+
+        # No token: this is the "request a reset" path. Always return
+        # success so the response cannot be used to enumerate registered
+        # email addresses (M13).
+        email = (body.get("email") or "").lower()
+        if email:
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                user = None
+            if user is not None:
+                user.reset_password()
+        return Response({"success": True})
 
 
 class ProfileDetail(generics.GenericAPIView):
@@ -434,7 +505,10 @@ class ProfileDetail(generics.GenericAPIView):
         p = request.user.profile
         body = json.loads(request.body)
         can_edit_basic = config.MEMBER_CAN_EDIT_BASIC_DETAILS
-        screen_name = (body.get("screenName") or "").strip()
+        # Empty string maps to NULL so unset handles don't collide on the
+        # case-insensitive unique constraint.
+        screen_name = (body.get("screenName") or "").strip() or None
+        email = None
 
         if can_edit_basic:
             email = (body.get("email") or "").lower()
@@ -443,10 +517,11 @@ class ProfileDetail(generics.GenericAPIView):
             if not email:
                 return Response(status=status.HTTP_400_BAD_REQUEST)
 
-            # check if email is already in use
+            # check if email is already in use (case-insensitive, excluding self)
             if (
-                User.objects.filter(email=email).exists()
-                and email != request.user.email
+                User.objects.filter(email__iexact=email)
+                .exclude(pk=request.user.pk)
+                .exists()
             ):
                 return Response(
                     {"message": "error.accountAlreadyExists"},
@@ -465,17 +540,43 @@ class ProfileDetail(generics.GenericAPIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if can_edit_basic:
-            request.user.email = body.get("email")
-            p.first_name = body.get("firstName")
-            p.last_name = body.get("lastName")
-            p.phone = body.get("phone")
+        try:
+            with transaction.atomic():
+                p.screen_name = screen_name
+                p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
+                profile_fields = ["screen_name", "vehicle_registration_plate"]
 
-        p.screen_name = screen_name
-        p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
+                if can_edit_basic:
+                    request.user.email = email
+                    p.first_name = body.get("firstName")
+                    p.last_name = body.get("lastName")
+                    p.phone = body.get("phone")
+                    profile_fields += ["first_name", "last_name", "phone"]
+                    request.user.save(update_fields=["email"])
 
-        request.user.save()
-        p.save()
+                # update_fields restricts UPDATE to columns this view
+                # owns — concurrent writes elsewhere on the row (Stripe
+                # webhook, admin, access events) aren't reverted by a
+                # stale full-row save. Profile.save() rides `modified`
+                # along automatically.
+                p.save(update_fields=profile_fields)
+        except IntegrityError:
+            # Race with a concurrent register/update: pre-checks passed
+            # but a unique constraint tripped on insert. Re-check to
+            # identify which collision occurred.
+            if can_edit_basic and (
+                User.objects.filter(email__iexact=email)
+                .exclude(pk=request.user.pk)
+                .exists()
+            ):
+                return Response(
+                    {"message": "error.accountAlreadyExists"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response(
+                {"message": "error.screenNameAlreadyExists"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         return Response({"success": True})
 
@@ -659,121 +760,246 @@ class LoggedIn(APIView):
         return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
+class RegisterSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True, max_length=255)
+    password = serializers.CharField(
+        required=True, write_only=True, min_length=8, max_length=128
+    )
+    firstName = serializers.CharField(required=True, max_length=30, allow_blank=False)
+    lastName = serializers.CharField(required=True, max_length=30, allow_blank=False)
+    screenName = serializers.CharField(
+        required=False,
+        max_length=30,
+        allow_blank=True,
+        allow_null=True,
+        default=None,
+    )
+    mobile = serializers.CharField(
+        required=False, max_length=12, allow_blank=True, default=""
+    )
+    vehicleRegistrationPlate = serializers.CharField(
+        required=False, max_length=30, allow_blank=True, default=""
+    )
+
+    def validate_email(self, value):
+        return value.lower()
+
+    def validate_screenName(self, value):
+        return (value or "").strip() or None
+
+    def validate(self, attrs):
+        if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
+            raise serializers.ValidationError(
+                {"screenName": "error.screenNameRequired"}
+            )
+
+        # Run Django's AUTH_PASSWORD_VALIDATORS — min-length is already
+        # covered by the field's min_length=8, but this also picks up
+        # CommonPassword / NumericPassword / PwnedPasswords from
+        # settings.py, plus UserAttributeSimilarity against the email
+        # and names on this signup. first_name / last_name aren't real
+        # User fields (they live on Profile), but the similarity
+        # validator just getattrs them, so setting them on an unsaved
+        # User instance is enough.
+        pseudo_user = User(email=attrs["email"])
+        pseudo_user.first_name = attrs["firstName"]
+        pseudo_user.last_name = attrs["lastName"]
+        try:
+            validate_password(attrs["password"], user=pseudo_user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+
+        return attrs
+
+
+def _send_register_emails(new_user, profile, verification_token):
+    """Postmark sends queued via transaction.on_commit so a Postmark
+    outage cannot 500 the request after the user/profile rows commit.
+    Each send is independently captured — one failure does not abort
+    the others."""
+
+    verification_url = (
+        f"{config.SITE_URL}/profile/email/"
+        f"{verification_token.verification_token}/verify/"
+    )
+
+    def _send_verification_email():
+        try:
+            new_user.email_link(
+                "Action Required: Verify Email",
+                "Verify Email",
+                "Please verify your email address to activate your account.",
+                verification_url,
+                "Verify Now",
+            )
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+
+    def _send_admin_notification():
+        try:
+            profile.email_profile_to(config.EMAIL_ADMIN)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+
+    transaction.on_commit(_send_verification_email)
+    transaction.on_commit(_send_admin_notification)
+
+    if not config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS:
+        induction_subject = f"Action Required: {config.SITE_OWNER} New Member Signup"
+        induction_title = "Next Step: Register for an Induction"
+        induction_message = (
+            f"Hi {profile.first_name}, thanks for signing up! The next step "
+            "to becoming a fully fledged member is to book in for an "
+            "induction. During this induction we will go over the basic "
+            f"safety and operational aspects of {config.SITE_OWNER}. To book "
+            "in, click the link below."
+        )
+        induction_link = config.POST_INDUCTION_URL
+        induction_btn = "Register for Induction"
+
+        def _send_induction_email():
+            try:
+                new_user.email_link(
+                    induction_subject,
+                    induction_title,
+                    induction_message,
+                    induction_link,
+                    induction_btn,
+                )
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
+
+        transaction.on_commit(_send_induction_email)
+
+
+def _subscribe_to_mailchimp(new_user, profile):
+    if not config.MAILCHIMP_API_KEY:
+        return
+
+    def _subscribe():
+        try:
+            import mailchimp_marketing
+
+            client = mailchimp_marketing.Client()
+            client.set_config(
+                {
+                    "api_key": config.MAILCHIMP_API_KEY,
+                    "server": config.MAILCHIMP_SERVER,
+                }
+            )
+            client.lists.add_list_member(
+                config.MAILCHIMP_LIST_ID,
+                {
+                    "email_address": new_user.email,
+                    "email_type": "html",
+                    "status": "subscribed",
+                    "merge_fields": {
+                        "FNAME": profile.first_name,
+                        "LNAME": profile.last_name,
+                        "PHONE": profile.phone,
+                    },
+                    "vip": False,
+                    "tags": [config.MAILCHIMP_TAG],
+                },
+            )
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            logger.error(e)
+
+    transaction.on_commit(_subscribe)
+
+
 class Register(APIView):
     """
     post: registers a new member.
     """
 
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "register"
+
+    # TODO: layer CAPTCHA (e.g. Cloudflare Turnstile) on top of throttling.
+    # Throttling covers per-IP abuse but a distributed bot can still drift
+    # under the cap. Gate enforcement on a Constance flag + site keys so
+    # fresh installs and CI work without configuration. See PR follow-ups.
 
     def post(self, request):
-        body = request.data
+        if not config.ENABLE_REGISTRATION:
+            return Response(
+                {
+                    "message": "error.registrationClosed",
+                    "detail": config.REGISTRATION_DISABLED_MESSAGE,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        if User.objects.filter(email=body.get("email").lower()).exists():
+        serializer = RegisterSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+
+        # Pre-flight uniqueness checks. The DB constraint (User.email
+        # already unique; Profile.screen_name unique after the M32
+        # migration) is the authoritative source for races — see the
+        # IntegrityError handler below. The 409 on duplicate email is a
+        # deliberate UX trade-off (account-existence enumeration); the
+        # alternative — silently emailing "you already have an account" —
+        # was considered worse for the typical signup mistake.
+        # __iexact rather than = catches any mixed-case rows already in
+        # the DB (Postgres email column is case-sensitive by default).
+        if User.objects.filter(email__iexact=data["email"]).exists():
             return Response(
                 {"message": "error.accountAlreadyExists"},
                 status=status.HTTP_409_CONFLICT,
             )
-
-        screen_name = (body.get("screenName") or "").strip()
-
-        if not screen_name:
-            if config.REQUIRE_SCREEN_NAME:
-                return Response(
-                    {"message": "error.screenNameRequired"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        elif Profile.objects.filter(screen_name__iexact=screen_name).exists():
+        if (
+            data["screenName"]
+            and Profile.objects.filter(screen_name__iexact=data["screenName"]).exists()
+        ):
             return Response(
                 {"message": "error.screenNameAlreadyExists"},
                 status=status.HTTP_409_CONFLICT,
             )
 
-        new_user = User.objects.create(
-            email=body.get("email").lower(),
-            email_verified=False,
-        )
-
-        new_user.set_password(body.get("password"))
-        new_user.save()
-
-        profile = Profile.objects.create(
-            user=new_user,
-            first_name=body.get("firstName"),
-            last_name=body.get("lastName"),
-            screen_name=screen_name,
-            phone=body.get("mobile"),
-            vehicle_registration_plate=body.get("vehicleRegistrationPlate"),
-        )
-
-        profile.save()
-
-        verification_token = EmailVerificationToken.objects.create(user=new_user)
-
-        url = f"{config.SITE_URL}/profile/email/{verification_token.verification_token}/verify/"
-        verification_token.user.email_link(
-            "Action Required: Verify Email",
-            "Verify Email",
-            "Please verify your email address to activate your account.",
-            url,
-            "Verify Now",
-        )
-
-        profile.email_profile_to(config.EMAIL_ADMIN)
-
-        if not config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS:
-            subject = f"Action Required: {config.SITE_OWNER} New Member Signup"
-            title = "Next Step: Register for an Induction"
-            message = (
-                f"Hi {profile.first_name}, thanks for signing up! The next step to becoming a fully "
-                "fledged member is to book in for an induction. During this "
-                "induction we will go over the basic safety and operational "
-                f"aspects of {config.SITE_OWNER}. To book in, click the link below."
-            )
-            link = config.POST_INDUCTION_URL
-            btn_text = "Register for Induction"
-
-            new_user.email_link(subject, title, message, link, btn_text)
-
         try:
-            if config.MAILCHIMP_API_KEY:
-                import mailchimp_marketing
-                from mailchimp_marketing.api_client import ApiClientError
+            with transaction.atomic():
+                new_user = User.objects.create(
+                    email=data["email"],
+                    email_verified=False,
+                )
+                new_user.set_password(data["password"])
+                new_user.save(update_fields=["password"])
 
-                client = mailchimp_marketing.Client()
-                client.set_config(
-                    {
-                        "api_key": config.MAILCHIMP_API_KEY,
-                        "server": config.MAILCHIMP_SERVER,
-                    }
+                profile = Profile.objects.create(
+                    user=new_user,
+                    first_name=data["firstName"],
+                    last_name=data["lastName"],
+                    screen_name=data["screenName"],
+                    phone=data["mobile"],
+                    vehicle_registration_plate=data["vehicleRegistrationPlate"],
                 )
 
-                list_id = config.MAILCHIMP_LIST_ID
-                merge_fields = {
-                    "FNAME": new_user.profile.first_name,
-                    "LNAME": new_user.profile.last_name,
-                    "PHONE": new_user.profile.phone,
-                }
+                verification_token = EmailVerificationToken.objects.create(
+                    user=new_user
+                )
 
-                payload = {
-                    "email_address": new_user.email,
-                    "email_type": "html",
-                    "status": "subscribed",
-                    "merge_fields": merge_fields,
-                    "vip": False,
-                    "tags": [
-                        config.MAILCHIMP_TAG,
-                    ],
-                }
-                client.lists.add_list_member(list_id, payload)
+                _send_register_emails(new_user, profile, verification_token)
+                _subscribe_to_mailchimp(new_user, profile)
+        except IntegrityError:
+            # Race with another concurrent register: pre-checks passed but
+            # a unique constraint tripped on insert. Re-check to identify
+            # which collision occurred.
+            if User.objects.filter(email__iexact=data["email"]).exists():
+                return Response(
+                    {"message": "error.accountAlreadyExists"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response(
+                {"message": "error.screenNameAlreadyExists"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
-        except Exception as e:
-            # gracefully catch and move on
-            sentry_sdk.capture_exception(e)
-            logger.error(e)
-            return Response()
-
-        return Response()
+        return Response(status=status.HTTP_201_CREATED)
 
 
 class VerifyEmail(APIView):
@@ -788,44 +1014,44 @@ class VerifyEmail(APIView):
             verification_token = EmailVerificationToken.objects.get(
                 verification_token=verify_token
             )
-
-        except EmailVerificationToken.DoesNotExist:
+        except (EmailVerificationToken.DoesNotExist, ValueError):
             return Response(
                 {"message": "error.emailVerificationFailed"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if utc.localize(
+        user = verification_token.user
+        is_fresh = utc.localize(
             datetime.datetime.now()
-        ) < verification_token.creation_date + datetime.timedelta(hours=24):
-            verification_token.user.email_verified = True
-            verification_token.user.save()
+        ) < verification_token.creation_date + datetime.timedelta(hours=24)
 
-            # auto log the user in after verifying their email
-            login(request, verification_token.user)
+        with transaction.atomic():
+            # Compare-and-delete: only one concurrent request can claim
+            # the token. The loser gets affected_rows=0 and a clean 401.
+            deleted_count, _ = EmailVerificationToken.objects.filter(
+                pk=verification_token.pk
+            ).delete()
+            if deleted_count == 0:
+                return Response(
+                    {"message": "error.emailVerificationFailed"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
-            # delete the verification token so it can't be used again
-            verification_token.delete()
+            if is_fresh:
+                user.email_verified = True
+                user.save(update_fields=["email_verified"])
 
+        if is_fresh:
+            # Session login runs after the DB commit so a session-store
+            # write cannot extend the transaction's row-lock window.
+            login(request, user)
             return Response()
 
-        else:
-            new_token = EmailVerificationToken.objects.create(
-                user=verification_token.user
-            )
-
-            url = f"{config.SITE_URL}/profile/email/{new_token.verification_token}/verify/"
-            new_token.user.email_link(
-                "Action Required: Verify Email",
-                "Verify Email",
-                "Please verify your email address to activate your account.",
-                url,
-                "Verify Now",
-            )
-
-            verification_token.delete()
-
-            return Response(
-                {"message": "error.emailVerificationExpired"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Expired tokens do not auto-resend. Logging in with valid
+        # credentials + an unverified email already triggers a fresh
+        # verification email (see Login.post), so the explicit resend
+        # path exists without an unauthenticated amplifier here.
+        return Response(
+            {"message": "error.emailVerificationExpired"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
