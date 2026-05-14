@@ -6,6 +6,7 @@ from profile.models import (
     CompleteSignupOutcome,
     CompleteSignupResult,
     SignupTriggeredBy,
+    CancelTriggeredBy,
 )
 from api_admin_tools.models import *
 from .models import ProcessedStripeEvent
@@ -1039,24 +1040,18 @@ class PaymentPlanCancel(StripeAPIView):
     """
 
     def post(self, request):
-        current_plan = request.user.profile.membership_plan
-
-        if not current_plan:
+        if not request.user.profile.membership_plan:
             return _no_plan_response(request.user)
 
         if request.user.profile.subscription_status == "pending":
             return self._cancel_pending(request)
-
         return self._cancel_active(request)
 
     def _cancel_pending(self, request):
         # Pending invoice sub: commit the DB cancel under the row lock,
-        # then push the Stripe-side cleanup (void open invoices + delete
-        # subscription) to on_commit. Mirrors the webhook handler — the
-        # row lock is only held for a DB UPDATE, not for ~3 round trips
-        # to Stripe. Trade-off: if the on_commit Stripe calls fail, our
-        # DB says cancelled before Stripe does, so we email admin asking
-        # for manual cleanup.
+        # then push Stripe cleanup + profile-side reaction to on_commit.
+        # Stripe orchestration stays here; the profile-side reaction (clear
+        # pre-staged access, audit log) lives in Profile.complete_cancel().
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(
                 pk=request.user.profile.pk
@@ -1075,14 +1070,6 @@ class PaymentPlanCancel(StripeAPIView):
 
             subscription_id = locked_profile.stripe_subscription_id
 
-            # If this was a noob/accountonly who never activated, drop the
-            # default door/interlock access that CompleteSignup pre-staged
-            # so we don't leave dangling M2M links. For returning members
-            # (state="inactive"), leave their historical access intact.
-            if locked_profile.state in ("noob", "accountonly"):
-                locked_profile.doors.clear()
-                locked_profile.interlocks.clear()
-
             locked_profile.membership_plan = None
             locked_profile.stripe_subscription_id = None
             locked_profile.subscription_status = "inactive"
@@ -1097,13 +1084,10 @@ class PaymentPlanCancel(StripeAPIView):
                 ]
             )
 
-            request.user.log_event("Cancelled pending invoice subscription.", "stripe")
-
             cancelled_subject = (
                 f"{request.user.get_full_name()} cancelled their pending "
                 "membership (no payment was made)."
             )
-
             member_subject = "Your pending membership signup has been cancelled."
             member_message = (
                 "We've cancelled your pending membership signup at your "
@@ -1117,10 +1101,6 @@ class PaymentPlanCancel(StripeAPIView):
                 member_subject=member_subject,
                 member_message=member_message,
             ):
-                # Each notification is wrapped independently so a
-                # Postmark blip on the admin email doesn't suppress the
-                # member's confirmation (or vice versa). on_commit
-                # raises are silently dropped post-2xx, so capture too.
                 try:
                     send_email_to_admin(
                         subject=admin_subject,
@@ -1138,29 +1118,13 @@ class PaymentPlanCancel(StripeAPIView):
                 except Exception as e:
                     capture_exception(e)
 
-            # Notifications first — Django fires on_commit callbacks in
-            # registration order and any uncaught raise stops the chain.
-            # The Stripe cleanup is the slow / failure-prone step, so
-            # putting the member email behind it would risk losing it.
             transaction.on_commit(_on_commit_cancel_notifications)
 
             def _on_commit_stripe_cleanup(
                 subscription_id=subscription_id,
                 user=request.user,
             ):
-                # No period has elapsed and nothing was paid, so we
-                # explicitly don't want Stripe to generate a
-                # final/proration invoice. Per-invoice voids are
-                # best-effort so a single bad invoice can't stop us
-                # reaching Subscription.delete. The deletion fires
-                # customer.subscription.deleted, but our DB already
-                # cleared stripe_subscription_id so the webhook's
-                # scope check bails — no double-cleanup.
-                #
-                # Outer broad try/except: an unexpected exception type
-                # (network library raising outside StripeError, JSON
-                # decode errors during pagination, etc.) here would
-                # otherwise abort any later on_commit handler.
+                # See today's _cancel_pending for the failure-mode rationale.
                 try:
                     try:
                         open_invoices = stripe.Invoice.list(
@@ -1210,11 +1174,20 @@ class PaymentPlanCancel(StripeAPIView):
 
             transaction.on_commit(_on_commit_stripe_cleanup)
 
+            def _on_commit_complete_cancel(profile=locked_profile):
+                try:
+                    profile.complete_cancel(CancelTriggeredBy.MEMBER_SELF_CANCEL)
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_on_commit_complete_cancel)
+
         return Response({"success": True})
 
     def _cancel_active(self, request):
-        # Cancel-active: schedule cancellation at period end. Lock so a
-        # concurrent webhook can't interleave with our save.
+        # Schedule cancellation at period end. complete_cancel is NOT called
+        # here — the actual deactivation happens when the
+        # customer.subscription.deleted webhook arrives at period end.
         failed = False
         with transaction.atomic():
             locked_profile = Profile.objects.select_for_update().get(
@@ -1227,10 +1200,8 @@ class PaymentPlanCancel(StripeAPIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            # StripeError must be caught (not raised) so the atomic
-            # commits cleanly and the failure-email helper outside this
-            # block can fire on_commit. Letting it propagate would roll
-            # back, drop pending on_commit callbacks, and 500 the user.
+            # StripeError must be caught so the atomic commits cleanly and
+            # the failure-email helper outside this block can fire.
             try:
                 modified_subscription = stripe.Subscription.modify(
                     locked_profile.stripe_subscription_id,
@@ -1246,7 +1217,10 @@ class PaymentPlanCancel(StripeAPIView):
                     locked_profile.subscription_status = "cancelling"
                     locked_profile.save(update_fields=["subscription_status"])
 
-                    cancel_subject = f"{request.user.get_full_name()} requested to cancel their membership plan."
+                    cancel_subject = (
+                        f"{request.user.get_full_name()} requested to cancel "
+                        "their membership plan."
+                    )
                     request.user.log_event(
                         "You've requested to cancel your membership plan.",
                         "stripe",
@@ -1256,9 +1230,11 @@ class PaymentPlanCancel(StripeAPIView):
                         admin_subject=cancel_subject,
                         user=request.user,
                     ):
-                        # Each notification wrapped independently — see
-                        # _cancel_pending's _on_commit_cancel_notifications.
-                        description = "No further action is required, the subscription will automatically cancel at the end of the current billing period."
+                        description = (
+                            "No further action is required, the subscription "
+                            "will automatically cancel at the end of the "
+                            "current billing period."
+                        )
                         try:
                             send_email_to_admin(
                                 subject=admin_subject,
@@ -1275,7 +1251,12 @@ class PaymentPlanCancel(StripeAPIView):
                         member_subject = (
                             "You've requested to cancel your membership plan."
                         )
-                        member_description = "No further action is required, the subscription will automatically cancel at the end of the current billing period. You can cancel this request at any time from the member portal."
+                        member_description = (
+                            "No further action is required, the subscription "
+                            "will automatically cancel at the end of the "
+                            "current billing period. You can cancel this "
+                            "request at any time from the member portal."
+                        )
                         try:
                             user.email_notification(member_subject, member_description)
                         except Exception as e:
@@ -1519,87 +1500,8 @@ class StripeWebhook(StripeAPIView):
                 transaction.on_commit(_on_commit_payment_failed)
 
             if event_type == "customer.subscription.deleted":
-                previous_state = locked_profile.state
                 deleted_subscription_id = data["id"]
-
-                # Capture name now so a concurrent rename can't reach the admin email.
                 full_name = locked_profile.get_full_name()
-
-                if previous_state == "active":
-                    subject = "Your membership has been cancelled"
-                    message = (
-                        "You will receive another email shortly confirming that your access has been deactivated. Your "
-                        "membership was cancelled because we couldn't collect your payment, or you chose not to renew it."
-                    )
-                    admin_subject = f"The membership for {full_name} was just cancelled"
-                    admin_message = (
-                        f"The Stripe subscription for {full_name} ended, so their membership has "
-                        f"been cancelled. Their site access has been turned off."
-                    )
-
-                    def _on_commit_active_cancel(
-                        profile=locked_profile,
-                        subject=subject,
-                        message=message,
-                        admin_subject=admin_subject,
-                        admin_message=admin_message,
-                    ):
-                        # deactivate() sends its own access-disabled
-                        # email/SMS. Each step is wrapped so a Postmark
-                        # blip can't skip deactivate() (the access
-                        # revocation) or the admin alert. See
-                        # _on_commit_paid_activate for the rationale.
-                        try:
-                            profile.deactivate()
-                        except Exception as e:
-                            capture_exception(e)
-                        try:
-                            profile.user.email_notification(subject, message)
-                        except Exception as e:
-                            capture_exception(e)
-                        try:
-                            send_email_to_admin(
-                                admin_subject,
-                                template_vars={
-                                    "title": admin_subject,
-                                    "message": admin_message,
-                                },
-                                reply_to=profile.user.email,
-                                user=profile.user,
-                            )
-                        except Exception as e:
-                            capture_exception(e)
-
-                    transaction.on_commit(_on_commit_active_cancel)
-                elif previous_state in ("noob", "accountonly"):
-                    # Signup lapsed before activation — drop the default M2M
-                    # rows CompleteSignup pre-staged so they don't linger.
-                    locked_profile.doors.clear()
-                    locked_profile.interlocks.clear()
-
-                    if previous_state == "noob":
-                        # Only noobs get the "signup lapsed" email; an
-                        # accountonly member explicitly chose not to sign up
-                        # in the first place, so the message would confuse.
-                        subject = "Your membership signup has lapsed"
-                        message = (
-                            "We weren't able to collect your membership payment in time, "
-                            "so your pending signup has been cancelled. You can sign up "
-                            "again at any time from the member portal."
-                        )
-
-                        def _on_commit_noob_cancel(
-                            profile=locked_profile,
-                            subject=subject,
-                            message=message,
-                        ):
-                            try:
-                                profile.user.email_notification(subject, message)
-                            except Exception as e:
-                                capture_exception(e)
-
-                        transaction.on_commit(_on_commit_noob_cancel)
-                # state == "inactive": quiet cleanup, no notification.
 
                 locked_profile.membership_plan = None
                 locked_profile.stripe_subscription_id = None
@@ -1610,11 +1512,6 @@ class StripeWebhook(StripeAPIView):
                         "stripe_subscription_id",
                         "subscription_status",
                     ]
-                )
-
-                locked_profile.user.log_event(
-                    "Membership was cancelled due to Stripe subscription ending",
-                    "stripe",
                 )
 
                 # Void open invoices — Stripe doesn't auto-void on cancel.
@@ -1691,5 +1588,13 @@ class StripeWebhook(StripeAPIView):
                             capture_exception(email_err)
 
                 transaction.on_commit(_on_commit_void_open_invoices)
+
+                def _on_commit_complete_cancel(profile=locked_profile):
+                    try:
+                        profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
+                    except Exception as e:
+                        capture_exception(e)
+
+                transaction.on_commit(_on_commit_complete_cancel)
 
         return Response()

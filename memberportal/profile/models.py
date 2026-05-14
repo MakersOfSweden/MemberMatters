@@ -333,6 +333,25 @@ class CompleteSignupResult:
     required_steps: list = field(default_factory=list)
 
 
+class CancelTriggeredBy(str, Enum):
+    MEMBER_SELF_CANCEL = "member_self_cancel"
+    ADMIN_OVERRIDE_CANCEL = "admin_override_cancel"
+    SUBSCRIPTION_DELETED = "subscription_deleted"
+
+
+class CompleteCancelOutcome(str, Enum):
+    DEACTIVATED = "deactivated"
+    STATE_LOCKED = "state_locked"
+    SIGNUP_LAPSED = "signup_lapsed"
+    ALREADY_DEACTIVATED = "already_deactivated"
+
+
+@dataclass
+class CompleteCancelResult:
+    outcome: CompleteCancelOutcome
+    previous_state: str = ""
+
+
 class Profile(ExportModelOperationsMixin("profile"), models.Model):
     STATES = (
         ("noob", "Needs Induction"),
@@ -613,6 +632,82 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             capture_exception(e)
         self.sync_access()
         return True
+
+    def complete_cancel(self, triggered_by, request=None, set_state_locked=None):
+        # state_locked field and enforcement land in Phase 2.
+        del set_state_locked
+
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            previous_state = locked.state
+
+            # noob/accountonly never activated, so drop any pre-staged M2M.
+            if previous_state in ("noob", "accountonly"):
+                locked.doors.clear()
+                locked.interlocks.clear()
+
+        if previous_state == "active":
+            cancel_subject = "Your membership has been cancelled"
+            cancel_message = (
+                "You will receive another email shortly confirming that "
+                "your access has been deactivated. Your membership was "
+                "cancelled because we couldn't collect your payment, or "
+                "you chose not to renew it."
+            )
+            admin_subject = (
+                f"The membership for {self.get_full_name()} was just cancelled"
+            )
+            admin_message = (
+                f"The Stripe subscription for {self.get_full_name()} "
+                "ended, so their membership has been cancelled. Their "
+                "site access has been turned off."
+            )
+
+            def _on_transition(_previous_state, _new_state):
+                if triggered_by != CancelTriggeredBy.SUBSCRIPTION_DELETED:
+                    return
+                try:
+                    self.user.email_notification(cancel_subject, cancel_message)
+                except Exception as e:
+                    capture_exception(e)
+                try:
+                    send_email_to_admin(
+                        admin_subject,
+                        template_vars={
+                            "title": admin_subject,
+                            "message": admin_message,
+                        },
+                        reply_to=self.user.email,
+                        user=self.user,
+                    )
+                except Exception as e:
+                    capture_exception(e)
+
+            self.deactivate(request, on_transition=_on_transition)
+            outcome = CompleteCancelOutcome.DEACTIVATED
+        elif previous_state == "noob":
+            if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED:
+                lapsed_subject = "Your membership signup has lapsed"
+                lapsed_message = (
+                    "We weren't able to collect your membership payment in "
+                    "time, so your pending signup has been cancelled. You "
+                    "can sign up again at any time from the member portal."
+                )
+                try:
+                    self.user.email_notification(lapsed_subject, lapsed_message)
+                except Exception as e:
+                    capture_exception(e)
+            outcome = CompleteCancelOutcome.SIGNUP_LAPSED
+        else:
+            outcome = CompleteCancelOutcome.ALREADY_DEACTIVATED
+
+        self.user.log_event(
+            f"Membership cancelled by {triggered_by.value}. "
+            f"Previous state: {previous_state}. Outcome: {outcome.value}.",
+            "stripe",
+        )
+
+        return CompleteCancelResult(outcome=outcome, previous_state=previous_state)
 
     def activate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
