@@ -466,6 +466,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     # sent by CompleteSignup on invoice signups.
     pending_signup_email_sent = models.BooleanField(default=False)
 
+    # Revokes door access without cancelling billing or touching `state`.
+    admin_disabled_access = models.BooleanField(default=False)
+
+    # Locks `state` only; `subscription_status` still follows Stripe.
+    state_locked = models.BooleanField(default=False)
+
     def __str__(self):
         return str(self.user)
 
