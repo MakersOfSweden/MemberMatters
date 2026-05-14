@@ -1,7 +1,7 @@
 <template>
-  <div class="quick-cards-grid">
+  <div class="row items-stretch">
     <template v-if="enableSiteSignIn">
-      <div v-if="siteSignedIn" class="q-pa-md">
+      <div v-if="siteSignedIn" class="q-pa-md col-12 col-sm-6 col-md-4">
         <a @click="signInCard.click" :disabled="signinDisable">
           <q-card class="q-pa-md column justify-center items-center">
             <q-banner
@@ -23,7 +23,7 @@
         </a>
       </div>
 
-      <div v-else class="q-pa-md">
+      <div v-else class="q-pa-md col-12 col-sm-6 col-md-4">
         <a @click="signInCard.click" :disabled="signinDisable">
           <q-card class="q-pa-xl column justify-center items-center">
             <p class="text-h4">
@@ -35,15 +35,15 @@
       </div>
     </template>
 
-    <div v-if="enableMembershipStatusCard" class="q-pa-md">
+    <div v-if="enableMembershipStatusCard" class="q-pa-md col-12 col-sm-6 col-md-4">
       <membership-status-card />
     </div>
 
-    <div v-if="enableMembersOnSite" class="q-pa-md">
+    <div v-if="enableMembersOnSite" class="q-pa-md col-12 col-sm-6 col-md-4">
       <members-onsite-card />
     </div>
 
-    <div v-if="enableReportIssue" class="q-pa-md">
+    <div v-if="enableReportIssue" class="q-pa-md col-12 col-sm-6 col-md-4">
       <report-issue-card />
     </div>
   </div>
@@ -157,12 +157,5 @@ export default {
 <style scoped>
 a {
   text-decoration: none;
-}
-
-.quick-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
-  align-items: stretch;
-  width: 100%;
 }
 </style>
