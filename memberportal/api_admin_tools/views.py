@@ -24,9 +24,8 @@ from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
 )
-from profile.models import Profile, User, UserEventLog
+from profile.models import Profile, SignupTriggeredBy, User, UserEventLog
 from services import sms
-from services.emails import send_email_to_admin
 from .models import MemberTier, PaymentPlan
 
 
@@ -82,52 +81,15 @@ class MemberState(APIView):
     def post(self, request, member_id, state):
         member = User.objects.get(id=member_id)
         if state == "active":
-            member.profile.activate(request)
+            member.profile.complete_signup(
+                SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE, request=request
+            )
         elif state == "inactive":
             member.profile.deactivate(request)
         else:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        return Response()
-
-
-class MakeMember(APIView):
-    """
-    post: This activates a new member.
-    """
-
-    permission_classes = (permissions.IsAdminUser,)
-
-    def post(self, request, member_id):
-        user = User.objects.get(id=member_id)
-
-        # if they're a new member or account only
-        if user.profile.state == "noob" or user.profile.state == "accountonly":
-            user.profile.add_default_access()
-
-            # activate() owns the welcome + access-enabled messaging.
-            user.profile.activate(request)
-
-            subject = f"{user.profile.get_full_name()} just got turned into a member!"
-            send_email_to_admin(
-                subject=subject,
-                template_vars={"title": subject, "message": subject},
-                user=request.user,
-            )
-
-            return Response(
-                {
-                    "success": True,
-                    "message": "adminTools.makeMemberSuccess",
-                }
-            )
-        else:
-            return Response(
-                {
-                    "success": False,
-                    "message": "adminTools.makeMemberErrorExists",
-                }
-            )
+        return Response({"success": True})
 
 
 class Doors(APIView):

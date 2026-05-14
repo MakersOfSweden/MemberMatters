@@ -16,6 +16,8 @@ from api_admin_tools.models import PaymentPlan
 import json
 import uuid
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
 from services.emails import send_single_email, send_email_to_admin
 from services import sms
 from sentry_sdk import capture_exception
@@ -309,6 +311,28 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
         return True
 
 
+class CompleteSignupOutcome(str, Enum):
+    ACTIVATED = "activated"
+    ALREADY_ACTIVE = "already_active"
+    AWAITING_PAYMENT = "awaiting_payment"
+    REQUIREMENTS_UNMET = "requirements_unmet"
+    NO_SUBSCRIPTION = "no_subscription"
+    STATE_LOCKED = "state_locked"
+
+
+class SignupTriggeredBy(str, Enum):
+    MEMBER_SELF_SERVE = "member_self_serve"
+    SUBSCRIPTION_CREATED = "subscription_created"
+    INVOICE_PAID = "invoice_paid"
+    ADMIN_OVERRIDE_ACTIVATE = "admin_override_activate"
+
+
+@dataclass
+class CompleteSignupResult:
+    outcome: CompleteSignupOutcome
+    required_steps: list = field(default_factory=list)
+
+
 class Profile(ExportModelOperationsMixin("profile"), models.Model):
     STATES = (
         ("noob", "Needs Induction"),
@@ -463,7 +487,81 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         for interlock in Interlock.objects.filter(all_members=True):
             self.interlocks.add(interlock)
 
-    def deactivate(self, request=None):
+    def complete_signup(self, triggered_by, request=None):
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+
+            if locked.state == "active":
+                return CompleteSignupResult(CompleteSignupOutcome.ALREADY_ACTIVE)
+
+            if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
+                locked.add_default_access()
+            else:
+                if locked.subscription_status not in ("active", "pending"):
+                    return CompleteSignupResult(CompleteSignupOutcome.NO_SUBSCRIPTION)
+
+                signup_check = locked.can_signup()
+                if not signup_check["success"]:
+                    return CompleteSignupResult(
+                        CompleteSignupOutcome.REQUIREMENTS_UNMET,
+                        required_steps=signup_check["requiredSteps"],
+                    )
+
+                if locked.subscription_status == "pending":
+                    if not locked.pending_signup_email_sent:
+                        pending_subject = (
+                            "Your signup has been received — awaiting payment"
+                        )
+                        pending_message = (
+                            f"Hi {locked.first_name}, thanks for signing "
+                            f"up to {config.SITE_OWNER}! We've received your "
+                            "signup and you'll receive an invoice from Stripe "
+                            "shortly. Once it's paid, your access will be "
+                            "enabled automatically and we'll send you a "
+                            "welcome email."
+                        )
+
+                        def _on_commit_pending_signup(
+                            user=locked.user,
+                            subject=pending_subject,
+                            message=pending_message,
+                        ):
+                            try:
+                                user.email_notification(subject, message)
+                            except Exception as e:
+                                capture_exception(e)
+
+                        transaction.on_commit(_on_commit_pending_signup)
+
+                        # Set pessimistically: if Postmark drops the email we
+                        # accept losing it rather than risk a duplicate when
+                        # the user re-enters this flow.
+                        locked.pending_signup_email_sent = True
+                        locked.save(update_fields=["pending_signup_email_sent"])
+
+                    return CompleteSignupResult(CompleteSignupOutcome.AWAITING_PAYMENT)
+
+                locked.add_default_access()
+
+        paid_subject = "Your payment was successful."
+        paid_message = (
+            "Thanks for making a membership payment using our online payment "
+            "system. You've already met all of the requirements for activating "
+            "your site access. Please check for another email message "
+            "confirming this was successful."
+        )
+
+        def _on_transition(_previous_state, _new_state):
+            if triggered_by == SignupTriggeredBy.INVOICE_PAID:
+                try:
+                    self.user.email_notification(paid_subject, paid_message)
+                except Exception as e:
+                    capture_exception(e)
+
+        self.activate(request, on_transition=_on_transition)
+        return CompleteSignupResult(CompleteSignupOutcome.ACTIVATED)
+
+    def deactivate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. Stripe webhook
         # retries racing an admin action) from double-running side effects.
         # External I/O (email/SMS, sync_access) runs after the lock is
@@ -473,6 +571,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             if locked.state == "inactive":
                 return False
+            previous_state = locked.state
 
             if request:
                 request.user.log_event(
@@ -494,6 +593,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             self.state = "inactive"
             self.save(update_fields=["state"])
 
+        if on_transition is not None:
+            try:
+                on_transition(previous_state, "inactive")
+            except Exception as e:
+                capture_exception(e)
+
         # Each notification is wrapped independently so a single
         # Postmark/Twilio failure does not skip later notifications or
         # sync_access — leaving an "inactive" member with devices still
@@ -509,7 +614,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         self.sync_access()
         return True
 
-    def activate(self, request=None):
+    def activate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
         # racing the invoice.paid webhook) from double-running side effects.
         # External I/O (email/SMS, sync_access) runs after the lock is
@@ -539,16 +644,19 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             self.state = "active"
             self.save(update_fields=["state"])
 
-        # First-time activation (noob): send the welcome/applicant emails.
-        # Re-activation (inactive/accountonly): send the access-enabled
-        # notification. These live inside activate() so that every code
-        # path that flips a member to active — CompleteSignup, the
-        # invoice.paid webhook, admin MakeMember, admin MemberState —
-        # sends the right notifications without the caller duplicating
-        # them. Each notification is wrapped independently so a single
-        # Postmark/Twilio failure does not skip later notifications or
-        # sync_access — leaving an "active" member whose devices were
-        # never told their tag is worse than a missed email.
+        # Fires only for the caller whose lock won the state flip — gives
+        # callers a single-shot hook for trigger-specific side effects
+        # (e.g. complete_signup(INVOICE_PAID)'s "payment received" email).
+        if on_transition is not None:
+            try:
+                on_transition(previous_state, "active")
+            except Exception as e:
+                capture_exception(e)
+
+        # Each notification wrapped independently so a single Postmark/Twilio
+        # failure doesn't skip later steps — leaving an "active" member
+        # whose devices were never told their tag is worse than a missed
+        # email.
         if previous_state == "noob":
             try:
                 self.user.email_membership_application()

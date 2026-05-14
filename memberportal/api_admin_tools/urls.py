@@ -11,11 +11,6 @@ urlpatterns = [
         name="MemberState",
     ),
     path(
-        "api/admin/members/<int:member_id>/makemember/",
-        views.MakeMember.as_view(),
-        name="ActivateMember",
-    ),
-    path(
         "api/admin/members/<int:member_id>/access/",
         views.MemberAccess.as_view(),
         name="MemberAccess",

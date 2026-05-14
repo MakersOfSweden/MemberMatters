@@ -1,7 +1,12 @@
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
 
-from profile.models import Profile
+from profile.models import (
+    Profile,
+    CompleteSignupOutcome,
+    CompleteSignupResult,
+    SignupTriggeredBy,
+)
 from api_admin_tools.models import *
 from .models import ProcessedStripeEvent
 
@@ -466,28 +471,9 @@ class PaymentPlanSignup(StripeAPIView):
                     "",
                 )
 
-                # Defensive auto-activate: if the member has nothing else
-                # left to do (no induction / RFID outstanding), flip them
-                # to active immediately. Without this, a frontend that
-                # never mounts SignupRequiredSteps (because can_signup is
-                # already success) will leave them stranded at state=noob
-                # with an active subscription. Invoice billing stays
-                # pending — activation defers to invoice.paid.
-                auto_activate = (
-                    locked_profile.subscription_status == "active"
-                    and locked_profile.can_signup()["success"]
-                )
-                if auto_activate:
-                    locked_profile.add_default_access()
-
         if new_subscription.status == "active":
-            # activate() takes its own lock + sends emails/SMS/sync_access;
-            # run outside our atomic so I/O can't extend the row-lock window.
-            # Idempotent — short-circuits if state is already "active".
-            if auto_activate:
-                already_active = not locked_profile.activate()
-                if already_active:
-                    locked_profile.sync_access()
+            # Outside the atomic so complete_signup can take its own lock.
+            locked_profile.complete_signup(SignupTriggeredBy.SUBSCRIPTION_CREATED)
             return Response({"success": True})
 
         request.user.log_event(
@@ -675,99 +661,47 @@ class CheckInductionStatus(APIView):
             return Response({"success": False, "score": 0, "error": str(e)})
 
 
+def _serialize_complete_signup(result: CompleteSignupResult) -> Response:
+    if result.outcome == CompleteSignupOutcome.ACTIVATED:
+        return Response({"success": True})
+    if result.outcome == CompleteSignupOutcome.ALREADY_ACTIVE:
+        return Response({"success": True})
+    if result.outcome == CompleteSignupOutcome.AWAITING_PAYMENT:
+        return Response(
+            {
+                "success": True,
+                "awaitingPayment": True,
+                "message": "signup.awaitingInvoicePayment",
+            }
+        )
+    if result.outcome == CompleteSignupOutcome.REQUIREMENTS_UNMET:
+        return Response(
+            {
+                "success": False,
+                "message": "signup.requirementsNotMet",
+                "items": result.required_steps,
+            }
+        )
+    # NO_SUBSCRIPTION
+    return Response(
+        {
+            "success": False,
+            "message": "signup.requirementsNotMet",
+            "items": ["No active subscription found."],
+        }
+    )
+
+
 class CompleteSignup(StripeAPIView):
     """
     post: completes the member's signup if they have completed all requirements and enables access
     """
 
     def post(self, request):
-        # Lock so a concurrent cancel/webhook can't doors.clear() between
-        # our subscription_status check and add_default_access().
-        with transaction.atomic():
-            locked_profile = Profile.objects.select_for_update().get(
-                pk=request.user.profile.pk
-            )
-
-            if locked_profile.subscription_status not in ("active", "pending"):
-                return Response(
-                    {
-                        "success": False,
-                        "message": "signup.requirementsNotMet",
-                        "items": ["No active subscription found."],
-                    }
-                )
-
-            signupCheck = locked_profile.can_signup()
-
-            if not signupCheck["success"]:
-                return Response(
-                    {
-                        "success": False,
-                        "message": "signup.requirementsNotMet",
-                        "items": signupCheck["requiredSteps"],
-                    }
-                )
-
-            # For invoice billing: all requirements met, but don't activate
-            # until invoice is paid. Pre-stage default door/interlock access —
-            # safe because access.get_tags() only includes state="active"
-            # profiles.
-            if locked_profile.subscription_status == "pending":
-                locked_profile.add_default_access()
-
-                # Invoice signups don't hit activate() until invoice.paid,
-                # so they need their own "we got it" email. One-shot via
-                # pending_signup_email_sent (re-armed at signup/resume).
-                if not locked_profile.pending_signup_email_sent:
-                    pending_subject = "Your signup has been received — awaiting payment"
-                    pending_message = (
-                        f"Hi {locked_profile.first_name}, thanks for signing "
-                        f"up to {config.SITE_OWNER}! We've received your "
-                        "signup and you'll receive an invoice from Stripe "
-                        "shortly. Once it's paid, your access will be "
-                        "enabled automatically and we'll send you a welcome "
-                        "email."
-                    )
-
-                    def _on_commit_pending_signup(
-                        profile=locked_profile,
-                        subject=pending_subject,
-                        message=pending_message,
-                    ):
-                        try:
-                            profile.user.email_notification(subject, message)
-                        except Exception as e:
-                            capture_exception(e)
-
-                    transaction.on_commit(_on_commit_pending_signup)
-
-                    # Set pessimistically — if Postmark drops the email
-                    # we accept losing it this cycle rather than risking
-                    # a duplicate when the user re-enters this view.
-                    locked_profile.pending_signup_email_sent = True
-                    locked_profile.save(update_fields=["pending_signup_email_sent"])
-
-                return Response(
-                    {
-                        "success": True,
-                        "awaitingPayment": True,
-                        "message": "signup.awaitingInvoicePayment",
-                    }
-                )
-
-            locked_profile.add_default_access()
-
-        # activate() takes its own lock + sends emails/SMS/sync_access; run
-        # outside our atomic so that I/O can't extend the row-lock window.
-        already_active = not locked_profile.activate()
-
-        # If activate() short-circuited because the webhook already flipped
-        # state to active, devices haven't been pushed the rows we just
-        # staged — sync explicitly.
-        if already_active:
-            locked_profile.sync_access()
-
-        return Response({"success": True})
+        result = request.user.profile.complete_signup(
+            SignupTriggeredBy.MEMBER_SELF_SERVE
+        )
+        return _serialize_complete_signup(result)
 
 
 class SkipSignup(APIView):
@@ -1486,14 +1420,6 @@ class StripeWebhook(StripeAPIView):
                     and locked_profile.can_signup()["success"]
                     and invoice_status == "paid"
                 ):
-                    # For invoice billing the member may pay the invoice (via
-                    # the Stripe email link) before the frontend ever calls
-                    # /complete-signup/ to pre-stage access. Stage defaults
-                    # here so activate()'s sync_access actually pushes their
-                    # tags.
-                    if locked_profile.billing_method == "invoice":
-                        locked_profile.add_default_access()
-
                     locked_profile.subscription_status = "active"
                     locked_profile.save(update_fields=["subscription_status"])
 
@@ -1502,28 +1428,12 @@ class StripeWebhook(StripeAPIView):
                         "stripe",
                     )
 
-                    paid_subject = "Your payment was successful."
-                    paid_message = (
-                        "Thanks for making a membership payment using our online payment system. "
-                        "You've already met all of the requirements for activating your site access. Please check "
-                        "for another email message confirming this was successful."
-                    )
-
-                    def _on_commit_paid_activate(
-                        profile=locked_profile,
-                        subject=paid_subject,
-                        message=paid_message,
-                    ):
-                        # on_commit fires after the 200 has gone back to
-                        # Stripe, so any raise here is silently dropped
-                        # by Django and Stripe will not retry — capture
-                        # so a stuck activation is at least visible.
+                    # Deferred to on_commit so the I/O inside complete_signup
+                    # (email + activate's sync_access) can't extend the row
+                    # lock past Stripe's 30s webhook timeout.
+                    def _on_commit_paid_activate(profile=locked_profile):
                         try:
-                            profile.user.email_notification(subject, message)
-                        except Exception as e:
-                            capture_exception(e)
-                        try:
-                            profile.activate()
+                            profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
                         except Exception as e:
                             capture_exception(e)
 

@@ -1576,7 +1576,7 @@ export default defineComponent({
     activateMember() {
       this.stateLoading = true;
       this.$axios
-        .post(`/api/admin/members/${this.member.id}/makemember/`)
+        .post(`/api/admin/members/${this.member.id}/state/active/`)
         .then((response) => {
           if (response.data.success) {
             this.$q.dialog({
