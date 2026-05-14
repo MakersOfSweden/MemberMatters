@@ -2,6 +2,7 @@
   <div class="q-gutter-md">
     <q-stepper v-model="step" ref="stepper" color="primary" animated>
       <q-step
+        v-if="features.signup.enableInduction"
         :name="1"
         :title="$tc('signup.induction')"
         :icon="icons.induction"
@@ -85,6 +86,7 @@
       </q-step>
 
       <q-step
+        v-if="features.signup.requireAccessCard"
         :name="2"
         :title="$tc('signup.accessCard')"
         :icon="icons.accessCard"
@@ -237,8 +239,18 @@ import { api } from 'boot/axios';
 export default defineComponent({
   name: 'SignupRequiredSteps',
   data() {
+    const signup = this.$store.getters['config/features'].signup;
+    // Land on the first step that's actually rendered. With induction or
+    // RFID disabled, the matching q-step has v-if=false; defaulting to 1
+    // would leave us on a hidden step until check-induction's async
+    // notRequired response auto-bumped us off.
+    const initialStep = signup.enableInduction
+      ? 1
+      : signup.requireAccessCard
+      ? 2
+      : 3;
     return {
-      step: 1,
+      step: initialStep,
       inductionComplete: false,
       accessCardComplete: false,
       accessCard: null,
@@ -270,6 +282,7 @@ export default defineComponent({
         // Pre-reqs already met (re-signup, RFID + induction still valid,
         // or relaxed config). Drive complete-signup now — without this the
         // user sits on subscription_status=active|pending with state=noob.
+        clearInterval(this.interval);
         this.completeSignup();
       } else {
         // if we don't need the access card, that step is complete
@@ -278,7 +291,10 @@ export default defineComponent({
       }
     });
   },
-  beforeRouteLeave() {
+  beforeUnmount() {
+    // beforeRouteLeave only fires on a route change; a parent re-render,
+    // layout swap, or logout that unmounts us without one would leave the
+    // 10s poller running. beforeUnmount catches every teardown path.
     clearInterval(this.interval);
   },
   methods: {
@@ -297,9 +313,12 @@ export default defineComponent({
       // increment further (would land on a non-existent step 4).
       clearInterval(this.interval);
       if (this.step !== 1) return;
-      this.step++;
       if (this.accessCardComplete) {
+        // RFID step is hidden (v-if=false) or already satisfied — skip
+        // straight to confirm instead of briefly landing on step 2.
         this.completeSignup();
+      } else {
+        this.step++;
       }
     },
     async completeSignup() {

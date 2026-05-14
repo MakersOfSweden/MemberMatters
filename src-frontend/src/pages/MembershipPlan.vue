@@ -147,6 +147,12 @@ export default defineComponent({
       disableButton: false,
       loadingButton: false,
       cancelSuccess: false,
+      // Guard against double-firing maybeCompleteSignup. getCanSignup
+      // may be called more than once during a page lifecycle (e.g. if
+      // we add a refresh button later); /complete-signup/ is idempotent
+      // server-side but a duplicate POST while the first is in-flight
+      // just wastes a request.
+      completeSignupAttempted: false,
       subscriptionInfo: {
         billingCycleAnchor: null,
         currentPeriodEnd: null,
@@ -215,6 +221,14 @@ export default defineComponent({
         .then((result) => {
           if (result.data.success) {
             this.canSignup = true;
+            // No outstanding requirements (induction/RFID) — but
+            // complete-signup is only ever called from
+            // SignupRequiredSteps.vue, which we don't mount in this
+            // branch. Drive it from here so a noob whose backend
+            // auto-activate didn't fire (admin-flipped status, lapsed
+            // sub resumed, requirements already satisfied from a prior
+            // membership) still flips to active.
+            this.maybeCompleteSignup();
           } else {
             this.canSignup = false;
           }
@@ -226,6 +240,28 @@ export default defineComponent({
               message: this.$t('error.contactUs'),
             })
             .onDismiss(() => this.$router.push({ name: 'dashboard' }));
+        });
+    },
+    maybeCompleteSignup() {
+      if (this.profile?.memberStatus !== 'noob') return;
+      if (this.completeSignupAttempted) return;
+      this.completeSignupAttempted = true;
+      this.$axios
+        .post('/api/billing/complete-signup/')
+        .then((result) => {
+          // awaitingPayment (invoice billing pre-activation) leaves
+          // state=noob by design — surfaced via the orange banner below
+          // when subscriptionStatus === 'pending'. Only re-fetch on
+          // success so the page re-renders with state="active".
+          if (result.data.success && !result.data.awaitingPayment) {
+            this.getProfile();
+          }
+        })
+        .catch(() => {
+          // Swallow: backend may already have activated via the
+          // PaymentPlanSignup auto-activate path, or the user has a
+          // genuinely-incomplete state that SignupRequiredSteps will
+          // surface on the next mount. Either way, don't block the page.
         });
     },
     cancelPlan() {
@@ -295,8 +331,11 @@ export default defineComponent({
         });
     },
   },
-  mounted() {
-    this.getProfile();
+  async mounted() {
+    // Profile must be loaded before getCanSignup -> maybeCompleteSignup
+    // checks memberStatus; Vuex default is `{}` so a check before resolve
+    // would treat the noob path as "not noob" and skip activation.
+    await this.getProfile();
     this.getSubscriptionInfo();
     this.getCanSignup();
   },

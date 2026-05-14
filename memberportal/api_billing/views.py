@@ -466,19 +466,41 @@ class PaymentPlanSignup(StripeAPIView):
                     "",
                 )
 
-                return Response({"success": True})
+                # Defensive auto-activate: if the member has nothing else
+                # left to do (no induction / RFID outstanding), flip them
+                # to active immediately. Without this, a frontend that
+                # never mounts SignupRequiredSteps (because can_signup is
+                # already success) will leave them stranded at state=noob
+                # with an active subscription. Invoice billing stays
+                # pending — activation defers to invoice.paid.
+                auto_activate = (
+                    locked_profile.subscription_status == "active"
+                    and locked_profile.can_signup()["success"]
+                )
+                if auto_activate:
+                    locked_profile.add_default_access()
 
-            request.user.log_event(
-                f"Failed to create subscription in Stripe with status {new_subscription.status}.",
-                "stripe",
-                "",
-            )
+        if new_subscription.status == "active":
+            # activate() takes its own lock + sends emails/SMS/sync_access;
+            # run outside our atomic so I/O can't extend the row-lock window.
+            # Idempotent — short-circuits if state is already "active".
+            if auto_activate:
+                already_active = not locked_profile.activate()
+                if already_active:
+                    locked_profile.sync_access()
+            return Response({"success": True})
 
-            # Cancel the non-active sub (e.g. incomplete from SCA) so it
-            # doesn't dangle on the customer and trigger a duplicate next try.
-            _cancel_failed_subscription(request.user, new_subscription.id)
+        request.user.log_event(
+            f"Failed to create subscription in Stripe with status {new_subscription.status}.",
+            "stripe",
+            "",
+        )
 
-            return Response({"success": False, "message": "signup.subscriptionFailed"})
+        # Cancel the non-active sub (e.g. incomplete from SCA) so it
+        # doesn't dangle on the customer and trigger a duplicate next try.
+        _cancel_failed_subscription(request.user, new_subscription.id)
+
+        return Response({"success": False, "message": "signup.subscriptionFailed"})
 
 
 class CanSignup(APIView):

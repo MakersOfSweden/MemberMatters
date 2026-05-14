@@ -343,7 +343,7 @@ CONSTANCE_CONFIG = {
     ),
     "MAX_INDUCTION_DAYS": (
         180,
-        "The maximum amount of days since a member was last inducted before they have to complete another induction (0 to disable).",
+        "The maximum amount of days since a member was last inducted before they have to complete another induction (0 disables re-induction; first-time induction is still required).",
     ),
     "MIN_INDUCTION_SCORE": (
         99,

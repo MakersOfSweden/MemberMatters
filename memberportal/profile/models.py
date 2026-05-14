@@ -736,19 +736,29 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         """Checks if a member can signup. Returns {"success": True/False, "reasons": [String<list of reasons>]}"""
         required_steps = []
 
-        # check if they were inducted recently enough
-        last_inducted = self.last_induction
-        furthest_previous_date = timezone.now() - timedelta(
-            days=config.MAX_INDUCTION_DAYS
-        )
+        # Match CompleteSignup's gate (api_billing/views.py:669) so callers
+        # that wire can_signup -> activate (PaymentPlanSignup, the page-level
+        # auto-trigger in MembershipPlan.vue) cannot activate a member who
+        # never paid.
+        if self.subscription_status not in ("active", "pending"):
+            required_steps.append("subscription")
 
-        if config.MAX_INDUCTION_DAYS > 0 and (
-            last_inducted is None or last_inducted < furthest_previous_date
-        ):
-            if (
-                config.CANVAS_INDUCTION_ENABLED is True
-                or config.MOODLE_INDUCTION_ENABLED is True
-            ):
+        # First-time induction is always required when an induction
+        # provider is enabled. MAX_INDUCTION_DAYS only controls *re*-
+        # induction: 0 disables the recurring requirement but does not
+        # let first-timers skip.
+        induction_enabled = (
+            config.CANVAS_INDUCTION_ENABLED or config.MOODLE_INDUCTION_ENABLED
+        )
+        last_inducted = self.last_induction
+
+        if induction_enabled and last_inducted is None:
+            required_steps.append("induction")
+        elif induction_enabled and config.MAX_INDUCTION_DAYS > 0:
+            furthest_previous_date = timezone.now() - timedelta(
+                days=config.MAX_INDUCTION_DAYS
+            )
+            if last_inducted < furthest_previous_date:
                 required_steps.append("induction")
 
         # check if they have an RFID card assigned (only if required by config)
