@@ -16,6 +16,11 @@ urlpatterns = [
         name="MemberAdminDisabledAccess",
     ),
     path(
+        "api/admin/members/<int:member_id>/cancel-membership/",
+        views.MemberCancelMembership.as_view(),
+        name="MemberCancelMembership",
+    ),
+    path(
         "api/admin/members/<int:member_id>/access/",
         views.MemberAccess.as_view(),
         name="MemberAccess",

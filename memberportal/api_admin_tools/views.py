@@ -1,14 +1,17 @@
 import json
+from datetime import datetime
 
 import stripe
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from constance import config
 from constance.backends.database.models import Constance as ConstanceSetting
+from django.db import transaction
 from django.db.models import F, Sum, Value, CharField, Count, Max
 from django.db.models.functions import Concat
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions
 from rest_framework import status
 from rest_framework.response import Response
@@ -19,7 +22,10 @@ from sentry_sdk import capture_message
 
 from access import models
 from access.models import DoorLog, InterlockLog
-from api_billing.views import ensure_stripe_customer
+from api_billing.views import (
+    ensure_stripe_customer,
+    _email_admin_cancel_failed,
+)
 from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
@@ -32,6 +38,7 @@ from profile.models import (
     UserEventLog,
 )
 from services import sms
+from services.emails import send_email_to_admin
 from .models import MemberTier, PaymentPlan
 
 
@@ -128,6 +135,245 @@ class MemberAdminDisabledAccess(APIView):
         member.profile.set_admin_disabled_access(
             disabled, request=request, set_state_locked=lock
         )
+        return Response({"success": True})
+
+
+class MemberCancelMembership(StripeAPIView):
+    """
+    post: Admin cancels a member's Stripe membership.
+
+    Body: {"timing": "at_period_end" | "immediately", "lock": bool|null}
+
+    Mirrors PaymentPlanCancel's two-branch shape, but admin-driven: Stripe
+    orchestration happens here, then complete_cancel(ADMIN_OVERRIDE_CANCEL)
+    reacts on the profile side. "immediately" records a "Xd Yh remaining"
+    audit entry so operators have the prorated-refund window handy.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = User.objects.get(id=member_id)
+        profile = member.profile
+
+        timing = request.data.get("timing", "at_period_end")
+        if timing not in ("at_period_end", "immediately"):
+            return Response(
+                {"success": False, "message": "billing.invalidTiming"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        lock = request.data.get("lock")
+
+        if not profile.membership_plan or not profile.stripe_subscription_id:
+            return Response(
+                {"success": False, "message": "paymentPlan.notExists"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if timing == "at_period_end":
+            return self._cancel_at_period_end(request, profile, lock)
+        return self._cancel_immediately(request, profile, lock)
+
+    def _cancel_at_period_end(self, request, profile, lock):
+        # Schedule cancel-at-period-end on Stripe. complete_cancel is NOT
+        # called yet — the actual deactivation flows through
+        # customer.subscription.deleted when the period ends.
+        failed = False
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=profile.pk)
+
+            if not locked.stripe_subscription_id:
+                return Response(
+                    {"success": False, "message": "paymentPlan.notExists"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            try:
+                modified = stripe.Subscription.modify(
+                    locked.stripe_subscription_id,
+                    cancel_at_period_end=True,
+                )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                failed = True
+            else:
+                if not modified.cancel_at_period_end:
+                    failed = True
+                else:
+                    update_fields = ["subscription_status"]
+                    locked.subscription_status = "cancelling"
+                    if lock is not None and locked.state_locked != lock:
+                        locked.state_locked = lock
+                        update_fields.append("state_locked")
+                    locked.save(update_fields=update_fields)
+
+                    locked.user.log_event(
+                        f"Admin scheduled membership cancellation at "
+                        f"period end (by {request.user.get_full_name()}).",
+                        "admin",
+                    )
+
+                    member_subject = "Your membership has been cancelled"
+                    member_message = (
+                        "An admin has cancelled your membership. Your "
+                        "access will continue until the end of the current "
+                        "billing period."
+                    )
+                    admin_subject = (
+                        f"{request.user.get_full_name()} cancelled "
+                        f"{locked.get_full_name()}'s membership (at period end)."
+                    )
+                    actor = request.user
+                    member_user = locked.user
+
+                    def _on_commit_notifications():
+                        try:
+                            member_user.email_notification(
+                                member_subject, member_message
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+                        try:
+                            send_email_to_admin(
+                                subject=admin_subject,
+                                template_vars={
+                                    "title": admin_subject,
+                                    "message": admin_subject,
+                                },
+                                user=actor,
+                                reply_to=actor.email,
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                    transaction.on_commit(_on_commit_notifications)
+                    return Response({"success": True})
+
+        if failed:
+            _email_admin_cancel_failed(request.user)
+        return Response({"success": False})
+
+    def _cancel_immediately(self, request, profile, lock):
+        # Immediate cancel: capture period_end for the audit "Xd Yh remaining"
+        # line, do Stripe-side cleanup (void invoices + Subscription.delete)
+        # on_commit, then call complete_cancel(ADMIN_OVERRIDE_CANCEL) for the
+        # profile-side reaction.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=profile.pk)
+
+            if not locked.stripe_subscription_id:
+                return Response(
+                    {"success": False, "message": "paymentPlan.notExists"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            subscription_id = locked.stripe_subscription_id
+            full_name = locked.get_full_name()
+
+            # Capture current_period_end so operators have the unused window
+            # for prorated refunds. If Stripe is unreachable we still cancel
+            # locally — the remaining line just gets omitted.
+            period_end_dt = None
+            try:
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                period_end_ts = getattr(stripe_sub, "current_period_end", None)
+                if period_end_ts:
+                    period_end_dt = datetime.fromtimestamp(
+                        period_end_ts, tz=timezone.utc
+                    )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+
+            locked.membership_plan = None
+            locked.stripe_subscription_id = None
+            locked.subscription_status = "inactive"
+            locked.save(
+                update_fields=[
+                    "membership_plan",
+                    "stripe_subscription_id",
+                    "subscription_status",
+                ]
+            )
+
+            if period_end_dt:
+                remaining = period_end_dt - timezone.now()
+                if remaining.total_seconds() > 0:
+                    days = remaining.days
+                    hours = remaining.seconds // 3600
+                    locked.user.log_event(
+                        f"Admin cancelled membership immediately with "
+                        f"{days}d {hours}h remaining on the current billing "
+                        f"period (period_end={period_end_dt.isoformat()}).",
+                        "stripe",
+                    )
+
+            def _on_commit_stripe_cleanup(
+                subscription_id=subscription_id,
+                user=locked.user,
+                full_name=full_name,
+            ):
+                try:
+                    try:
+                        open_invoices = stripe.Invoice.list(
+                            subscription=subscription_id, status="open"
+                        )
+                        for invoice in open_invoices.auto_paging_iter():
+                            try:
+                                stripe.Invoice.void_invoice(invoice.id)
+                            except stripe.error.StripeError as e:
+                                capture_exception(e)
+                        stripe.Subscription.delete(
+                            subscription_id, invoice_now=False, prorate=False
+                        )
+                    except stripe.error.StripeError as e:
+                        capture_exception(e)
+                        user.log_event(
+                            f"Failed to delete subscription {subscription_id} "
+                            "on Stripe after admin DB cancel; manual cleanup "
+                            "required.",
+                            "stripe",
+                        )
+                        failure_subject = (
+                            f"Action Required: clean up Stripe subscription "
+                            f"{subscription_id} for {full_name}"
+                        )
+                        failure_message = (
+                            f"An admin cancelled {full_name}'s membership in "
+                            "the portal, but the Stripe-side cleanup failed. "
+                            f"Subscription {subscription_id} and any open "
+                            "invoices may still be live in Stripe — please "
+                            "void/delete them manually."
+                        )
+                        try:
+                            send_email_to_admin(
+                                subject=failure_subject,
+                                template_vars={
+                                    "title": failure_subject,
+                                    "message": failure_message,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as email_err:
+                            capture_exception(email_err)
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_on_commit_stripe_cleanup)
+
+            def _on_commit_complete_cancel(profile=locked, lock=lock):
+                try:
+                    profile.complete_cancel(
+                        CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL,
+                        request=request,
+                        set_state_locked=lock,
+                    )
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_on_commit_complete_cancel)
+
         return Response({"success": True})
 
 
