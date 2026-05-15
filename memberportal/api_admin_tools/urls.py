@@ -11,6 +11,11 @@ urlpatterns = [
         name="MemberState",
     ),
     path(
+        "api/admin/members/<int:member_id>/admin-disabled-access/",
+        views.MemberAdminDisabledAccess.as_view(),
+        name="MemberAdminDisabledAccess",
+    ),
+    path(
         "api/admin/members/<int:member_id>/access/",
         views.MemberAccess.as_view(),
         name="MemberAccess",

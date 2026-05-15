@@ -107,6 +107,30 @@ class MemberState(APIView):
         return Response({"success": True})
 
 
+class MemberAdminDisabledAccess(APIView):
+    """
+    post: Pause/resume a member's door access (admin override).
+
+    Orthogonal to state / subscription_status — flips the
+    `admin_disabled_access` flag so an operator can revoke access during a
+    dispute or pause without cancelling billing. Body:
+      {"disabled": true|false, "lock": true|false|null}
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = User.objects.get(id=member_id)
+        disabled = request.data.get("disabled")
+        if not isinstance(disabled, bool):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        lock = request.data.get("lock")
+        member.profile.set_admin_disabled_access(
+            disabled, request=request, set_state_locked=lock
+        )
+        return Response({"success": True})
+
+
 class Doors(APIView):
     """
     get: returns a list of doors.

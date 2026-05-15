@@ -276,14 +276,14 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
 
         return False
 
-    def email_disable_member(self):
+    def email_disable_member_access(self):
         return self.email_notification(
             f"Your {config.SITE_OWNER} site access has been disabled.",
             f"Your access to {config.SITE_OWNER} has been disabled. This could be due to many reasons, but is "
             f"usually due to a failed membership payment. If this is unexpected, please let us know.",
         )
 
-    def email_enable_member(self):
+    def email_enable_member_access(self):
         message = f"Great news {self.profile.first_name}, your {config.SITE_OWNER} site access has been enabled."
         subject = f"Your {config.SITE_OWNER} site access has been enabled."
 
@@ -680,7 +680,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # sync_access — leaving an "inactive" member with devices still
         # holding their tag is worse than a missed email.
         try:
-            self.user.email_disable_member()
+            self.user.email_disable_member_access()
         except Exception as e:
             capture_exception(e)
         try:
@@ -756,6 +756,64 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             previous_state="active",
         )
 
+    def set_admin_disabled_access(self, disabled, request=None, set_state_locked=None):
+        # Admin-only toggle for the access pause (orthogonal to state /
+        # subscription). Also accepts set_state_locked so the dialog's
+        # "Lock state?" checkbox can be applied alongside.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            was_disabled = locked.admin_disabled_access
+
+            update_fields = []
+            if locked.admin_disabled_access != disabled:
+                locked.admin_disabled_access = disabled
+                update_fields.append("admin_disabled_access")
+            if set_state_locked is not None and locked.state_locked != set_state_locked:
+                locked.state_locked = set_state_locked
+                update_fields.append("state_locked")
+            if update_fields:
+                locked.save(update_fields=update_fields)
+
+            if request and was_disabled != disabled:
+                action = "paused" if disabled else "resumed"
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} {action} access "
+                    f"for {self.get_full_name()}.",
+                    "admin",
+                )
+                self.user.log_event(f"Access {action} by admin.", "admin")
+
+        if was_disabled == disabled:
+            return
+
+        # Push the updated tag list to devices and notify the member — but
+        # only when their effective access actually changed (state="active").
+        # For non-active members, the flag is inert and notifying about an
+        # access change they never had would be misleading.
+        self.sync_access()
+
+        if self.state != "active":
+            return
+
+        if disabled:
+            try:
+                self.user.email_disable_member.access()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                sms.SMS().send_deactivated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
+        else:
+            try:
+                self.user.email_enable_member_access()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                sms.SMS().send_activated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
+
     def activate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
         # racing the invoice.paid webhook) from double-running side effects.
@@ -814,7 +872,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             except Exception as e:
                 capture_exception(e)
             try:
-                self.user.email_enable_member()
+                self.user.email_enable_member_access()
             except Exception as e:
                 capture_exception(e)
 
