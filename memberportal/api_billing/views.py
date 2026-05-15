@@ -1409,9 +1409,37 @@ class StripeWebhook(StripeAPIView):
                         "stripe",
                     )
 
-                    # Deferred to on_commit so the I/O inside complete_signup
-                    # (email + activate's sync_access) can't extend the row
-                    # lock past Stripe's 30s webhook timeout.
+                    # Both callbacks deferred to on_commit so the I/O can't
+                    # extend the row lock past Stripe's 30s webhook timeout.
+                    # The paid-confirmation email is registered first so it
+                    # arrives before activate()'s welcome email — the body
+                    # references "another email message confirming this was
+                    # successful" which is the welcome that follows.
+                    paid_subject = "Your payment was successful."
+                    paid_message = (
+                        "Thanks for making a membership payment using our "
+                        "online payment system. You've already met all of "
+                        "the requirements for activating your site access. "
+                        "Please check for another email message confirming "
+                        "this was successful."
+                    )
+
+                    def _on_commit_paid_email(
+                        user=locked_profile.user,
+                        subject=paid_subject,
+                        message=paid_message,
+                    ):
+                        try:
+                            user.email_notification(subject, message)
+                            user.log_event(
+                                "Payment-received email sent.",
+                                "email",
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                    transaction.on_commit(_on_commit_paid_email)
+
                     def _on_commit_paid_activate(profile=locked_profile):
                         try:
                             profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
@@ -1588,6 +1616,37 @@ class StripeWebhook(StripeAPIView):
                             capture_exception(email_err)
 
                 transaction.on_commit(_on_commit_void_open_invoices)
+
+                # Notify the operator that this member's Stripe sub ended out
+                # of band. Stripe-specific messaging stays here, not in
+                # complete_cancel. Registered before the complete_cancel
+                # callback so it lands before the member-facing access-
+                # disabled email that deactivate() sends.
+                admin_cancel_subject = (
+                    f"The membership for {full_name} was just cancelled"
+                )
+                admin_cancel_message = (
+                    f"The Stripe subscription for {full_name} ended, so "
+                    "their membership has been cancelled. Their site "
+                    "access has been turned off."
+                )
+
+                def _on_commit_admin_cancel_email(
+                    user=locked_profile.user,
+                    subject=admin_cancel_subject,
+                    message=admin_cancel_message,
+                ):
+                    try:
+                        send_email_to_admin(
+                            subject=subject,
+                            template_vars={"title": subject, "message": message},
+                            user=user,
+                            reply_to=user.email,
+                        )
+                    except Exception as e:
+                        capture_exception(e)
+
+                transaction.on_commit(_on_commit_admin_cancel_email)
 
                 def _on_commit_complete_cancel(profile=locked_profile):
                     try:

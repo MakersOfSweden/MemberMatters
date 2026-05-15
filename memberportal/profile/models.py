@@ -512,12 +512,70 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         for interlock in Interlock.objects.filter(all_members=True):
             self.interlocks.add(interlock)
 
-    def complete_signup(self, triggered_by, request=None):
+    def _log_state_lock_refusal(self, triggered_by, action):
+        # Four sinks: audit log (admin UI), aggregator (logger), Sentry
+        # (alerting), admin email (operator nudge to review).
+        name = self.get_full_name()
+        triggered_label = getattr(triggered_by, "value", str(triggered_by))
+
+        try:
+            self.user.log_event(
+                f"state_locked refused {action} (triggered_by={triggered_label}); "
+                f"state kept as {self.state}",
+                "admin",
+            )
+        except Exception as e:
+            capture_exception(e)
+
+        logger.warning(
+            f"state_locked refusal: profile={self.pk} action={action} "
+            f"triggered_by={triggered_label} state={self.state}"
+        )
+
+        try:
+            capture_exception(
+                Exception(
+                    f"state_locked refusal: {action} blocked "
+                    f"(triggered_by={triggered_label}, state={self.state})"
+                )
+            )
+        except Exception as e:
+            capture_exception(e)
+
+        subject = f"Locked member {name}: {action} preserved state"
+        message = (
+            f"{action.capitalize()} for locked member {name} was triggered "
+            f"by {triggered_label}. State kept as {self.state}. Review "
+            "whether their grandfathered access still applies."
+        )
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": message},
+                user=self.user,
+                reply_to=self.user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    def complete_signup(self, triggered_by, request=None, set_state_locked=None):
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
+            previous_state = locked.state
+
+            if set_state_locked is not None:
+                locked.state_locked = set_state_locked
+                locked.save(update_fields=["state_locked"])
 
             if locked.state == "active":
                 return CompleteSignupResult(CompleteSignupOutcome.ALREADY_ACTIVE)
+
+            if (
+                locked.state_locked
+                and triggered_by != SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE
+            ):
+                locked._log_state_lock_refusal(triggered_by, "activation")
+                return CompleteSignupResult(CompleteSignupOutcome.STATE_LOCKED)
 
             if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
                 locked.add_default_access()
@@ -553,6 +611,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                         ):
                             try:
                                 user.email_notification(subject, message)
+                                user.log_event(
+                                    "Awaiting-payment email sent for pending invoice signup.",
+                                    "email",
+                                )
                             except Exception as e:
                                 capture_exception(e)
 
@@ -568,22 +630,11 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
                 locked.add_default_access()
 
-        paid_subject = "Your payment was successful."
-        paid_message = (
-            "Thanks for making a membership payment using our online payment "
-            "system. You've already met all of the requirements for activating "
-            "your site access. Please check for another email message "
-            "confirming this was successful."
+        self.activate(request)
+        self.user.log_event(
+            f"Activated via {triggered_by.value} (from {previous_state}).",
+            "profile",
         )
-
-        def _on_transition(_previous_state, _new_state):
-            if triggered_by == SignupTriggeredBy.INVOICE_PAID:
-                try:
-                    self.user.email_notification(paid_subject, paid_message)
-                except Exception as e:
-                    capture_exception(e)
-
-        self.activate(request, on_transition=_on_transition)
         return CompleteSignupResult(CompleteSignupOutcome.ACTIVATED)
 
     def deactivate(self, request=None, on_transition=None):
@@ -640,80 +691,70 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         return True
 
     def complete_cancel(self, triggered_by, request=None, set_state_locked=None):
-        # state_locked field and enforcement land in Phase 2.
-        del set_state_locked
-
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             previous_state = locked.state
 
-            # noob/accountonly never activated, so drop any pre-staged M2M.
-            if previous_state in ("noob", "accountonly"):
-                locked.doors.clear()
-                locked.interlocks.clear()
+            if set_state_locked is not None:
+                locked.state_locked = set_state_locked
+                locked.save(update_fields=["state_locked"])
 
-        if previous_state == "active":
-            cancel_subject = "Your membership has been cancelled"
-            cancel_message = (
-                "You will receive another email shortly confirming that "
-                "your access has been deactivated. Your membership was "
-                "cancelled because we couldn't collect your payment, or "
-                "you chose not to renew it."
-            )
-            admin_subject = (
-                f"The membership for {self.get_full_name()} was just cancelled"
-            )
-            admin_message = (
-                f"The Stripe subscription for {self.get_full_name()} "
-                "ended, so their membership has been cancelled. Their "
-                "site access has been turned off."
-            )
-
-            def _on_transition(_previous_state, _new_state):
-                if triggered_by != CancelTriggeredBy.SUBSCRIPTION_DELETED:
-                    return
-                try:
-                    self.user.email_notification(cancel_subject, cancel_message)
-                except Exception as e:
-                    capture_exception(e)
-                try:
-                    send_email_to_admin(
-                        admin_subject,
-                        template_vars={
-                            "title": admin_subject,
-                            "message": admin_message,
-                        },
-                        reply_to=self.user.email,
-                        user=self.user,
-                    )
-                except Exception as e:
-                    capture_exception(e)
-
-            self.deactivate(request, on_transition=_on_transition)
-            outcome = CompleteCancelOutcome.DEACTIVATED
-        elif previous_state == "noob":
-            if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED:
-                lapsed_subject = "Your membership signup has lapsed"
-                lapsed_message = (
-                    "We weren't able to collect your membership payment in "
-                    "time, so your pending signup has been cancelled. You "
-                    "can sign up again at any time from the member portal."
+            if previous_state in ("inactive", "accountonly"):
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.ALREADY_DEACTIVATED,
+                    previous_state=previous_state,
                 )
-                try:
-                    self.user.email_notification(lapsed_subject, lapsed_message)
-                except Exception as e:
-                    capture_exception(e)
-            outcome = CompleteCancelOutcome.SIGNUP_LAPSED
-        else:
-            outcome = CompleteCancelOutcome.ALREADY_DEACTIVATED
 
+            if (
+                previous_state == "active"
+                and locked.state_locked
+                and triggered_by != CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL
+            ):
+                self._log_state_lock_refusal(triggered_by, "cancellation")
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.STATE_LOCKED,
+                    previous_state=previous_state,
+                )
+
+            if previous_state == "noob":
+                if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED:
+                    lapsed_subject = "Your membership signup has lapsed"
+                    lapsed_message = (
+                        "We weren't able to collect your membership payment "
+                        "in time, so your pending signup has been cancelled. "
+                        "You can sign up again at any time from the member "
+                        "portal."
+                    )
+
+                    def _on_commit_lapsed(
+                        user=locked.user,
+                        subject=lapsed_subject,
+                        message=lapsed_message,
+                    ):
+                        try:
+                            user.email_notification(subject, message)
+                            user.log_event(
+                                "Signup-lapsed email sent (subscription deleted before activation).",
+                                "email",
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                    transaction.on_commit(_on_commit_lapsed)
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.SIGNUP_LAPSED,
+                    previous_state=previous_state,
+                )
+
+        self.deactivate(request)
         self.user.log_event(
-            f"Membership cancelled by {triggered_by.value}. "
-            f"Previous state: {previous_state}. Outcome: {outcome.value}.",
-            "stripe",
+            f"Cancelled via {triggered_by.value}.",
+            "profile",
         )
-
-        return CompleteCancelResult(outcome=outcome, previous_state=previous_state)
+        return CompleteCancelResult(
+            outcome=CompleteCancelOutcome.DEACTIVATED,
+            previous_state="active",
+        )
 
     def activate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
