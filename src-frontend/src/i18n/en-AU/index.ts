@@ -444,6 +444,43 @@ export default {
     accountOnly: 'Account Only',
     enableAccess: 'Enable Access',
     disableAccess: 'Disable Access',
+    pauseAccess: 'Pause Access',
+    resumeAccess: 'Resume Access',
+    pauseAccessTitle: 'Pause access for this member?',
+    resumeAccessTitle: 'Resume access for this member?',
+    pauseAccessDescription:
+      "This member will lose door access immediately. Their state and subscription won't change — use Deactivate or Cancel Membership if you want those too.",
+    resumeAccessDescription:
+      "This member's access pause will be lifted. If their state is active they'll regain door access immediately.",
+    activate: 'Activate',
+    deactivate: 'Deactivate',
+    activateTitle: 'Activate this member?',
+    deactivateTitle: 'Deactivate this member?',
+    activateDescription:
+      'Flip this member to active state, bypassing the usual induction / RFID / subscription gates.',
+    deactivateDescription:
+      "Flip this member to inactive state. Their Stripe subscription is not affected — use Cancel Membership if you want to end billing too.",
+    cancelMembership: 'Cancel Membership',
+    cancelMembershipTitle: 'Cancel this member’s membership?',
+    cancelMembershipDescription:
+      "This cancels the member's Stripe subscription. State and billing are handled together.",
+    cancelTimingLabel: 'When should the cancellation take effect?',
+    cancelTimingAtPeriodEnd:
+      'At end of current billing period (member keeps access until then)',
+    cancelTimingImmediately:
+      'Immediately (deletes subscription, voids open invoices)',
+    lockStateCheckbox: 'Lock state',
+    lockStateHelp:
+      "Locked members can't be auto-activated or deactivated by Stripe webhooks or self-serve flows. Useful for grandfathered or admin-managed members.",
+    stateLockedTooltip:
+      "State is locked — automated flows (webhooks, self-serve signup) won't modify this member's state.",
+    lockedWarning:
+      "This member's state is currently locked. Confirming will override the lock.",
+    reconcileTitle: 'Reconcile member state?',
+    reconcileMessageActivate:
+      "You just unlocked this member. Their state is '{state}' but their subscription is '{subscriptionStatus}'. Activate to bring their access in line with their billing?",
+    reconcileMessageDeactivate:
+      "You just unlocked this member. Their state is '{state}' but their subscription is '{subscriptionStatus}'. Deactivate to bring their access in line with their billing?",
     sendWelcomeEmail: 'Send welcome email',
     sendSms: 'Send SMS to member',
     sendSmsModalTitle: 'Send {name} a one-way sms alert.',

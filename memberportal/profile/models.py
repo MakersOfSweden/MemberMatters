@@ -969,6 +969,8 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 "last4": self.stripe_card_last_digits,
             },
             "subscriptionStatus": self.subscription_status,
+            "stateLocked": self.state_locked,
+            "adminDisabledAccess": self.admin_disabled_access,
         }
 
     def get_access_permissions(self, ignore_user_state=False):
