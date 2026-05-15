@@ -1,9 +1,8 @@
 <template>
   <div class="">
     <h3 class="q-mt-none q-mb-md">
-      {{ profileForm.firstName }} {{ profileForm.lastName }} ({{
-        profileForm.screenName
-      }})
+      {{ profileForm.firstName }} {{ profileForm.lastName }}
+      <span v-if="profileForm.screenName">({{ profileForm.screenName }})</span>
     </h3>
     <q-card
       class="q-mb-none"
