@@ -471,6 +471,7 @@ class ProfileDetail(generics.GenericAPIView):
             "screenName": p.screen_name,
             "phone": p.phone,
             "memberStatus": p.state,
+            "signupStage": p.signup_stage,
             "vehicleRegistrationPlate": p.vehicle_registration_plate,
             "lastInduction": p.last_induction,
             "lastSeen": p.last_seen,

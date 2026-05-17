@@ -923,6 +923,22 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
         return True if len(sessions) else False
 
+    @property
+    def signup_stage(self):
+        # Single source of truth for which signup view the frontend renders.
+        if self.state == "accountonly":
+            return "account_only"
+        if self.state == "active":
+            return "managed"
+        if self.state == "inactive":
+            return "lapsed"
+        # state == "noob" below
+        if not self.membership_plan:
+            return "needs_plan"
+        if self.subscription_status == "pending":
+            return "awaiting_payment"
+        return "needs_requirements"
+
     def get_basic_profile(self):
         """
         Returns a user's profile with a basic amount of info.
