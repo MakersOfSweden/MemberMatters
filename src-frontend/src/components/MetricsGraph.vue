@@ -111,8 +111,8 @@ export default {
    don't stretch unreadably wide on large screens. */
 .metrics-graph-wrapper {
   width: 100%;
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
 }
 </style>
