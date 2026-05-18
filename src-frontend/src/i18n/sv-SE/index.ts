@@ -765,6 +765,7 @@ export default {
       'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
     renewalDate: 'Förnyelsedatum',
     inDays: 'om {days} dagar',
+    unknown: 'Okänt',
     completeSetup: 'Slutför registrering',
     activateMembership: 'Aktivera medlemskap',
     viewMembership: 'Visa medlemskap',

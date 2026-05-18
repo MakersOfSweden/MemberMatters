@@ -770,6 +770,7 @@ export default {
       'You have an account but have not been granted full membership access.',
     renewalDate: 'Renewal date',
     inDays: 'in {days} days',
+    unknown: 'Unknown',
     completeSetup: 'Complete Setup',
     activateMembership: 'Activate Membership',
     viewMembership: 'View Membership',

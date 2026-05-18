@@ -7,7 +7,9 @@
       </div>
     </q-card-section>
 
-    <div :class="`bg-${stateBadgeColor} text-white text-center text-subtitle1 text-weight-medium q-py-sm q-mb-sm`">
+    <div
+      :class="`bg-${stateBadgeColor} text-white text-center text-subtitle1 text-weight-medium q-py-sm q-mb-sm`"
+    >
       {{ $t(`membershipStatusCard.stateBanner.${bannerKey}`) }}
     </div>
 
@@ -22,12 +24,36 @@
             <q-item v-if="showPaymentStep" dense>
               <q-item-section avatar>
                 <q-icon
-                  :name="paymentComplete ? icons.success : profile.financial.subscriptionState === 'pending' ? icons.warning : icons.fail"
-                  :color="paymentComplete ? 'positive' : profile.financial.subscriptionState === 'pending' ? 'warning' : nextStep === 'payment' ? 'negative' : 'grey-5'"
+                  :name="
+                    paymentComplete
+                      ? icons.success
+                      : profile.financial.subscriptionState === 'pending'
+                      ? icons.warning
+                      : icons.fail
+                  "
+                  :color="
+                    paymentComplete
+                      ? 'positive'
+                      : profile.financial.subscriptionState === 'pending'
+                      ? 'warning'
+                      : nextStep === 'payment'
+                      ? 'negative'
+                      : 'grey-5'
+                  "
                 />
               </q-item-section>
-              <q-item-section :class="paymentComplete ? 'text-strike text-grey-6' : nextStep === 'payment' ? 'text-weight-bold' : 'text-grey-6'">
-                <q-item-label>{{ $t('membershipStatusCard.payment') }}</q-item-label>
+              <q-item-section
+                :class="
+                  paymentComplete
+                    ? 'text-strike text-grey-6'
+                    : nextStep === 'payment'
+                    ? 'text-weight-bold'
+                    : 'text-grey-6'
+                "
+              >
+                <q-item-label>{{
+                  $t('membershipStatusCard.payment')
+                }}</q-item-label>
                 <q-item-label caption>{{
                   paymentComplete
                     ? $t('membershipStatusCard.paymentComplete')
@@ -42,10 +68,24 @@
               <q-item-section avatar>
                 <q-icon
                   :name="inductionComplete ? icons.success : icons.fail"
-                  :color="inductionComplete ? 'positive' : nextStep === 'induction' ? 'negative' : 'grey-5'"
+                  :color="
+                    inductionComplete
+                      ? 'positive'
+                      : nextStep === 'induction'
+                      ? 'negative'
+                      : 'grey-5'
+                  "
                 />
               </q-item-section>
-              <q-item-section :class="inductionComplete ? 'text-strike text-grey-6' : nextStep === 'induction' ? 'text-weight-bold' : 'text-grey-6'">
+              <q-item-section
+                :class="
+                  inductionComplete
+                    ? 'text-strike text-grey-6'
+                    : nextStep === 'induction'
+                    ? 'text-weight-bold'
+                    : 'text-grey-6'
+                "
+              >
                 <q-item-label>{{ $t('signup.induction') }}</q-item-label>
                 <q-item-label caption>{{
                   inductionComplete
@@ -59,10 +99,24 @@
               <q-item-section avatar>
                 <q-icon
                   :name="accessCardComplete ? icons.success : icons.fail"
-                  :color="accessCardComplete ? 'positive' : nextStep === 'accessCard' ? 'negative' : 'grey-5'"
+                  :color="
+                    accessCardComplete
+                      ? 'positive'
+                      : nextStep === 'accessCard'
+                      ? 'negative'
+                      : 'grey-5'
+                  "
                 />
               </q-item-section>
-              <q-item-section :class="accessCardComplete ? 'text-strike text-grey-6' : nextStep === 'accessCard' ? 'text-weight-bold' : 'text-grey-6'">
+              <q-item-section
+                :class="
+                  accessCardComplete
+                    ? 'text-strike text-grey-6'
+                    : nextStep === 'accessCard'
+                    ? 'text-weight-bold'
+                    : 'text-grey-6'
+                "
+              >
                 <q-item-label>{{ $t('signup.accessCard') }}</q-item-label>
                 <q-item-label caption>{{
                   accessCardComplete
@@ -81,13 +135,22 @@
       <!-- active -->
       <template v-else-if="isActiveMember">
         <div
-          v-if="formattedRenewalDate && profile.financial.subscriptionState !== 'cancelling'"
+          v-if="profile.financial.subscriptionState !== 'cancelling'"
           class="q-mb-sm text-caption"
         >
-          {{ $t('membershipStatusCard.renewalDate') }}: {{ formattedRenewalDate }} ({{ $t('membershipStatusCard.inDays', { days: daysUntilRenewal }) }})
+          {{ $t('membershipStatusCard.renewalDate') }}:
+          <template v-if="formattedRenewalDate">
+            {{ formattedRenewalDate }} ({{
+              $t('membershipStatusCard.inDays', { days: daysUntilRenewal })
+            }})
+          </template>
+          <template v-else>{{ $t('membershipStatusCard.unknown') }}</template>
         </div>
         <q-banner
-          v-if="features.enableMembershipPayments && profile.financial.subscriptionState === 'cancelling'"
+          v-if="
+            features.enableMembershipPayments &&
+            profile.financial.subscriptionState === 'cancelling'
+          "
           inline-actions
           rounded
           class="bg-orange text-white q-mt-sm"
@@ -97,19 +160,27 @@
           </template>
           {{ $t('membershipStatusCard.cancellingWarning') }}
           <span v-if="formattedCancelAt">
-            {{ $t('membershipStatusCard.membershipExpires', { date: formattedCancelAt }) }}
-            ({{ $t('membershipStatusCard.inDays', { days: daysUntilExpiration }) }})
+            {{
+              $t('membershipStatusCard.membershipExpires', {
+                date: formattedCancelAt,
+              })
+            }}
+            ({{
+              $t('membershipStatusCard.inDays', { days: daysUntilExpiration })
+            }})
           </span>
         </q-banner>
       </template>
 
       <!-- inactive (former member, no pending invoice) -->
       <template v-else-if="isInactiveMember">
-        <p class="q-mb-none">{{ $t('membershipStatusCard.inactiveDescription') }}</p>
+        <p class="q-mb-none">
+          {{ $t('membershipStatusCard.inactiveDescription') }}
+        </p>
       </template>
 
       <!-- accountonly -->
-      <template v-else-if="profile.memberStatus === 'accountonly'">
+      <template v-else-if="signupStage === 'account_only'">
         <p class="q-mb-xs">{{ $t('membershipStatusCard.accountOnlyTitle') }}</p>
         <p class="q-mb-none text-grey-7 text-caption">
           {{ $t('membershipStatusCard.accountOnlyDescription') }}
@@ -119,18 +190,17 @@
 
     <q-card-section class="q-pt-none">
       <div class="row">
-        <q-space />
         <q-btn
-          v-if="profile.memberStatus === 'accountonly'"
-          color="positive"
-          :label="$t('membershipStatusCard.becomeMember')"
-          class="q-mr-sm"
+          flat
+          :label="$t('membershipStatusCard.viewMembership')"
           @click="$router.push({ name: 'membershipPlan' })"
         />
+        <q-space />
         <q-btn
-          color="primary-btn"
-          :label="ctaLabel"
-          @click="$router.push({ name: ctaRoute })"
+          v-if="actionLabel"
+          color="accent"
+          :label="actionLabel"
+          @click="$router.push({ name: 'membershipPlan' })"
         />
       </div>
     </q-card-section>
@@ -203,43 +273,54 @@ export default {
       return this.features.signup?.requireAccessCard;
     },
     hasAnyStep() {
-      return this.showPaymentStep || this.showInductionStep || this.showAccessCardStep;
+      return (
+        this.showPaymentStep ||
+        this.showInductionStep ||
+        this.showAccessCardStep
+      );
+    },
+    signupStage() {
+      return this.profile?.signupStage;
     },
     paymentPending() {
       return this.profile.financial.subscriptionState === 'pending';
     },
-    // A returning member (state="inactive") with a pending invoice subscription
-    // is mid-signup — treat them like a new "noob" member until payment arrives.
     isSignupInProgress() {
-      return (
-        this.profile.memberStatus === 'noob' ||
-        (this.profile.memberStatus === 'inactive' && this.paymentPending)
+      return ['needs_plan', 'needs_requirements', 'awaiting_payment'].includes(
+        this.signupStage
       );
     },
     isActiveMember() {
-      return this.profile.memberStatus === 'active';
+      return this.signupStage === 'managed';
     },
     isInactiveMember() {
-      return this.profile.memberStatus === 'inactive' && !this.paymentPending;
+      return this.signupStage === 'lapsed';
     },
     bannerKey() {
       return this.isSignupInProgress ? 'noob' : this.profile.memberStatus;
     },
     nextStep() {
       // When invoice is pending, payment is "in progress" (awaiting invoice) — skip to next actionable step
-      if (this.showPaymentStep && !this.paymentComplete && !this.paymentPending) return 'payment';
+      if (this.showPaymentStep && !this.paymentComplete && !this.paymentPending)
+        return 'payment';
       if (this.showInductionStep && !this.inductionComplete) return 'induction';
-      if (this.showAccessCardStep && !this.accessCardComplete) return 'accessCard';
+      if (this.showAccessCardStep && !this.accessCardComplete)
+        return 'accessCard';
       return null;
     },
     paymentComplete() {
       return this.profile.financial.subscriptionState === 'active';
     },
     inductionComplete() {
-      return this.requiredSteps !== null && !this.requiredSteps.includes('induction');
+      return (
+        this.requiredSteps !== null && !this.requiredSteps.includes('induction')
+      );
     },
     accessCardComplete() {
-      return this.requiredSteps !== null && !this.requiredSteps.includes('accessCard');
+      return (
+        this.requiredSteps !== null &&
+        !this.requiredSteps.includes('accessCard')
+      );
     },
     stateBadgeColor() {
       const colors = {
@@ -266,27 +347,17 @@ export default {
       if (!this.cancelAt) return null;
       return dayjs(this.cancelAt * 1000).diff(dayjs(), 'day');
     },
-    ctaLabel() {
+    actionLabel() {
       if (this.isSignupInProgress) {
         return this.$t('membershipStatusCard.completeSetup');
       }
-      if (this.isActiveMember) {
-        return this.$t('membershipStatusCard.viewMembership');
+      if (this.signupStage === 'account_only') {
+        return this.$t('membershipStatusCard.becomeMember');
       }
       if (this.isInactiveMember && this.features.enableMembershipPayments) {
         return this.$t('membershipStatusCard.activateMembership');
       }
-      return this.$t('membershipStatusCard.viewAccount');
-    },
-    ctaRoute() {
-      if (
-        this.isSignupInProgress ||
-        this.isActiveMember ||
-        (this.isInactiveMember && this.features.enableMembershipPayments)
-      ) {
-        return 'membershipPlan';
-      }
-      return 'profile';
+      return null;
     },
   },
 };
