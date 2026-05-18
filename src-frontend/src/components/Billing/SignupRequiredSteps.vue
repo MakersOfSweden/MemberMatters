@@ -232,7 +232,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { mapGetters } from 'vuex';
+import { mapGetters, mapActions } from 'vuex';
 import icons from '@icons';
 import { api } from 'boot/axios';
 
@@ -321,18 +321,26 @@ export default defineComponent({
         this.step++;
       }
     },
+    ...mapActions('profile', ['getProfile']),
     async completeSignup() {
       api
         .post('/api/billing/complete-signup/')
         .then((result) => {
           if (result.data.awaitingPayment) {
             this.awaitingPayment = true;
+            // Refresh so the parent re-derives signupStage and swaps to the
+            // awaiting-payment view.
+            this.getProfile();
           } else if (!result.data.success) {
             this.signupError = true;
             this.signupErrorMessage = result.data.message;
             this.signupErrorItems = result.data.items;
           } else {
             this.signupError = false;
+            // Server flipped the member to active — refresh the profile so
+            // the parent page re-derives signupStage (-> "managed") and
+            // advances off the required-steps view.
+            this.getProfile();
           }
         })
         .catch(() => {
@@ -369,9 +377,7 @@ export default defineComponent({
     showAccessCardError(messageKey) {
       this.$q.dialog({
         title: this.$tc('error.error'),
-        message: messageKey
-          ? this.$t(messageKey)
-          : this.$tc('error.contactUs'),
+        message: messageKey ? this.$t(messageKey) : this.$tc('error.contactUs'),
       });
     },
   },

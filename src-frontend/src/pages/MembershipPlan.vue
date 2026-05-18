@@ -1,10 +1,12 @@
 <template>
   <q-page class="column flex justify-start items-center">
-    <template v-if="currentPlan == false || canSignup == null">
+    <template v-if="!profileLoaded">
       <q-spinner size="4em" />
     </template>
 
-    <template v-else-if="!currentPlan">
+    <template
+      v-else-if="['needs_plan', 'account_only', 'lapsed'].includes(signupStage)"
+    >
       <q-banner
         v-if="features.enableNewSubscriptions === false"
         class="bg-info text-white q-pa-md"
@@ -14,113 +16,120 @@
       <select-tier v-else />
     </template>
 
+    <template v-else-if="signupStage === 'needs_requirements'">
+      <div class="text-h6 q-pb-md">
+        {{ $t('signup.requiredSteps') }}
+      </div>
+
+      <signup-required-steps />
+    </template>
+
     <template v-else>
-      <template v-if="!canSignup">
-        <div class="text-h6 q-pb-md">
-          {{ $t('signup.requiredSteps') }}
-        </div>
+      <selected-tier :plan="membershipPlan" :tier="currentTier" />
 
-        <signup-required-steps />
-      </template>
+      <q-banner
+        v-if="subscriptionStatus === 'pending'"
+        class="bg-orange text-white q-mb-md"
+        inline-actions
+        rounded
+      >
+        <template v-slot:avatar>
+          <q-icon name="mdi-alert" />
+        </template>
+        {{ $t('billing.awaitingInvoicePayment') }}
+        <template v-slot:action>
+          <q-btn
+            v-if="subscriptionInfo?.invoiceUrl"
+            flat
+            no-caps
+            text-color="white"
+            :label="$tc('billing.viewInvoice')"
+            :href="subscriptionInfo.invoiceUrl"
+            target="_blank"
+            icon="mdi-open-in-new"
+          />
+        </template>
+      </q-banner>
 
-      <template v-else>
-        <selected-tier :plan="currentPlan" :tier="currentTier" />
-
-        <q-banner v-if="subscriptionStatus === 'pending'" class="bg-orange text-white q-mb-md" inline-actions rounded>
-          <template v-slot:avatar>
-            <q-icon name="mdi-alert" />
-          </template>
-          {{ $t('billing.awaitingInvoicePayment') }}
-          <template v-slot:action>
-            <q-btn
-              v-if="subscriptionInfo?.invoiceUrl"
-              flat
-              no-caps
-              text-color="white"
-              :label="$tc('billing.viewInvoice')"
-              :href="subscriptionInfo.invoiceUrl"
-              target="_blank"
-              icon="mdi-open-in-new"
-            />
-          </template>
+      <div v-if="cancelSuccess" class="row q-mb-md">
+        <q-banner class="bg-success text-white">
+          <div class="text-h5">{{ $tc('actionSuccess') }}</div>
+          <p>{{ $tc('paymentPlans.cancelSuccessDescription') }}</p>
         </q-banner>
+      </div>
 
-        <div v-if="cancelSuccess" class="row q-mb-md">
-          <q-banner class="bg-success text-white">
-            <div class="text-h5">{{ $tc('actionSuccess') }}</div>
-            <p>{{ $tc('paymentPlans.cancelSuccessDescription') }}</p>
-          </q-banner>
+      <div v-if="subscriptionStatus === 'cancelling'" class="row q-mb-md">
+        <q-banner class="bg-error text-white">
+          <div class="text-h5">{{ $tc('paymentPlans.cancelling') }}</div>
+          <p>
+            {{
+              $t('paymentPlans.cancellingDescription', { date: cancelAtDate })
+            }}
+          </p>
+        </q-banner>
+      </div>
+
+      <div
+        v-if="
+          this.subscriptionInfo?.currentPeriodEnd &&
+          subscriptionStatus !== 'cancelling'
+        "
+        class="q-mb-md"
+      >
+        <div class="text-h6 q-py-md">
+          {{ $t('paymentPlans.subscriptionInfo') }}
         </div>
+        <q-card>
+          <q-list bordered separator>
+            <q-item>
+              <q-item-section>
+                <q-item-label>{{ paymentMethodLabel }}</q-item-label>
+                <q-item-label caption>{{
+                  $tc('paymentPlans.paymentMethod')
+                }}</q-item-label>
+              </q-item-section>
+            </q-item>
+            <q-item>
+              <q-item-section>
+                <q-item-label>{{ currentPeriodEnd }}</q-item-label>
+                <q-item-label caption>{{
+                  $tc('paymentPlans.renewalDate')
+                }}</q-item-label>
+              </q-item-section>
+            </q-item>
+            <q-item>
+              <q-item-section>
+                <q-item-label>{{ signupDate }}</q-item-label>
+                <q-item-label caption>{{
+                  $tc('paymentPlans.signupDate')
+                }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card>
+      </div>
 
-        <div v-if="subscriptionStatus === 'cancelling'" class="row q-mb-md">
-          <q-banner class="bg-error text-white">
-            <div class="text-h5">{{ $tc('paymentPlans.cancelling') }}</div>
-            <p>
-              {{
-                $t('paymentPlans.cancellingDescription', { date: cancelAtDate })
-              }}
-            </p>
-          </q-banner>
-        </div>
-
-        <div
-          v-if="
-            this.subscriptionInfo?.currentPeriodEnd &&
-            subscriptionStatus !== 'cancelling'
-          "
-          class="q-mb-md"
-        >
-          <div class="text-h6 q-py-md">
-            {{ $t('paymentPlans.subscriptionInfo') }}
-          </div>
-          <q-card>
-            <q-list bordered separator>
-              <q-item>
-                <q-item-section>
-                  <q-item-label>{{ paymentMethodLabel }}</q-item-label>
-                  <q-item-label caption>{{
-                    $tc('paymentPlans.paymentMethod')
-                  }}</q-item-label>
-                </q-item-section>
-              </q-item>
-              <q-item>
-                <q-item-section>
-                  <q-item-label>{{ currentPeriodEnd }}</q-item-label>
-                  <q-item-label caption>{{
-                    $tc('paymentPlans.renewalDate')
-                  }}</q-item-label>
-                </q-item-section>
-              </q-item>
-              <q-item>
-                <q-item-section>
-                  <q-item-label>{{ signupDate }}</q-item-label>
-                  <q-item-label caption>{{
-                    $tc('paymentPlans.signupDate')
-                  }}</q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-card>
-        </div>
-
-        <q-btn
-          v-if="subscriptionStatus === 'active' || subscriptionStatus === 'pending'"
-          :disable="disableButton"
-          :loading="loadingButton"
-          @click="cancelPlan"
-          color="error"
-          :label="$tc('paymentPlans.cancelButton')"
-        />
-        <member-bucks-manage-billing v-else-if="!cardExists && billingMethod !== 'invoice'" />
-        <q-btn
-          v-else
-          :disable="disableButton"
-          :loading="loadingButton"
-          @click="resumePlan"
-          color="success"
-          :label="$tc('paymentPlans.resumeButton')"
-        />
-      </template>
+      <q-btn
+        v-if="
+          subscriptionStatus === 'active' || subscriptionStatus === 'pending'
+        "
+        :disable="disableButton"
+        :loading="loadingButton"
+        @click="cancelPlan"
+        color="error"
+        :label="$tc('paymentPlans.cancelButton')"
+      />
+      <member-bucks-manage-billing
+        v-else-if="!cardExists && billingMethod !== 'invoice'"
+      />
+      <q-btn
+        v-else
+        :disable="disableButton"
+        :loading="loadingButton"
+        @click="resumePlan"
+        color="success"
+        :label="$tc('paymentPlans.resumeButton')"
+      />
     </template>
   </q-page>
 </template>
@@ -143,16 +152,9 @@ export default defineComponent({
   },
   data() {
     return {
-      canSignup: null,
       disableButton: false,
       loadingButton: false,
       cancelSuccess: false,
-      // Guard against double-firing maybeCompleteSignup. getCanSignup
-      // may be called more than once during a page lifecycle (e.g. if
-      // we add a refresh button later); /complete-signup/ is idempotent
-      // server-side but a duplicate POST while the first is in-flight
-      // just wastes a request.
-      completeSignupAttempted: false,
       subscriptionInfo: {
         billingCycleAnchor: null,
         currentPeriodEnd: null,
@@ -165,12 +167,14 @@ export default defineComponent({
   computed: {
     ...mapGetters('profile', ['profile']),
     ...mapGetters('config', ['features']),
-    currentPlan() {
-      if (Object.keys(this.profile).length) {
-        return this.profile.financial.membershipPlan;
-      } else {
-        return false;
-      }
+    profileLoaded() {
+      return Object.keys(this.profile).length > 0;
+    },
+    signupStage() {
+      return this.profile?.signupStage;
+    },
+    membershipPlan() {
+      return this.profile?.financial?.membershipPlan;
     },
     cardExists() {
       return this?.profile?.financial?.memberBucks?.savedCard?.last4;
@@ -214,55 +218,6 @@ export default defineComponent({
           this.subscriptionInfo = result.data.subscription;
         }
       });
-    },
-    getCanSignup() {
-      this.$axios
-        .get('/api/billing/can-signup/')
-        .then((result) => {
-          if (result.data.success) {
-            this.canSignup = true;
-            // No outstanding requirements (induction/RFID) — but
-            // complete-signup is only ever called from
-            // SignupRequiredSteps.vue, which we don't mount in this
-            // branch. Drive it from here so a noob whose backend
-            // auto-activate didn't fire (admin-flipped status, lapsed
-            // sub resumed, requirements already satisfied from a prior
-            // membership) still flips to active.
-            this.maybeCompleteSignup();
-          } else {
-            this.canSignup = false;
-          }
-        })
-        .catch(() => {
-          this.$q
-            .dialog({
-              title: this.$t('error.requestFailed'),
-              message: this.$t('error.contactUs'),
-            })
-            .onDismiss(() => this.$router.push({ name: 'dashboard' }));
-        });
-    },
-    maybeCompleteSignup() {
-      if (this.profile?.memberStatus !== 'noob') return;
-      if (this.completeSignupAttempted) return;
-      this.completeSignupAttempted = true;
-      this.$axios
-        .post('/api/billing/complete-signup/')
-        .then((result) => {
-          // awaitingPayment (invoice billing pre-activation) leaves
-          // state=noob by design — surfaced via the orange banner below
-          // when subscriptionStatus === 'pending'. Only re-fetch on
-          // success so the page re-renders with state="active".
-          if (result.data.success && !result.data.awaitingPayment) {
-            this.getProfile();
-          }
-        })
-        .catch(() => {
-          // Swallow: backend may already have activated via the
-          // PaymentPlanSignup auto-activate path, or the user has a
-          // genuinely-incomplete state that SignupRequiredSteps will
-          // surface on the next mount. Either way, don't block the page.
-        });
     },
     cancelPlan() {
       this.$q
@@ -332,12 +287,8 @@ export default defineComponent({
     },
   },
   async mounted() {
-    // Profile must be loaded before getCanSignup -> maybeCompleteSignup
-    // checks memberStatus; Vuex default is `{}` so a check before resolve
-    // would treat the noob path as "not noob" and skip activation.
     await this.getProfile();
     this.getSubscriptionInfo();
-    this.getCanSignup();
   },
 });
 </script>
