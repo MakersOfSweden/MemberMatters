@@ -292,8 +292,11 @@ export default defineComponent({
           this.$router.push({ name: 'registerSuccess' });
         })
         .catch((error) => {
-          if (error.response.status === 409) {
+          if (error.response?.status === 409) {
             this.errorExists = error.response.data.message;
+            this.error = false;
+          } else if (error.response?.status === 429) {
+            this.errorExists = 'error.tooManyRequests';
             this.error = false;
           } else {
             this.error = true;

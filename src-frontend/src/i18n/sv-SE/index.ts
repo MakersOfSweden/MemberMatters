@@ -72,6 +72,8 @@ export default {
     downloadFailed: 'Misslyckades att ladda hem filen.',
     requestFailed:
       "Det har uppstått ett fel. Försök igen senare.",
+    tooManyRequests:
+      'För många försök från ditt nätverk. Vänta en stund och försök sedan igen.',
     pageNotFound: 'Sidan kan inte hittas',
     noValue: 'Inget värde',
     noData: 'Ingen data hittas',

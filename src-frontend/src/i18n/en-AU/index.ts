@@ -72,6 +72,8 @@ export default {
     downloadFailed: 'Failed to download the file.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",
+    tooManyRequests:
+      'Too many attempts from your network. Please wait a little while and then try again.',
     pageNotFound: 'Page not found',
     noValue: 'No Value',
     noData: 'No records found',

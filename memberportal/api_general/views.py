@@ -350,10 +350,6 @@ class ResetPassword(APIView):
     throttle_classes = (ScopedRateThrottle,)
 
     def get_throttles(self):
-        # request-reset issues an email on every match — abuse vector,
-        # stays at 5/hour. validate/submit are also IP-throttled (token
-        # isn't checked before this point), but they have no email
-        # side-effect, so a roomier bucket for legitimate retries.
         if self.request.data.get("token"):
             self.throttle_scope = "password_reset_use"
         else:
