@@ -770,11 +770,21 @@ class RegisterSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
+    # allow_null: the form posts null for fields it isn't collecting;
+    # validate() normalises that to "".
     mobile = serializers.CharField(
-        required=False, max_length=12, allow_blank=True, default=""
+        required=False,
+        max_length=12,
+        allow_blank=True,
+        allow_null=True,
+        default="",
     )
     vehicleRegistrationPlate = serializers.CharField(
-        required=False, max_length=30, allow_blank=True, default=""
+        required=False,
+        max_length=30,
+        allow_blank=True,
+        allow_null=True,
+        default="",
     )
 
     def validate_email(self, value):
@@ -784,6 +794,16 @@ class RegisterSerializer(serializers.Serializer):
         return (value or "").strip() or None
 
     def validate(self, attrs):
+        # A null mobile / vehicle plate (see allow_null above) becomes ""
+        # so the Profile row always gets a string, not None. The plate is
+        # also dropped entirely unless the site collects it.
+        attrs["mobile"] = (attrs.get("mobile") or "").strip()
+        attrs["vehicleRegistrationPlate"] = (
+            (attrs.get("vehicleRegistrationPlate") or "").strip()
+            if config.COLLECT_VEHICLE_REGISTRATION_PLATE
+            else ""
+        )
+
         if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
             raise serializers.ValidationError(
                 {"screenName": "error.screenNameRequired"}
