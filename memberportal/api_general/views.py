@@ -756,19 +756,74 @@ class LoggedIn(APIView):
         return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
+# Maps Django password-validator error codes (AUTH_PASSWORD_VALIDATORS)
+# to frontend i18n keys; unknown codes fall back to error.passwordInvalid.
+PASSWORD_VALIDATION_ERROR_KEYS = {
+    "password_too_short": "error.passwordTooShort",
+    "password_too_common": "error.passwordTooCommon",
+    "password_entirely_numeric": "error.passwordEntirelyNumeric",
+    "password_too_similar": "error.passwordTooSimilar",
+    "password_compromised": "error.passwordCompromised",
+}
+
+
 class RegisterSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True, max_length=255)
-    password = serializers.CharField(
-        required=True, write_only=True, min_length=8, max_length=128
+    # Every error message is an i18n key resolved by the frontend, not
+    # English text. Keep these in sync with the `error` block in
+    # src-frontend/src/i18n/*/index.ts.
+    email = serializers.EmailField(
+        required=True,
+        max_length=255,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "invalid": "validation.invalidEmail",
+            "max_length": "error.emailTooLong",
+        },
     )
-    firstName = serializers.CharField(required=True, max_length=30, allow_blank=False)
-    lastName = serializers.CharField(required=True, max_length=30, allow_blank=False)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        min_length=8,
+        max_length=128,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "min_length": "error.passwordTooShort",
+            "max_length": "error.passwordTooLong",
+        },
+    )
+    firstName = serializers.CharField(
+        required=True,
+        max_length=30,
+        allow_blank=False,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "max_length": "error.firstNameTooLong",
+        },
+    )
+    lastName = serializers.CharField(
+        required=True,
+        max_length=30,
+        allow_blank=False,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "max_length": "error.lastNameTooLong",
+        },
+    )
     screenName = serializers.CharField(
         required=False,
         max_length=30,
         allow_blank=True,
         allow_null=True,
         default=None,
+        error_messages={"max_length": "error.screenNameTooLong"},
     )
     # allow_null: the form posts null for fields it isn't collecting;
     # validate() normalises that to "".
@@ -778,6 +833,7 @@ class RegisterSerializer(serializers.Serializer):
         allow_blank=True,
         allow_null=True,
         default="",
+        error_messages={"max_length": "error.mobileTooLong"},
     )
     vehicleRegistrationPlate = serializers.CharField(
         required=False,
@@ -785,6 +841,7 @@ class RegisterSerializer(serializers.Serializer):
         allow_blank=True,
         allow_null=True,
         default="",
+        error_messages={"max_length": "error.vehiclePlateTooLong"},
     )
 
     def validate_email(self, value):
@@ -823,7 +880,17 @@ class RegisterSerializer(serializers.Serializer):
         try:
             validate_password(attrs["password"], user=pseudo_user)
         except DjangoValidationError as e:
-            raise serializers.ValidationError({"password": list(e.messages)})
+            # Map each validator's error code to an i18n key, de-duped
+            # (a pwned + common password trips two validators).
+            keys = list(
+                dict.fromkeys(
+                    PASSWORD_VALIDATION_ERROR_KEYS.get(
+                        err.code, "error.passwordInvalid"
+                    )
+                    for err in e.error_list
+                )
+            )
+            raise serializers.ValidationError({"password": keys})
 
         return attrs
 

@@ -74,6 +74,23 @@ export default {
       "Det har uppstått ett fel. Försök igen senare.",
     tooManyRequests:
       'För många försök från ditt nätverk. Vänta en stund och försök sedan igen.',
+    fieldRequired: 'Fyll i alla obligatoriska fält.',
+    emailTooLong: 'E-postadressen är för lång.',
+    passwordTooShort: 'Ditt lösenord måste vara minst 8 tecken långt.',
+    passwordTooLong: 'Ditt lösenord får vara högst 128 tecken.',
+    passwordTooCommon:
+      'Lösenordet är för vanligt. Välj ett mindre förutsägbart lösenord.',
+    passwordEntirelyNumeric: 'Ditt lösenord kan inte bestå av enbart siffror.',
+    passwordTooSimilar:
+      'Ditt lösenord liknar ditt namn eller din e-postadress för mycket.',
+    passwordCompromised:
+      'Lösenordet har förekommit i en känd dataläcka. Välj ett annat.',
+    passwordInvalid: 'Välj ett starkare lösenord.',
+    firstNameTooLong: 'Ditt förnamn får vara högst 30 tecken.',
+    lastNameTooLong: 'Ditt efternamn får vara högst 30 tecken.',
+    screenNameTooLong: 'Ditt användarnamn får vara högst 30 tecken.',
+    mobileTooLong: 'Ditt mobilnummer får vara högst 12 tecken.',
+    vehiclePlateTooLong: 'Ditt registreringsnummer får vara högst 30 tecken.',
     pageNotFound: 'Sidan kan inte hittas',
     noValue: 'Inget värde',
     noData: 'Ingen data hittas',

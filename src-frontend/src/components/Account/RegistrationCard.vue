@@ -192,6 +192,15 @@
             {{ $t(errorExists as string) }}
           </q-banner>
 
+          <q-banner
+            v-if="validationErrors.length"
+            class="bg-negative text-white"
+          >
+            <ul class="q-my-none">
+              <li v-for="(msg, i) in validationErrors" :key="i">{{ msg }}</li>
+            </ul>
+          </q-banner>
+
           <p class="text-caption">
             {{ $t('registrationCard.alreadyAMember') }}
             <router-link
@@ -223,6 +232,7 @@ import { mapGetters } from 'vuex';
 import formMixin from '../../mixins/formMixin';
 import icons from '../../icons';
 import { defineComponent } from 'vue';
+import { i18n } from '../../boot/i18n';
 
 export default defineComponent({
   name: 'RegistrationCard',
@@ -232,6 +242,7 @@ export default defineComponent({
       failed: false,
       error: false,
       errorExists: false as boolean | string,
+      validationErrors: [] as string[],
       complete: false,
       buttonLoading: false,
       isPwd: true,
@@ -272,6 +283,7 @@ export default defineComponent({
     register() {
       this.errorExists = false;
       this.error = false;
+      this.validationErrors = [];
       this.buttonLoading = true;
 
       this.$axios
@@ -298,6 +310,21 @@ export default defineComponent({
           } else if (error.response?.status === 429) {
             this.errorExists = 'error.tooManyRequests';
             this.error = false;
+          } else if (error.response?.status === 400) {
+            // DRF serializer errors: { field: ['key', ...] } or
+            // { field: 'key' } — every value is an i18n key. Dedupe
+            // (a pwned + common password trips two validators) and
+            // translate for display.
+            const data = (error.response.data || {}) as Record<
+              string,
+              string | string[]
+            >;
+            const keys = [...new Set(Object.values(data).flat())];
+            this.validationErrors = keys.map(
+              (key) => i18n.global.t(key) as string,
+            );
+            this.error = this.validationErrors.length === 0;
+            this.errorExists = false;
           } else {
             this.error = true;
             this.errorExists = false;

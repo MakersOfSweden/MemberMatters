@@ -74,6 +74,24 @@ export default {
       "Sorry, we're having trouble performing that action. Please try again later.",
     tooManyRequests:
       'Too many attempts from your network. Please wait a little while and then try again.',
+    fieldRequired: 'Please fill in all required fields.',
+    emailTooLong: 'That email address is too long.',
+    passwordTooShort: 'Your password must be at least 8 characters long.',
+    passwordTooLong: 'Your password must be 128 characters or fewer.',
+    passwordTooCommon:
+      'That password is too common. Please choose a less predictable one.',
+    passwordEntirelyNumeric: "Your password can't be entirely numbers.",
+    passwordTooSimilar:
+      'Your password is too similar to your name or email address.',
+    passwordCompromised:
+      'That password has appeared in a known data breach. Please choose another.',
+    passwordInvalid: 'Please choose a stronger password.',
+    firstNameTooLong: 'Your first name must be 30 characters or fewer.',
+    lastNameTooLong: 'Your last name must be 30 characters or fewer.',
+    screenNameTooLong: 'Your screen name must be 30 characters or fewer.',
+    mobileTooLong: 'Your mobile number must be 12 characters or fewer.',
+    vehiclePlateTooLong:
+      'Your vehicle registration plate must be 30 characters or fewer.',
     pageNotFound: 'Page not found',
     noValue: 'No Value',
     noData: 'No records found',
