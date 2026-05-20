@@ -584,9 +584,7 @@ class MemberProfile(APIView):
 
         if (
             email
-            and User.objects.filter(email__iexact=email)
-            .exclude(pk=member.pk)
-            .exists()
+            and User.objects.filter(email__iexact=email).exclude(pk=member.pk).exists()
         ):
             return Response(
                 {"message": "error.accountAlreadyExists"},

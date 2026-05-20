@@ -7,13 +7,22 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('profile', '0022_screen_name_unique'),
+        ("profile", "0022_screen_name_unique"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='profile',
-            name='phone',
-            field=models.CharField(blank=True, max_length=16, validators=[django.core.validators.RegexValidator(message='Phone number must be in E.164 format, e.g. +61417123456.', regex='^\\+[1-9]\\d{1,14}$')]),
+            model_name="profile",
+            name="phone",
+            field=models.CharField(
+                blank=True,
+                max_length=16,
+                validators=[
+                    django.core.validators.RegexValidator(
+                        message="Phone number must be in E.164 format, e.g. +61417123456.",
+                        regex="^\\+[1-9]\\d{1,14}$",
+                    )
+                ],
+            ),
         ),
     ]

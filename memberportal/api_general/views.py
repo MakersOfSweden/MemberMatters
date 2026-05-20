@@ -889,9 +889,7 @@ class RegisterSerializer(serializers.Serializer):
                     attrs["mobile"], config.PROFILE_DEFAULT_PHONE_REGION
                 )
             except ValueError:
-                raise serializers.ValidationError(
-                    {"mobile": "validation.invalidPhone"}
-                )
+                raise serializers.ValidationError({"mobile": "validation.invalidPhone"})
 
         if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
             raise serializers.ValidationError(
