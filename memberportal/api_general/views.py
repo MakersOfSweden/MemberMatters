@@ -15,6 +15,7 @@ from django.utils.timezone import make_aware
 import datetime
 from pytz import UTC as utc
 from profile.models import User, Profile
+from profile.phone import to_e164
 
 from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
@@ -66,6 +67,7 @@ class GetConfig(APIView):
                 "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
                 "privacyPolicyText": config.SIGNUP_PRIVACY_POLICY_TEXT,
                 "requireScreenName": config.REQUIRE_SCREEN_NAME,
+                "defaultPhoneRegion": config.PROFILE_DEFAULT_PHONE_REGION,
             },
             "profile": {
                 "canEditBasicDetails": config.MEMBER_CAN_EDIT_BASIC_DETAILS,
@@ -536,6 +538,20 @@ class ProfileDetail(generics.GenericAPIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # Normalise the phone number to E.164 (only editable when
+        # can_edit_basic, so only validated then).
+        phone = ""
+        if can_edit_basic:
+            phone = (body.get("phone") or "").strip()
+            if phone:
+                try:
+                    phone = to_e164(phone, config.PROFILE_DEFAULT_PHONE_REGION)
+                except ValueError:
+                    return Response(
+                        {"message": "validation.invalidPhone"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         try:
             with transaction.atomic():
                 p.screen_name = screen_name
@@ -546,7 +562,7 @@ class ProfileDetail(generics.GenericAPIView):
                     request.user.email = email
                     p.first_name = body.get("firstName")
                     p.last_name = body.get("lastName")
-                    p.phone = body.get("phone")
+                    p.phone = phone
                     profile_fields += ["first_name", "last_name", "phone"]
                     request.user.save(update_fields=["email"])
 
@@ -829,7 +845,7 @@ class RegisterSerializer(serializers.Serializer):
     # validate() normalises that to "".
     mobile = serializers.CharField(
         required=False,
-        max_length=12,
+        max_length=16,
         allow_blank=True,
         allow_null=True,
         default="",
@@ -860,6 +876,17 @@ class RegisterSerializer(serializers.Serializer):
             if config.COLLECT_VEHICLE_REGISTRATION_PLATE
             else ""
         )
+
+        # Store the phone number in E.164 format.
+        if attrs["mobile"]:
+            try:
+                attrs["mobile"] = to_e164(
+                    attrs["mobile"], config.PROFILE_DEFAULT_PHONE_REGION
+                )
+            except ValueError:
+                raise serializers.ValidationError(
+                    {"mobile": "validation.invalidPhone"}
+                )
 
         if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
             raise serializers.ValidationError(

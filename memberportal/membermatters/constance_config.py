@@ -377,6 +377,10 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
     ),
+    "PROFILE_DEFAULT_PHONE_REGION": (
+        "AU",
+        "Default region (ISO-3166 alpha-2 code, e.g. AU or SE) used to interpret phone numbers entered without an international +country-code prefix. Numbers are stored in E.164 format.",
+    ),
     "SIGNUP_REQUIRE_PRIVACY_CONSENT": (
         False,
         "Display a checkbox on the signup page requiring the user to consent to the storage of their personal data before registering.",
@@ -543,7 +547,10 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
         ),
         (
             "Member Profile",
-            ("MEMBER_CAN_EDIT_BASIC_DETAILS",),
+            (
+                "MEMBER_CAN_EDIT_BASIC_DETAILS",
+                "PROFILE_DEFAULT_PHONE_REGION",
+            ),
         ),
         (
             "Moodle (LMS) Integration",

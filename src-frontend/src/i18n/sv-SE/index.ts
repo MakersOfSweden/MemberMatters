@@ -89,7 +89,7 @@ export default {
     firstNameTooLong: 'Ditt förnamn får vara högst 30 tecken.',
     lastNameTooLong: 'Ditt efternamn får vara högst 30 tecken.',
     screenNameTooLong: 'Ditt användarnamn får vara högst 30 tecken.',
-    mobileTooLong: 'Ditt mobilnummer får vara högst 12 tecken.',
+    mobileTooLong: 'Ditt mobilnummer får vara högst 16 tecken.',
     vehiclePlateTooLong: 'Ditt registreringsnummer får vara högst 30 tecken.',
     pageNotFound: 'Sidan kan inte hittas',
     noValue: 'Inget värde',

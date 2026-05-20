@@ -89,7 +89,7 @@ export default {
     firstNameTooLong: 'Your first name must be 30 characters or fewer.',
     lastNameTooLong: 'Your last name must be 30 characters or fewer.',
     screenNameTooLong: 'Your screen name must be 30 characters or fewer.',
-    mobileTooLong: 'Your mobile number must be 12 characters or fewer.',
+    mobileTooLong: 'Your mobile number must be 16 characters or fewer.',
     vehiclePlateTooLong:
       'Your vehicle registration plate must be 30 characters or fewer.',
     pageNotFound: 'Page not found',

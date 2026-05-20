@@ -25,6 +25,7 @@ from memberbucks.models import (
     MemberbucksProductPurchaseLog,
 )
 from profile.models import Profile, User, UserEventLog
+from profile.phone import to_e164
 from services import sms
 from services.emails import send_email_to_admin
 from .models import MemberTier, PaymentPlan
@@ -589,11 +590,22 @@ class MemberProfile(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # Store the phone number in E.164 format.
+        phone = (body.get("phone") or "").strip()
+        if phone:
+            try:
+                phone = to_e164(phone, config.PROFILE_DEFAULT_PHONE_REGION)
+            except ValueError:
+                return Response(
+                    {"message": "validation.invalidPhone"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         member.email = body.get("email")
         member.profile.first_name = body.get("firstName")
         member.profile.last_name = body.get("lastName")
         member.profile.rfid = rfid
-        member.profile.phone = body.get("phone")
+        member.profile.phone = phone
         member.profile.screen_name = screen_name
         member.profile.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
         member.profile.exclude_from_email_export = body.get("excludeFromEmailExport")
