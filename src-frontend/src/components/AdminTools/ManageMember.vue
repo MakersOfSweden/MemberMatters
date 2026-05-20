@@ -1476,7 +1476,8 @@ export default defineComponent({
         })
         .catch((err) => {
           const message = err?.response?.data?.message;
-          if (err?.response?.status === 409 && message) {
+          const status = err?.response?.status;
+          if ((status === 409 || status === 400) && message) {
             this.errorMessageKey = message;
           } else {
             this.genericError = true;
@@ -1627,10 +1628,16 @@ export default defineComponent({
         .then(() => {
           this.$emit('memberUpdated');
         })
-        .catch(() => {
+        .catch((err) => {
+          const message = err?.response?.data?.message;
+          const status = err?.response?.status;
+          const key =
+            (status === 409 || status === 400) && message
+              ? message
+              : 'error.requestFailed';
           this.$q.dialog({
             title: this.$t('error.error'),
-            message: this.$t('error.requestFailed'),
+            message: this.$t(key),
           });
         });
     },

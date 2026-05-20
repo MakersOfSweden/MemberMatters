@@ -191,7 +191,8 @@ export default {
         })
         .catch((err) => {
           const message = err?.response?.data?.message;
-          if (err?.response?.status === 409 && message) {
+          const status = err?.response?.status;
+          if ((status === 409 || status === 400) && message) {
             this.errorMessageKey = message;
           } else {
             this.genericError = true;
