@@ -63,16 +63,13 @@
         :label="
           requiredLabel(
             $t('form.screenName'),
-            features?.signup?.requireScreenName !== false,
+            features?.signup?.requireScreenName !== false
           )
         "
         lazy-rules
         :rules="
           features?.signup?.requireScreenName !== false
-            ? [
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-              ]
+            ? [(val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty')]
             : []
         "
       />
@@ -94,10 +91,7 @@
         {{ $t(errorMessageKey) }}
       </q-banner>
 
-      <q-banner
-        v-else-if="genericError"
-        class="bg-negative text-white q-mt-md"
-      >
+      <q-banner v-else-if="genericError" class="bg-negative text-white q-mt-md">
         {{ $t('error.requestFailed') }}
       </q-banner>
 
@@ -147,15 +141,9 @@ export default {
     canEditBasicDetails() {
       return this.features?.profile?.canEditBasicDetails !== false;
     },
-    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
-    // parsing locally-formatted numbers; fall back to the server's
-    // configured default.
+    // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
     phoneRegion() {
-      return (
-        navigator.language?.split('-')[1]?.toUpperCase() ||
-        this.features?.signup?.defaultPhoneRegion ||
-        'AU'
-      );
+      return this.features?.signup?.defaultPhoneRegion || 'AU';
     },
   },
   methods: {
@@ -179,7 +167,7 @@ export default {
       // Normalise to E.164 before posting; the backend re-validates.
       const phone = this.form.phone
         ? parsePhoneNumberFromString(this.form.phone, this.phoneRegion)?.format(
-            'E.164',
+            'E.164'
           ) ?? this.form.phone
         : this.form.phone;
 

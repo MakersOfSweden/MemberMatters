@@ -63,7 +63,7 @@
               :label="
                 requiredLabel(
                   $t('form.screenName'),
-                  features?.signup?.requireScreenName !== false,
+                  features?.signup?.requireScreenName !== false
                 )
               "
               lazy-rules
@@ -71,8 +71,7 @@
                 features?.signup?.requireScreenName !== false
                   ? [
                       (val) =>
-                        validateNotEmpty(val) ||
-                        $t('validation.cannotBeEmpty'),
+                        validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
                     ]
                   : []
               "
@@ -236,7 +235,10 @@ import formMixin from '../../mixins/formMixin';
 import icons from '../../icons';
 import { defineComponent } from 'vue';
 import { i18n } from '../../boot/i18n';
-import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import {
+  parsePhoneNumberFromString,
+  type CountryCode,
+} from 'libphonenumber-js';
 
 export default defineComponent({
   name: 'RegistrationCard',
@@ -272,15 +274,9 @@ export default defineComponent({
     icons() {
       return icons;
     },
-    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
-    // parsing locally-formatted numbers; fall back to the server's
-    // configured default.
+    // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
     phoneRegion(): string {
-      return (
-        navigator.language?.split('-')[1]?.toUpperCase() ||
-        this.features?.signup?.defaultPhoneRegion ||
-        'AU'
-      );
+      return this.features?.signup?.defaultPhoneRegion || 'AU';
     },
   },
   methods: {
@@ -304,7 +300,7 @@ export default defineComponent({
       const mobile = this.form.mobile
         ? parsePhoneNumberFromString(
             this.form.mobile,
-            this.phoneRegion as CountryCode,
+            this.phoneRegion as CountryCode
           )?.format('E.164') ?? this.form.mobile
         : this.form.mobile;
 
@@ -346,7 +342,7 @@ export default defineComponent({
             >;
             const keys = [...new Set(Object.values(data).flat())];
             this.validationErrors = keys.map(
-              (key) => i18n.global.t(key) as string,
+              (key) => i18n.global.t(key) as string
             );
             this.error = this.validationErrors.length === 0;
             this.errorExists = false;

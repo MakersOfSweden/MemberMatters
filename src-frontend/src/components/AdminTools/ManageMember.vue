@@ -200,7 +200,7 @@
                   :label="
                     requiredLabel(
                       $t('form.screenName'),
-                      features?.signup?.requireScreenName !== false,
+                      features?.signup?.requireScreenName !== false
                     )
                   "
                   lazy-rules
@@ -230,10 +230,7 @@
                   ]"
                 />
 
-                <q-banner
-                  v-if="success"
-                  class="bg-positive text-white q-mt-md"
-                >
+                <q-banner v-if="success" class="bg-positive text-white q-mt-md">
                   {{ $t('form.saved') }}
                 </q-banner>
 
@@ -1368,7 +1365,10 @@ import formatMixin from '@mixins/formatMixin';
 import { mapGetters } from 'vuex';
 import { MemberBillingInfo, MemberProfile, MemberState } from 'types/member';
 import { defineComponent } from 'vue';
-import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import {
+  parsePhoneNumberFromString,
+  type CountryCode,
+} from 'libphonenumber-js';
 
 export default defineComponent({
   name: 'ManageMember',
@@ -1443,8 +1443,10 @@ export default defineComponent({
     toE164Phone(value: string): string {
       if (!value) return value;
       return (
-        parsePhoneNumberFromString(value, this.phoneRegion as CountryCode)
-          ?.format('E.164') ?? value
+        parsePhoneNumberFromString(
+          value,
+          this.phoneRegion as CountryCode
+        )?.format('E.164') ?? value
       );
     },
     loadInitialForm() {
@@ -1680,15 +1682,9 @@ export default defineComponent({
   },
   computed: {
     ...mapGetters('config', ['siteLocaleCurrency', 'features']),
-    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
-    // parsing locally-formatted numbers; fall back to the server's
-    // configured default.
+    // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
     phoneRegion(): string {
-      return (
-        navigator.language?.split('-')[1]?.toUpperCase() ||
-        (this as any).features?.signup?.defaultPhoneRegion ||
-        'AU'
-      );
+      return (this as any).features?.signup?.defaultPhoneRegion || 'AU';
     },
     selectedMember() {
       if (this.members) {
