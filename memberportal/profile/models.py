@@ -243,10 +243,11 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
         )
 
     def email_membership_application(self):
-        subject = "Your membership application has been submitted"
-        message = "Thanks for submitting your membership application! Your membership application has been submitted and you are now a 'member applicant'. Your membership will be officially accepted shortly, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information."
+        if config.ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL:
+            subject = "Your membership application has been submitted"
+            message = "Thanks for submitting your membership application! Your membership application has been submitted and you are now a 'member applicant'. Your membership will be officially accepted shortly, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information."
 
-        self.email_notification(subject, message)
+            self.email_notification(subject, message)
 
         subject = f"A new person just became a member applicant: {self.profile.get_full_name()}"
         message = f"{self.profile.get_full_name()} just completed all steps required to sign up and is now a member applicant. Their site access has been enabled and membership will automatically be accepted within 7 days without objection."

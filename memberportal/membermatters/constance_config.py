@@ -393,6 +393,10 @@ CONSTANCE_CONFIG = {
         "",
         "Optional privacy policy text shown to the user in a popup on the signup page. Takes precedence over SIGNUP_PRIVACY_POLICY_URL if both are set. Leave empty to use the URL (or no link at all).",
     ),
+    "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL": (
+        True,
+        "Send the 'your membership application has been submitted' email to the user when they finish signup. Note: the admin notification about the new applicant is sent regardless. Disable this if you don't want to promise the unenforced 7-day review window described in that email.",
+    ),
     "ENABLE_PROXY_VOTING": (False, "Enables the proxy voting management feature."),
     "ENABLE_WEBCAMS": (
         False,
@@ -543,6 +547,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "SIGNUP_REQUIRE_PRIVACY_CONSENT",
                 "SIGNUP_PRIVACY_POLICY_URL",
                 "SIGNUP_PRIVACY_POLICY_TEXT",
+                "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL",
             ),
         ),
         (
