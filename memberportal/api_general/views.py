@@ -782,6 +782,8 @@ PASSWORD_VALIDATION_ERROR_KEYS = {
     "password_compromised": "error.passwordCompromised",
 }
 
+REQUIRE_MOBILE = True  # TODO: migrate to a constance flag
+
 
 class RegisterSerializer(serializers.Serializer):
     # Every error message is an i18n key resolved by the frontend, not
@@ -876,6 +878,9 @@ class RegisterSerializer(serializers.Serializer):
             if config.COLLECT_VEHICLE_REGISTRATION_PLATE
             else ""
         )
+
+        if REQUIRE_MOBILE and not attrs["mobile"]:
+            raise serializers.ValidationError({"mobile": "error.fieldRequired"})
 
         # Store the phone number in E.164 format.
         if attrs["mobile"]:

@@ -332,6 +332,9 @@ export default defineComponent({
           } else if (error.response?.status === 429) {
             this.errorExists = 'error.tooManyRequests';
             this.error = false;
+          } else if (error.response?.status === 503) {
+            this.errorExists = 'error.registrationClosed';
+            this.error = false;
           } else if (error.response?.status === 400) {
             // DRF serializer errors: { field: ['key', ...] } or
             // { field: 'key' } — every value is an i18n key. Dedupe
