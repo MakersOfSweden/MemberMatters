@@ -15,6 +15,7 @@ from django.utils.timezone import make_aware
 import datetime
 from pytz import UTC as utc
 from profile.models import User, Profile
+from profile.phone import to_e164
 
 from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
@@ -66,6 +67,7 @@ class GetConfig(APIView):
                 "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
                 "privacyPolicyText": config.SIGNUP_PRIVACY_POLICY_TEXT,
                 "requireScreenName": config.REQUIRE_SCREEN_NAME,
+                "defaultPhoneRegion": config.PROFILE_DEFAULT_PHONE_REGION,
             },
             "profile": {
                 "canEditBasicDetails": config.MEMBER_CAN_EDIT_BASIC_DETAILS,
@@ -350,10 +352,6 @@ class ResetPassword(APIView):
     throttle_classes = (ScopedRateThrottle,)
 
     def get_throttles(self):
-        # request-reset issues an email on every match — abuse vector,
-        # stays at 5/hour. validate/submit are also IP-throttled (token
-        # isn't checked before this point), but they have no email
-        # side-effect, so a roomier bucket for legitimate retries.
         if self.request.data.get("token"):
             self.throttle_scope = "password_reset_use"
         else:
@@ -540,6 +538,20 @@ class ProfileDetail(generics.GenericAPIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # Normalise the phone number to E.164 (only editable when
+        # can_edit_basic, so only validated then).
+        phone = ""
+        if can_edit_basic:
+            phone = (body.get("phone") or "").strip()
+            if phone:
+                try:
+                    phone = to_e164(phone, config.PROFILE_DEFAULT_PHONE_REGION)
+                except ValueError:
+                    return Response(
+                        {"message": "validation.invalidPhone"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         try:
             with transaction.atomic():
                 p.screen_name = screen_name
@@ -550,7 +562,7 @@ class ProfileDetail(generics.GenericAPIView):
                     request.user.email = email
                     p.first_name = body.get("firstName")
                     p.last_name = body.get("lastName")
-                    p.phone = body.get("phone")
+                    p.phone = phone
                     profile_fields += ["first_name", "last_name", "phone"]
                     request.user.save(update_fields=["email"])
 
@@ -760,25 +772,94 @@ class LoggedIn(APIView):
         return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
+# Maps Django password-validator error codes (AUTH_PASSWORD_VALIDATORS)
+# to frontend i18n keys; unknown codes fall back to error.passwordInvalid.
+PASSWORD_VALIDATION_ERROR_KEYS = {
+    "password_too_short": "error.passwordTooShort",
+    "password_too_common": "error.passwordTooCommon",
+    "password_entirely_numeric": "error.passwordEntirelyNumeric",
+    "password_too_similar": "error.passwordTooSimilar",
+    "password_compromised": "error.passwordCompromised",
+}
+
+REQUIRE_MOBILE = True  # TODO: migrate to a constance flag
+
+
 class RegisterSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True, max_length=255)
-    password = serializers.CharField(
-        required=True, write_only=True, min_length=8, max_length=128
+    # Every error message is an i18n key resolved by the frontend, not
+    # English text. Keep these in sync with the `error` block in
+    # src-frontend/src/i18n/*/index.ts.
+    email = serializers.EmailField(
+        required=True,
+        max_length=255,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "invalid": "validation.invalidEmail",
+            "max_length": "error.emailTooLong",
+        },
     )
-    firstName = serializers.CharField(required=True, max_length=30, allow_blank=False)
-    lastName = serializers.CharField(required=True, max_length=30, allow_blank=False)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        min_length=8,
+        max_length=128,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "min_length": "error.passwordTooShort",
+            "max_length": "error.passwordTooLong",
+        },
+    )
+    firstName = serializers.CharField(
+        required=True,
+        max_length=30,
+        allow_blank=False,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "max_length": "error.firstNameTooLong",
+        },
+    )
+    lastName = serializers.CharField(
+        required=True,
+        max_length=30,
+        allow_blank=False,
+        error_messages={
+            "required": "error.fieldRequired",
+            "null": "error.fieldRequired",
+            "blank": "error.fieldRequired",
+            "max_length": "error.lastNameTooLong",
+        },
+    )
     screenName = serializers.CharField(
         required=False,
         max_length=30,
         allow_blank=True,
         allow_null=True,
         default=None,
+        error_messages={"max_length": "error.screenNameTooLong"},
     )
+    # allow_null: the form posts null for fields it isn't collecting;
+    # validate() normalises that to "".
     mobile = serializers.CharField(
-        required=False, max_length=12, allow_blank=True, default=""
+        required=False,
+        max_length=16,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        error_messages={"max_length": "error.mobileTooLong"},
     )
     vehicleRegistrationPlate = serializers.CharField(
-        required=False, max_length=30, allow_blank=True, default=""
+        required=False,
+        max_length=30,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        error_messages={"max_length": "error.vehiclePlateTooLong"},
     )
 
     def validate_email(self, value):
@@ -788,6 +869,30 @@ class RegisterSerializer(serializers.Serializer):
         return (value or "").strip() or None
 
     def validate(self, attrs):
+        # A null mobile / vehicle plate (see allow_null above) becomes ""
+        # so the Profile row always gets a string, not None. The plate is
+        # also dropped entirely unless the site collects it.
+        attrs["mobile"] = (attrs.get("mobile") or "").strip()
+        attrs["vehicleRegistrationPlate"] = (
+            (attrs.get("vehicleRegistrationPlate") or "").strip()
+            if config.COLLECT_VEHICLE_REGISTRATION_PLATE
+            else ""
+        )
+
+        if REQUIRE_MOBILE and not attrs["mobile"]:
+            raise serializers.ValidationError({"mobile": "error.fieldRequired"})
+
+        # Store the phone number in E.164 format.
+        if attrs["mobile"]:
+            try:
+                attrs["mobile"] = to_e164(
+                    attrs["mobile"], config.PROFILE_DEFAULT_PHONE_REGION
+                )
+            except ValueError:
+                raise serializers.ValidationError(
+                    {"mobile": "validation.invalidPhone"}
+                )
+
         if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
             raise serializers.ValidationError(
                 {"screenName": "error.screenNameRequired"}
@@ -807,7 +912,17 @@ class RegisterSerializer(serializers.Serializer):
         try:
             validate_password(attrs["password"], user=pseudo_user)
         except DjangoValidationError as e:
-            raise serializers.ValidationError({"password": list(e.messages)})
+            # Map each validator's error code to an i18n key, de-duped
+            # (a pwned + common password trips two validators).
+            keys = list(
+                dict.fromkeys(
+                    PASSWORD_VALIDATION_ERROR_KEYS.get(
+                        err.code, "error.passwordInvalid"
+                    )
+                    for err in e.error_list
+                )
+            )
+            raise serializers.ValidationError({"password": keys})
 
         return attrs
 

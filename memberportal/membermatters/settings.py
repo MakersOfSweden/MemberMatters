@@ -344,6 +344,12 @@ LOGGING = {
     },
 }
 
+# Number of reverse proxies in front of Django, so DRF reads the real
+# client IP from X-Forwarded-For when throttling. If unset, all visitors
+# can collapse into one throttle bucket. Bundled nginx = 1; +1 per extra
+# layer (CapRover, Cloudflare).
+_num_proxies = os.environ.get("MM_NUM_PROXIES")
+
 REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "membermatters.custom_exception_handlers.fix_401",
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
@@ -352,13 +358,18 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+    "NUM_PROXIES": int(_num_proxies) if _num_proxies else None,
     "DEFAULT_THROTTLE_RATES": {
-        "register": "5/hour",
+        # Throttling keys off client IP, and legitimate signups share IPs
+        # (makerspace WiFi, CGNAT), so a low cap rejects real people. This
+        # just stops a trivial script — CAPTCHA (see Register view TODO)
+        # is the real abuse control. Override with MM_THROTTLE_REGISTER.
+        "register": os.environ.get("MM_THROTTLE_REGISTER", "60/hour"),
         # Split so a legitimate user clicking a reset email (validate +
         # submit, possibly with a refresh) doesn't share the same bucket
         # as the abuse path (unauthenticated "send me a reset email").
-        "password_reset_request": "5/hour",
-        "password_reset_use": "20/hour",
+        "password_reset_request": "10/hour",
+        "password_reset_use": "40/hour",
     },
 }
 

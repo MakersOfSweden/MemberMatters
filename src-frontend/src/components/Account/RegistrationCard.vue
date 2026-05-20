@@ -87,6 +87,9 @@
               :rules="[
                 (val) =>
                   validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                (val) =>
+                  validatePhone(val, phoneRegion) ||
+                  $t('validation.invalidPhone'),
               ]"
             />
 
@@ -192,6 +195,15 @@
             {{ $t(errorExists as string) }}
           </q-banner>
 
+          <q-banner
+            v-if="validationErrors.length"
+            class="bg-negative text-white"
+          >
+            <ul class="q-my-none">
+              <li v-for="(msg, i) in validationErrors" :key="i">{{ msg }}</li>
+            </ul>
+          </q-banner>
+
           <p class="text-caption">
             {{ $t('registrationCard.alreadyAMember') }}
             <router-link
@@ -223,6 +235,8 @@ import { mapGetters } from 'vuex';
 import formMixin from '../../mixins/formMixin';
 import icons from '../../icons';
 import { defineComponent } from 'vue';
+import { i18n } from '../../boot/i18n';
+import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 
 export default defineComponent({
   name: 'RegistrationCard',
@@ -232,6 +246,7 @@ export default defineComponent({
       failed: false,
       error: false,
       errorExists: false as boolean | string,
+      validationErrors: [] as string[],
       complete: false,
       buttonLoading: false,
       isPwd: true,
@@ -257,6 +272,16 @@ export default defineComponent({
     icons() {
       return icons;
     },
+    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
+    // parsing locally-formatted numbers; fall back to the server's
+    // configured default.
+    phoneRegion(): string {
+      return (
+        navigator.language?.split('-')[1]?.toUpperCase() ||
+        this.features?.signup?.defaultPhoneRegion ||
+        'AU'
+      );
+    },
   },
   methods: {
     onReset() {
@@ -272,7 +297,16 @@ export default defineComponent({
     register() {
       this.errorExists = false;
       this.error = false;
+      this.validationErrors = [];
       this.buttonLoading = true;
+
+      // Normalise to E.164 before posting; the backend re-validates.
+      const mobile = this.form.mobile
+        ? parsePhoneNumberFromString(
+            this.form.mobile,
+            this.phoneRegion as CountryCode,
+          )?.format('E.164') ?? this.form.mobile
+        : this.form.mobile;
 
       this.$axios
         .post('/api/register/', {
@@ -280,7 +314,7 @@ export default defineComponent({
           lastName: this.form.lastName,
           email: this.form.email,
           screenName: this.form.screenName,
-          mobile: this.form.mobile,
+          mobile,
           password: this.form.password,
           vehicleRegistrationPlate: this.form.vehicleRegistrationPlate,
         })
@@ -292,9 +326,30 @@ export default defineComponent({
           this.$router.push({ name: 'registerSuccess' });
         })
         .catch((error) => {
-          if (error.response.status === 409) {
+          if (error.response?.status === 409) {
             this.errorExists = error.response.data.message;
             this.error = false;
+          } else if (error.response?.status === 429) {
+            this.errorExists = 'error.tooManyRequests';
+            this.error = false;
+          } else if (error.response?.status === 503) {
+            this.errorExists = 'error.registrationClosed';
+            this.error = false;
+          } else if (error.response?.status === 400) {
+            // DRF serializer errors: { field: ['key', ...] } or
+            // { field: 'key' } — every value is an i18n key. Dedupe
+            // (a pwned + common password trips two validators) and
+            // translate for display.
+            const data = (error.response.data || {}) as Record<
+              string,
+              string | string[]
+            >;
+            const keys = [...new Set(Object.values(data).flat())];
+            this.validationErrors = keys.map(
+              (key) => i18n.global.t(key) as string,
+            );
+            this.error = this.validationErrors.length === 0;
+            this.errorExists = false;
           } else {
             this.error = true;
             this.errorExists = false;
