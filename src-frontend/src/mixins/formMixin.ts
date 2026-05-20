@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { isValidPhoneNumber, type CountryCode } from 'libphonenumber-js';
 
 export default {
   methods: {
@@ -28,6 +29,12 @@ export default {
     },
     validateMax30(value: string | number | null) {
       return value == null || value.toString().length <= 30;
+    },
+    validatePhone(value: string, region?: string) {
+      // Empty is "valid" here — required-ness is enforced by
+      // validateNotEmpty so this rule doesn't double-report.
+      if (!value) return true;
+      return isValidPhoneNumber(value, region as CountryCode | undefined);
     },
     requiredLabel(label: string, required = true): string {
       return required ? `${label} *` : label;

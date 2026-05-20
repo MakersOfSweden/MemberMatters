@@ -400,11 +400,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     first_name = models.CharField("First Name", max_length=30)
     last_name = models.CharField("Last Name", max_length=30)
     phone_regex = RegexValidator(
-        regex=r"^\+?1?\d{9,15}$",
-        message="Phone number must be entered in the format: '0417123456'."
-        "Up to 12 characters allowed.",
+        regex=r"^\+[1-9]\d{1,14}$",
+        message="Phone number must be in E.164 format, e.g. +61417123456.",
     )
-    phone = models.CharField(validators=[phone_regex], max_length=12, blank=True)
+    phone = models.CharField(validators=[phone_regex], max_length=16, blank=True)
     state = models.CharField(max_length=11, default="noob", choices=STATES)
     vehicle_registration_plate = models.CharField(max_length=30, blank=True, null=True)
 

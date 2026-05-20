@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("profile", "0022_screen_name_unique"),
+        ("profile", "0023_alter_profile_phone"),
     ]
 
     operations = [

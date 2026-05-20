@@ -3,7 +3,7 @@ import { boot } from 'quasar/wrappers';
 import type { MemberState } from '../pages/pageAndRouteConfig';
 
 export default boot(({ router, store }) => {
-  router.beforeEach((to, from, next) => {
+  router.beforeEach(async (to, from, next) => {
     // if we're in kiosk mode disallow certain pages
     if (Platform.is.electron) {
       if (!to.meta.kiosk) {
@@ -25,6 +25,23 @@ export default boot(({ router, store }) => {
           nextUrl: to.fullPath,
         },
       });
+    }
+
+    // The admin / allowedStates checks below fail closed against an empty
+    // profile. On a hard reload (or the post-login redirect to nextUrl)
+    // the user can be logged in before getProfile() has resolved — fetch
+    // it here so a valid member isn't bounced to an error page.
+    if (
+      (to.meta.admin === true || to.meta.allowedStates) &&
+      store.getters['profile/loggedIn'] === true &&
+      !store.getters['profile/profile']?.memberStatus
+    ) {
+      try {
+        await store.dispatch('profile/getProfile');
+      } catch {
+        // Profile fetch failed (e.g. the session expired) — send to login.
+        return next({ name: 'login', query: { nextUrl: to.fullPath } });
+      }
     }
 
     // Check if the user must be an admin to access the route
