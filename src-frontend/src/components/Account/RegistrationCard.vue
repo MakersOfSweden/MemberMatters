@@ -87,6 +87,9 @@
               :rules="[
                 (val) =>
                   validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                (val) =>
+                  validatePhone(val, phoneRegion) ||
+                  $t('validation.invalidPhone'),
               ]"
             />
 
@@ -233,6 +236,7 @@ import formMixin from '../../mixins/formMixin';
 import icons from '../../icons';
 import { defineComponent } from 'vue';
 import { i18n } from '../../boot/i18n';
+import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 
 export default defineComponent({
   name: 'RegistrationCard',
@@ -268,6 +272,16 @@ export default defineComponent({
     icons() {
       return icons;
     },
+    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
+    // parsing locally-formatted numbers; fall back to the server's
+    // configured default.
+    phoneRegion(): string {
+      return (
+        navigator.language?.split('-')[1]?.toUpperCase() ||
+        this.features?.signup?.defaultPhoneRegion ||
+        'AU'
+      );
+    },
   },
   methods: {
     onReset() {
@@ -286,13 +300,21 @@ export default defineComponent({
       this.validationErrors = [];
       this.buttonLoading = true;
 
+      // Normalise to E.164 before posting; the backend re-validates.
+      const mobile = this.form.mobile
+        ? parsePhoneNumberFromString(
+            this.form.mobile,
+            this.phoneRegion as CountryCode,
+          )?.format('E.164') ?? this.form.mobile
+        : this.form.mobile;
+
       this.$axios
         .post('/api/register/', {
           firstName: this.form.firstName,
           lastName: this.form.lastName,
           email: this.form.email,
           screenName: this.form.screenName,
-          mobile: this.form.mobile,
+          mobile,
           password: this.form.password,
           vehicleRegistrationPlate: this.form.vehicleRegistrationPlate,
         })

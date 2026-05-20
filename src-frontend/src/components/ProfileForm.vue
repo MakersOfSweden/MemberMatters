@@ -52,6 +52,8 @@
         lazy-rules
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+          (val) =>
+            validatePhone(val, phoneRegion) || $t('validation.invalidPhone'),
         ]"
       />
 
@@ -113,6 +115,7 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import formMixin from '../mixins/formMixin';
 
 export default {
@@ -144,6 +147,16 @@ export default {
     canEditBasicDetails() {
       return this.features?.profile?.canEditBasicDetails !== false;
     },
+    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
+    // parsing locally-formatted numbers; fall back to the server's
+    // configured default.
+    phoneRegion() {
+      return (
+        navigator.language?.split('-')[1]?.toUpperCase() ||
+        this.features?.signup?.defaultPhoneRegion ||
+        'AU'
+      );
+    },
   },
   methods: {
     ...mapActions('profile', ['getProfile']),
@@ -163,8 +176,15 @@ export default {
       this.errorMessageKey = null;
       this.saving = true;
 
+      // Normalise to E.164 before posting; the backend re-validates.
+      const phone = this.form.phone
+        ? parsePhoneNumberFromString(this.form.phone, this.phoneRegion)?.format(
+            'E.164',
+          ) ?? this.form.phone
+        : this.form.phone;
+
       this.$axios
-        .put('/api/profile/', this.form)
+        .put('/api/profile/', { ...this.form, phone })
         .then(() => {
           this.success = true;
           this.getProfile();

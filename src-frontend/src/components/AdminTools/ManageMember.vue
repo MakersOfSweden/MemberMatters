@@ -188,6 +188,9 @@
                   :rules="[
                     (val) =>
                       validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                    (val) =>
+                      validatePhone(val, phoneRegion) ||
+                      $t('validation.invalidPhone'),
                   ]"
                 />
 
@@ -1365,6 +1368,7 @@ import formatMixin from '@mixins/formatMixin';
 import { mapGetters } from 'vuex';
 import { MemberBillingInfo, MemberProfile, MemberState } from 'types/member';
 import { defineComponent } from 'vue';
+import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 
 export default defineComponent({
   name: 'ManageMember',
@@ -1433,6 +1437,16 @@ export default defineComponent({
     this.getMemberLogs();
   },
   methods: {
+    // Normalise a phone number to E.164 using the region computed
+    // above; returns the original string if it can't be parsed (the
+    // backend will then reject it).
+    toE164Phone(value: string): string {
+      if (!value) return value;
+      return (
+        parsePhoneNumberFromString(value, this.phoneRegion as CountryCode)
+          ?.format('E.164') ?? value
+      );
+    },
     loadInitialForm() {
       this.profileForm.email = this.selectedMember.email ?? '';
       this.profileForm.rfidCard = this.selectedMember.rfid ?? '';
@@ -1453,6 +1467,7 @@ export default defineComponent({
       this.$axios
         .put(`/api/admin/members/${this.member.id}/profile/`, {
           ...this.profileForm,
+          phone: this.toE164Phone(this.profileForm.phone),
           excludeFromEmailExport: this.selectedMember.excludeFromEmailExport,
         })
         .then(() => {
@@ -1607,6 +1622,7 @@ export default defineComponent({
         .put(`/api/admin/members/${this.member.id}/profile/`, {
           excludeFromEmailExport: !this.selectedMember.excludeFromEmailExport,
           ...this.profileForm,
+          phone: this.toE164Phone(this.profileForm.phone),
         })
         .then(() => {
           this.$emit('memberUpdated');
@@ -1657,6 +1673,16 @@ export default defineComponent({
   },
   computed: {
     ...mapGetters('config', ['siteLocaleCurrency', 'features']),
+    // Browser locale provides the region (e.g. 'sv-SE' → 'SE') for
+    // parsing locally-formatted numbers; fall back to the server's
+    // configured default.
+    phoneRegion(): string {
+      return (
+        navigator.language?.split('-')[1]?.toUpperCase() ||
+        (this as any).features?.signup?.defaultPhoneRegion ||
+        'AU'
+      );
+    },
     selectedMember() {
       if (this.members) {
         return (this.members as MemberProfile[]).find(
