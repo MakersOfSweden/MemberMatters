@@ -402,6 +402,13 @@ class PaymentPlanSignup(StripeAPIView):
             )
 
     def post(self, request, plan_id):
+        # Refuse before any Stripe call so a locked member can't pay into a void.
+        if request.user.profile.state_locked:
+            return Response(
+                {"success": False, "message": "billing.stateLocked"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Gate ONLY on this view: renewals (invoice.paid webhook), pending
         # invoices being paid, CompleteSignup for already-created subs, and
         # PaymentPlanResume for cancelling members must all keep working.
@@ -683,6 +690,11 @@ def _serialize_complete_signup(result: CompleteSignupResult) -> Response:
                 "items": result.required_steps,
             }
         )
+    if result.outcome == CompleteSignupOutcome.STATE_LOCKED:
+        return Response(
+            {"success": False, "message": "billing.stateLocked"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     # NO_SUBSCRIPTION
     return Response(
         {
@@ -887,6 +899,12 @@ class PaymentPlanResume(StripeAPIView):
     """
 
     def post(self, request):
+        if request.user.profile.state_locked:
+            return Response(
+                {"success": False, "message": "billing.stateLocked"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         current_plan = request.user.profile.membership_plan
 
         if not current_plan:
@@ -951,18 +969,21 @@ class PaymentPlanResume(StripeAPIView):
                     "",
                 )
 
-                return Response({"success": True})
+        if new_subscription.status == "active":
+            # Outside the atomic so complete_signup can take its own lock.
+            locked_profile.complete_signup(SignupTriggeredBy.SUBSCRIPTION_CREATED)
+            return Response({"success": True})
 
-            request.user.log_event(
-                f"Failed to create subscription in Stripe with status {new_subscription.status}.",
-                "stripe",
-                "",
-            )
+        request.user.log_event(
+            f"Failed to create subscription in Stripe with status {new_subscription.status}.",
+            "stripe",
+            "",
+        )
 
-            # Cancel the non-active sub so a retry doesn't duplicate it.
-            _cancel_failed_subscription(request.user, new_subscription.id)
+        # Cancel the non-active sub so a retry doesn't duplicate it.
+        _cancel_failed_subscription(request.user, new_subscription.id)
 
-            return Response({"success": False, "message": "signup.subscriptionFailed"})
+        return Response({"success": False, "message": "signup.subscriptionFailed"})
 
     def _resume_cancelling(self, request):
         # Lock so a concurrent webhook can't null stripe_subscription_id
@@ -1199,6 +1220,10 @@ class PaymentPlanCancel(StripeAPIView):
                     {"success": False, "message": "paymentPlan.notExists"},
                     status=status.HTTP_409_CONFLICT,
                 )
+
+            # Already scheduled to cancel — treat a repeat request as a no-op.
+            if locked_profile.subscription_status == "cancelling":
+                return Response({"success": True})
 
             # StripeError must be caught so the atomic commits cleanly and
             # the failure-email helper outside this block can fire.

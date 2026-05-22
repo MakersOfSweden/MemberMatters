@@ -578,15 +578,16 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 return CompleteSignupResult(CompleteSignupOutcome.STATE_LOCKED)
 
             if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
-                # Admin re-admission is the manual intervention the lock
-                # was waiting for — clear it so the member is never both
-                # active and locked (the state_locked invariant).
+                # An active member is never locked (the state_locked invariant).
                 if locked.state_locked:
                     locked.state_locked = False
                     locked.save(update_fields=["state_locked"])
                 locked.add_default_access()
             else:
-                if locked.subscription_status not in ("active", "pending"):
+                if (
+                    config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS
+                    and locked.subscription_status not in ("active", "pending")
+                ):
                     return CompleteSignupResult(CompleteSignupOutcome.NO_SUBSCRIPTION)
 
                 signup_check = locked.can_signup()
@@ -823,12 +824,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 capture_exception(e)
 
     def set_state_locked(self, locked, request=None):
-        # Standalone admin toggle for state_locked. Locking is only
-        # permitted for a settled non-member — a non-active member with
-        # no live Stripe subscription — which keeps the state_locked
-        # invariant (locked => not active, no live sub) intact. Unlocking
-        # is always allowed. Returns False if a lock was refused by that
-        # guard, True otherwise.
+        # Returns False if locking was refused; unlocking always succeeds.
         with transaction.atomic():
             profile = Profile.objects.select_for_update().get(pk=self.pk)
 
@@ -968,6 +964,8 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     @property
     def signup_stage(self):
         # Single source of truth for which signup view the frontend renders.
+        if self.state_locked and self.state != "active":
+            return "locked"
         if self.state == "accountonly":
             return "account_only"
         if self.state == "active":
@@ -1104,11 +1102,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         """Checks if a member can signup. Returns {"success": True/False, "reasons": [String<list of reasons>]}"""
         required_steps = []
 
-        # Match CompleteSignup's gate (api_billing/views.py:669) so callers
-        # that wire can_signup -> activate (PaymentPlanSignup, the page-level
-        # auto-trigger in MembershipPlan.vue) cannot activate a member who
-        # never paid.
-        if self.subscription_status not in ("active", "pending"):
+        if (
+            config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS
+            and self.subscription_status not in ("active", "pending")
+        ):
             required_steps.append("subscription")
 
         # First-time induction is always required when an induction
