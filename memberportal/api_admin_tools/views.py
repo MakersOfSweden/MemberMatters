@@ -79,40 +79,23 @@ class GetMembers(APIView):
         return Response(filtered)
 
 
-class MemberState(APIView):
+class MakeMember(APIView):
     """
-    get: This method gets a member's state.
-    post: This method sets a member's state.
+    post: Activate a member ("Make Member") — admin override.
+
+    Deactivation is not handled here — it flows through
+    MemberCancelMembership.
     """
 
     permission_classes = (permissions.IsAdminUser,)
 
-    def get(self, request, member_id, state=None):
+    def post(self, request, member_id):
         member = User.objects.get(id=member_id)
-
-        return Response({"state": member.profile.state})
-
-    def post(self, request, member_id, state):
-        member = User.objects.get(id=member_id)
-        # None = leave as-is; True/False = toggle the lock alongside this
-        # state change. Only admin paths can touch state_locked.
-        lock = request.data.get("lock")
-        if state == "active":
-            member.profile.complete_signup(
-                SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE,
-                request=request,
-                set_state_locked=lock,
-            )
-        elif state == "inactive":
-            member.profile.complete_cancel(
-                CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL,
-                request=request,
-                set_state_locked=lock,
-            )
-        else:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({"success": True})
+        result = member.profile.complete_signup(
+            SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE,
+            request=request,
+        )
+        return Response({"success": True, "outcome": result.outcome.value})
 
 
 class MemberAdminDisabledAccess(APIView):
@@ -121,8 +104,7 @@ class MemberAdminDisabledAccess(APIView):
 
     Orthogonal to state / subscription_status — flips the
     `admin_disabled_access` flag so an operator can revoke access during a
-    dispute or pause without cancelling billing. Body:
-      {"disabled": true|false, "lock": true|false|null}
+    dispute or pause without cancelling billing. Body: {"disabled": true|false}
     """
 
     permission_classes = (permissions.IsAdminUser,)
@@ -132,23 +114,20 @@ class MemberAdminDisabledAccess(APIView):
         disabled = request.data.get("disabled")
         if not isinstance(disabled, bool):
             return Response(status=status.HTTP_400_BAD_REQUEST)
-        lock = request.data.get("lock")
-        member.profile.set_admin_disabled_access(
-            disabled, request=request, set_state_locked=lock
-        )
+        member.profile.set_admin_disabled_access(disabled, request=request)
         return Response({"success": True})
 
 
 class MemberCancelMembership(StripeAPIView):
     """
-    post: Admin cancels a member's Stripe membership.
+    post: Admin cancels a member's membership.
 
-    Body: {"timing": "at_period_end" | "immediately", "lock": bool|null}
+    Body: {"timing": "at_period_end" | "immediately"}
 
-    Mirrors PaymentPlanCancel's two-branch shape, but admin-driven: Stripe
-    orchestration happens here, then complete_cancel(ADMIN_OVERRIDE_CANCEL)
-    reacts on the profile side. "immediately" records a "Xd Yh remaining"
-    audit entry so operators have the prorated-refund window handy.
+    With a live Stripe subscription, orchestrates the Stripe cancel here
+    then complete_cancel(ADMIN_OVERRIDE_CANCEL) reacts on the profile
+    side; "immediately" records a "Xd Yh remaining" audit entry. With no
+    live subscription, deactivates the member directly.
     """
 
     permission_classes = (permissions.IsAdminUser,)
@@ -157,6 +136,14 @@ class MemberCancelMembership(StripeAPIView):
         member = User.objects.get(id=member_id)
         profile = member.profile
 
+        # No live subscription (Stripe disabled, or never subscribed):
+        # nothing to cancel in Stripe, so just deactivate the member.
+        if not profile.stripe_subscription_id:
+            profile.complete_cancel(
+                CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL, request=request
+            )
+            return Response({"success": True})
+
         timing = request.data.get("timing", "at_period_end")
         if timing not in ("at_period_end", "immediately"):
             return Response(
@@ -164,19 +151,11 @@ class MemberCancelMembership(StripeAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        lock = request.data.get("lock")
-
-        if not profile.membership_plan or not profile.stripe_subscription_id:
-            return Response(
-                {"success": False, "message": "paymentPlan.notExists"},
-                status=status.HTTP_409_CONFLICT,
-            )
-
         if timing == "at_period_end":
-            return self._cancel_at_period_end(request, profile, lock)
-        return self._cancel_immediately(request, profile, lock)
+            return self._cancel_at_period_end(request, profile)
+        return self._cancel_immediately(request, profile)
 
-    def _cancel_at_period_end(self, request, profile, lock):
+    def _cancel_at_period_end(self, request, profile):
         # Schedule cancel-at-period-end on Stripe. complete_cancel is NOT
         # called yet — the actual deactivation flows through
         # customer.subscription.deleted when the period ends.
@@ -202,12 +181,8 @@ class MemberCancelMembership(StripeAPIView):
                 if not modified.cancel_at_period_end:
                     failed = True
                 else:
-                    update_fields = ["subscription_status"]
                     locked.subscription_status = "cancelling"
-                    if lock is not None and locked.state_locked != lock:
-                        locked.state_locked = lock
-                        update_fields.append("state_locked")
-                    locked.save(update_fields=update_fields)
+                    locked.save(update_fields=["subscription_status"])
 
                     locked.user.log_event(
                         f"Admin scheduled membership cancellation at "
@@ -215,11 +190,11 @@ class MemberCancelMembership(StripeAPIView):
                         "admin",
                     )
 
-                    member_subject = "Your membership has been cancelled"
+                    member_subject = "Your membership cancellation is scheduled"
                     member_message = (
-                        "An admin has cancelled your membership. Your "
-                        "access will continue until the end of the current "
-                        "billing period."
+                        "An admin has scheduled your membership to cancel at "
+                        "the end of the current billing period. Your access "
+                        "continues until then."
                     )
                     admin_subject = (
                         f"{request.user.get_full_name()} cancelled "
@@ -255,7 +230,7 @@ class MemberCancelMembership(StripeAPIView):
             _email_admin_cancel_failed(request.user)
         return Response({"success": False})
 
-    def _cancel_immediately(self, request, profile, lock):
+    def _cancel_immediately(self, request, profile):
         # Immediate cancel: capture period_end for the audit "Xd Yh remaining"
         # line, do Stripe-side cleanup (void invoices + Subscription.delete)
         # on_commit, then call complete_cancel(ADMIN_OVERRIDE_CANCEL) for the
@@ -363,12 +338,11 @@ class MemberCancelMembership(StripeAPIView):
 
             transaction.on_commit(_on_commit_stripe_cleanup)
 
-            def _on_commit_complete_cancel(profile=locked, lock=lock):
+            def _on_commit_complete_cancel(profile=locked):
                 try:
                     profile.complete_cancel(
                         CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL,
                         request=request,
-                        set_state_locked=lock,
                     )
                 except Exception as e:
                     capture_exception(e)

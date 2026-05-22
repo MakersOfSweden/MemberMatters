@@ -6,9 +6,9 @@ from . import views
 urlpatterns = [
     path("api/admin/members/", views.GetMembers.as_view(), name="GetMembers"),
     path(
-        "api/admin/members/<int:member_id>/state/<str:state>/",
-        views.MemberState.as_view(),
-        name="MemberState",
+        "api/admin/members/<int:member_id>/make-member/",
+        views.MakeMember.as_view(),
+        name="MakeMember",
     ),
     path(
         "api/admin/members/<int:member_id>/admin-disabled-access/",

@@ -470,6 +470,7 @@ class ProfileDetail(generics.GenericAPIView):
             "phone": p.phone,
             "memberStatus": p.state,
             "signupStage": p.signup_stage,
+            "adminDisabledAccess": p.admin_disabled_access,
             "vehicleRegistrationPlate": p.vehicle_registration_plate,
             "lastInduction": p.last_induction,
             "lastSeen": p.last_seen,

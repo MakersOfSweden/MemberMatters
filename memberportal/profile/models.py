@@ -280,8 +280,8 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
     def email_disable_member_access(self):
         return self.email_notification(
             f"Your {config.SITE_OWNER} site access has been disabled.",
-            f"Your access to {config.SITE_OWNER} has been disabled. This could be due to many reasons, but is "
-            f"usually due to a failed membership payment. If this is unexpected, please let us know.",
+            f"Your access to {config.SITE_OWNER} has been disabled. "
+            f"If this is unexpected, please let us know.",
         )
 
     def email_enable_member_access(self):
@@ -558,14 +558,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         except Exception as e:
             capture_exception(e)
 
-    def complete_signup(self, triggered_by, request=None, set_state_locked=None):
+    def complete_signup(self, triggered_by, request=None):
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             previous_state = locked.state
-
-            if set_state_locked is not None:
-                locked.state_locked = set_state_locked
-                locked.save(update_fields=["state_locked"])
 
             if locked.state == "active":
                 return CompleteSignupResult(CompleteSignupOutcome.ALREADY_ACTIVE)
@@ -698,14 +694,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         self.sync_access()
         return True
 
-    def complete_cancel(self, triggered_by, request=None, set_state_locked=None):
+    def complete_cancel(self, triggered_by, request=None):
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             previous_state = locked.state
-
-            if set_state_locked is not None:
-                locked.state_locked = set_state_locked
-                locked.save(update_fields=["state_locked"])
 
             if previous_state in ("inactive", "accountonly"):
                 return CompleteCancelResult(
@@ -765,23 +757,16 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             previous_state="active",
         )
 
-    def set_admin_disabled_access(self, disabled, request=None, set_state_locked=None):
+    def set_admin_disabled_access(self, disabled, request=None):
         # Admin-only toggle for the access pause (orthogonal to state /
-        # subscription). Also accepts set_state_locked so the dialog's
-        # "Lock state?" checkbox can be applied alongside.
+        # subscription).
         with transaction.atomic():
             locked = Profile.objects.select_for_update().get(pk=self.pk)
             was_disabled = locked.admin_disabled_access
 
-            update_fields = []
             if locked.admin_disabled_access != disabled:
                 locked.admin_disabled_access = disabled
-                update_fields.append("admin_disabled_access")
-            if set_state_locked is not None and locked.state_locked != set_state_locked:
-                locked.state_locked = set_state_locked
-                update_fields.append("state_locked")
-            if update_fields:
-                locked.save(update_fields=update_fields)
+                locked.save(update_fields=["admin_disabled_access"])
 
             if request and was_disabled != disabled:
                 action = "paused" if disabled else "resumed"
