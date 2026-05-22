@@ -120,6 +120,15 @@
           >
             <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
           </q-icon>
+          <q-icon
+            v-if="props.row.adminDisabledAccess"
+            :name="icons.accessDisabled"
+            color="negative"
+            size="sm"
+            class="q-ml-xs"
+          >
+            <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
+          </q-icon>
         </q-td>
       </template>
     </q-table>

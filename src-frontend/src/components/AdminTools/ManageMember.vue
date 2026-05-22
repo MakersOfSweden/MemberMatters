@@ -12,6 +12,15 @@
       >
         <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
       </q-icon>
+      <q-icon
+        v-if="selectedMember.adminDisabledAccess"
+        :name="icons.accessDisabled"
+        color="negative"
+        size="md"
+        class="q-ml-sm"
+      >
+        <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
+      </q-icon>
     </h3>
     <q-card
       class="q-mb-none"
@@ -43,9 +52,6 @@
               :color="
                 selectedMember.adminDisabledAccess ? 'positive' : 'warning'
               "
-              :icon="
-                selectedMember.adminDisabledAccess ? icons.lock : undefined
-              "
               :label="
                 selectedMember.adminDisabledAccess
                   ? $t('adminTools.resumeAccess')
@@ -55,30 +61,39 @@
               @click="openToggleAccessDialog"
             />
             <q-btn
+              v-if="isSettledNonMember"
               class="q-mr-sm q-mb-sm"
-              :color="
-                selectedMember.state === 'active' ? 'negative' : 'primary'
-              "
-              :label="
-                selectedMember.state === 'active'
-                  ? $t('adminTools.deactivate')
-                  : $t('adminTools.activate')
-              "
-              :loading="adminDialogs.stateChange.loading"
-              @click="openStateChangeDialog"
+              color="primary"
+              :label="$t('adminTools.makeMember')"
+              :loading="adminDialogs.makeMember.loading"
+              @click="openMakeMemberDialog"
             />
             <q-btn
-              v-if="
-                selectedMember.subscriptionStatus === 'active' ||
-                selectedMember.subscriptionStatus === 'pending' ||
-                selectedMember.subscriptionStatus === 'cancelling'
-              "
+              v-else
               class="q-mr-sm q-mb-sm"
               color="negative"
               :label="$t('adminTools.cancelMembership')"
               :loading="adminDialogs.cancelMembership.loading"
               @click="openCancelMembershipDialog"
             />
+            <q-btn
+              class="q-mr-sm q-mb-sm"
+              :color="selectedMember.stateLocked ? 'positive' : 'grey-7'"
+              :label="
+                selectedMember.stateLocked
+                  ? $t('adminTools.unlockAccount')
+                  : $t('adminTools.lockAccount')
+              "
+              :disable="!selectedMember.stateLocked && !isSettledNonMember"
+              :loading="adminDialogs.lock.loading"
+              @click="openLockDialog"
+            >
+              <q-tooltip
+                v-if="!selectedMember.stateLocked && !isSettledNonMember"
+              >
+                {{ $t('adminTools.lockUnavailableTooltip') }}
+              </q-tooltip>
+            </q-btn>
 
             <q-btn-dropdown
               class="q-mr-sm q-mb-sm"
@@ -1312,13 +1327,6 @@
                 : $t('adminTools.pauseAccessDescription')
             }}
           </p>
-          <q-checkbox
-            v-model="adminDialogs.toggleAccess.lock"
-            :label="$t('adminTools.lockStateCheckbox')"
-          />
-          <p class="text-caption text-grey-7 q-mt-sm">
-            {{ $t('adminTools.lockStateHelp') }}
-          </p>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn
@@ -1337,57 +1345,27 @@
       </q-card>
     </q-dialog>
 
-    <!-- Activate / Deactivate state dialog -->
-    <q-dialog v-model="adminDialogs.stateChange.isOpen">
+    <!-- Make Member dialog -->
+    <q-dialog v-model="adminDialogs.makeMember.isOpen">
       <q-card style="min-width: 360px">
         <q-card-section>
-          <div class="text-h6">
-            {{
-              selectedMember.state === 'active'
-                ? $t('adminTools.deactivateTitle')
-                : $t('adminTools.activateTitle')
-            }}
-          </div>
+          <div class="text-h6">{{ $t('adminTools.makeMemberTitle') }}</div>
         </q-card-section>
-        <q-banner
-          v-if="selectedMember.stateLocked"
-          dense
-          class="bg-warning text-white q-mx-md"
-          :icon="icons.lock"
-        >
-          <template v-slot:avatar>
-            <q-icon :name="icons.lock" />
-          </template>
-          {{ $t('adminTools.lockedWarning') }}
-        </q-banner>
         <q-card-section class="q-pt-none">
-          <p>
-            {{
-              selectedMember.state === 'active'
-                ? $t('adminTools.deactivateDescription')
-                : $t('adminTools.activateDescription')
-            }}
-          </p>
-          <q-checkbox
-            v-model="adminDialogs.stateChange.lock"
-            :label="$t('adminTools.lockStateCheckbox')"
-          />
-          <p class="text-caption text-grey-7 q-mt-sm">
-            {{ $t('adminTools.lockStateHelp') }}
-          </p>
+          <p>{{ $t('adminTools.makeMemberDescription') }}</p>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn
             flat
             :label="$t('button.cancel')"
-            :disable="adminDialogs.stateChange.loading"
+            :disable="adminDialogs.makeMember.loading"
             v-close-popup
           />
           <q-btn
             color="primary"
             :label="$t('button.confirm')"
-            :loading="adminDialogs.stateChange.loading"
-            @click="submitStateChange"
+            :loading="adminDialogs.makeMember.loading"
+            @click="submitMakeMember"
           />
         </q-card-actions>
       </q-card>
@@ -1401,42 +1379,26 @@
             {{ $t('adminTools.cancelMembershipTitle') }}
           </div>
         </q-card-section>
-        <q-banner
-          v-if="selectedMember.stateLocked"
-          dense
-          class="bg-warning text-white q-mx-md"
-        >
-          <template v-slot:avatar>
-            <q-icon :name="icons.lock" />
-          </template>
-          {{ $t('adminTools.lockedWarning') }}
-        </q-banner>
         <q-card-section class="q-pt-none">
           <p>{{ $t('adminTools.cancelMembershipDescription') }}</p>
-          <div class="q-mb-sm text-weight-medium">
-            {{ $t('adminTools.cancelTimingLabel') }}
-          </div>
-          <q-option-group
-            v-model="adminDialogs.cancelMembership.timing"
-            :options="[
-              {
-                label: $t('adminTools.cancelTimingAtPeriodEnd'),
-                value: 'at_period_end',
-              },
-              {
-                label: $t('adminTools.cancelTimingImmediately'),
-                value: 'immediately',
-              },
-            ]"
-          />
-          <q-checkbox
-            v-model="adminDialogs.cancelMembership.lock"
-            :label="$t('adminTools.lockStateCheckbox')"
-            class="q-mt-md"
-          />
-          <p class="text-caption text-grey-7 q-mt-sm">
-            {{ $t('adminTools.lockStateHelp') }}
-          </p>
+          <template v-if="hasLiveSub">
+            <div class="q-mb-sm text-weight-medium">
+              {{ $t('adminTools.cancelTimingLabel') }}
+            </div>
+            <q-option-group
+              v-model="adminDialogs.cancelMembership.timing"
+              :options="[
+                {
+                  label: $t('adminTools.cancelTimingAtPeriodEnd'),
+                  value: 'at_period_end',
+                },
+                {
+                  label: $t('adminTools.cancelTimingImmediately'),
+                  value: 'immediately',
+                },
+              ]"
+            />
+          </template>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn
@@ -1450,6 +1412,44 @@
             :label="$t('button.confirm')"
             :loading="adminDialogs.cancelMembership.loading"
             @click="submitCancelMembership"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Lock / Unlock account dialog -->
+    <q-dialog v-model="adminDialogs.lock.isOpen">
+      <q-card style="min-width: 360px">
+        <q-card-section>
+          <div class="text-h6">
+            {{
+              selectedMember.stateLocked
+                ? $t('adminTools.unlockAccountTitle')
+                : $t('adminTools.lockAccountTitle')
+            }}
+          </div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <p>
+            {{
+              selectedMember.stateLocked
+                ? $t('adminTools.unlockAccountDescription')
+                : $t('adminTools.lockAccountDescription')
+            }}
+          </p>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('button.cancel')"
+            :disable="adminDialogs.lock.loading"
+            v-close-popup
+          />
+          <q-btn
+            color="primary"
+            :label="$t('button.confirm')"
+            :loading="adminDialogs.lock.loading"
+            @click="submitLock"
           />
         </q-card-actions>
       </q-card>
@@ -1578,14 +1578,14 @@ export default defineComponent({
   data() {
     return {
       adminDialogs: {
-        toggleAccess: { isOpen: false, lock: false, loading: false },
-        stateChange: { isOpen: false, lock: false, loading: false },
+        toggleAccess: { isOpen: false, loading: false },
+        makeMember: { isOpen: false, loading: false },
         cancelMembership: {
           isOpen: false,
-          lock: false,
           loading: false,
           timing: 'at_period_end',
         },
+        lock: { isOpen: false, loading: false },
       },
       welcomeLoading: false,
       ensureStripeLoading: false,
@@ -1763,25 +1763,17 @@ export default defineComponent({
         });
     },
     openToggleAccessDialog() {
-      this.adminDialogs.toggleAccess.lock = this.selectedMember.stateLocked;
       this.adminDialogs.toggleAccess.isOpen = true;
     },
     submitToggleAccess() {
       this.adminDialogs.toggleAccess.loading = true;
-      const wasLocked = this.selectedMember.stateLocked;
-      const newLock = this.adminDialogs.toggleAccess.lock;
       this.$axios
-        .post(
-          `/api/admin/members/${this.member.id}/admin-disabled-access/`,
-          {
-            disabled: !this.selectedMember.adminDisabledAccess,
-            lock: newLock,
-          }
-        )
+        .post(`/api/admin/members/${this.member.id}/admin-disabled-access/`, {
+          disabled: !this.selectedMember.adminDisabledAccess,
+        })
         .then(() => {
           this.adminDialogs.toggleAccess.isOpen = false;
           this.$emit('memberUpdated');
-          this.maybePromptReconcile(wasLocked, newLock);
         })
         .catch(() => {
           this.$q.dialog({
@@ -1795,24 +1787,16 @@ export default defineComponent({
           }, 1200);
         });
     },
-    openStateChangeDialog() {
-      this.adminDialogs.stateChange.lock = this.selectedMember.stateLocked;
-      this.adminDialogs.stateChange.isOpen = true;
+    openMakeMemberDialog() {
+      this.adminDialogs.makeMember.isOpen = true;
     },
-    submitStateChange() {
-      this.adminDialogs.stateChange.loading = true;
-      const wasLocked = this.selectedMember.stateLocked;
-      const newLock = this.adminDialogs.stateChange.lock;
-      const newState =
-        this.selectedMember.state === 'active' ? 'inactive' : 'active';
+    submitMakeMember() {
+      this.adminDialogs.makeMember.loading = true;
       this.$axios
-        .post(`/api/admin/members/${this.member.id}/state/${newState}/`, {
-          lock: newLock,
-        })
+        .post(`/api/admin/members/${this.member.id}/make-member/`)
         .then(() => {
-          this.adminDialogs.stateChange.isOpen = false;
+          this.adminDialogs.makeMember.isOpen = false;
           this.$emit('memberUpdated');
-          this.maybePromptReconcile(wasLocked, newLock);
         })
         .catch(() => {
           this.$q.dialog({
@@ -1822,32 +1806,23 @@ export default defineComponent({
         })
         .finally(() => {
           setTimeout(() => {
-            this.adminDialogs.stateChange.loading = false;
+            this.adminDialogs.makeMember.loading = false;
           }, 1200);
         });
     },
     openCancelMembershipDialog() {
-      this.adminDialogs.cancelMembership.lock =
-        this.selectedMember.stateLocked;
       this.adminDialogs.cancelMembership.timing = 'at_period_end';
       this.adminDialogs.cancelMembership.isOpen = true;
     },
     submitCancelMembership() {
       this.adminDialogs.cancelMembership.loading = true;
-      const wasLocked = this.selectedMember.stateLocked;
-      const newLock = this.adminDialogs.cancelMembership.lock;
       this.$axios
-        .post(
-          `/api/admin/members/${this.member.id}/cancel-membership/`,
-          {
-            timing: this.adminDialogs.cancelMembership.timing,
-            lock: newLock,
-          }
-        )
+        .post(`/api/admin/members/${this.member.id}/cancel-membership/`, {
+          timing: this.adminDialogs.cancelMembership.timing,
+        })
         .then(() => {
           this.adminDialogs.cancelMembership.isOpen = false;
           this.$emit('memberUpdated');
-          this.maybePromptReconcile(wasLocked, newLock);
         })
         .catch(() => {
           this.$q.dialog({
@@ -1861,51 +1836,29 @@ export default defineComponent({
           }, 1200);
         });
     },
-    maybePromptReconcile(wasLocked: boolean, newLock: boolean) {
-      // Sketch's "unlock side effect": when admin clears state_locked on a
-      // member whose state and subscription_status disagree in a load-
-      // bearing way, prompt to reconcile. We only flag the two
-      // load-bearing mismatches; pending/cancelling are normal mid-flow
-      // states and don't trigger:
-      //   - billing active but state isn't → re-run activation
-      //   - state active but no billing    → run deactivation
-      if (!wasLocked || newLock) return;
-      const m = this.selectedMember;
-      let target: 'active' | 'inactive' | null = null;
-      if (m.subscriptionStatus === 'active' && m.state !== 'active') {
-        target = 'active';
-      } else if (
-        m.subscriptionStatus === 'inactive' &&
-        m.state === 'active'
-      ) {
-        target = 'inactive';
-      }
-      if (!target) return;
-      this.$q
-        .dialog({
-          title: this.$t('adminTools.reconcileTitle'),
-          message: this.$t(
-            target === 'active'
-              ? 'adminTools.reconcileMessageActivate'
-              : 'adminTools.reconcileMessageDeactivate',
-            { state: m.state, subscriptionStatus: m.subscriptionStatus }
-          ),
-          ok: { label: this.$t('button.confirm'), color: 'primary' },
-          cancel: { label: this.$t('button.cancel'), flat: true },
+    openLockDialog() {
+      this.adminDialogs.lock.isOpen = true;
+    },
+    submitLock() {
+      this.adminDialogs.lock.loading = true;
+      this.$axios
+        .post(`/api/admin/members/${this.member.id}/state-lock/`, {
+          locked: !this.selectedMember.stateLocked,
         })
-        .onOk(() => {
-          this.$axios
-            .post(
-              `/api/admin/members/${this.member.id}/state/${target}/`,
-              { lock: false }
-            )
-            .then(() => this.$emit('memberUpdated'))
-            .catch(() => {
-              this.$q.dialog({
-                title: this.$t('error.error'),
-                message: this.$t('error.requestFailed'),
-              });
-            });
+        .then(() => {
+          this.adminDialogs.lock.isOpen = false;
+          this.$emit('memberUpdated');
+        })
+        .catch(() => {
+          this.$q.dialog({
+            title: this.$t('error.error'),
+            message: this.$t('error.requestFailed'),
+          });
+        })
+        .finally(() => {
+          setTimeout(() => {
+            this.adminDialogs.lock.loading = false;
+          }, 1200);
         });
     },
     optOutEmailExport() {
@@ -1988,6 +1941,17 @@ export default defineComponent({
       // @ts-ignore
       delete newMember.access;
       return newMember;
+    },
+    // A settled non-member: not active and without a live subscription.
+    // Button 2 reads "Make Member" for these; the Lock button is enabled.
+    isSettledNonMember(): boolean {
+      return (
+        this.selectedMember.state !== 'active' &&
+        this.selectedMember.subscriptionStatus === 'inactive'
+      );
+    },
+    hasLiveSub(): boolean {
+      return this.selectedMember.subscriptionStatus !== 'inactive';
     },
     icons() {
       return icons;
