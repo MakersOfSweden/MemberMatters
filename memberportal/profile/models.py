@@ -797,7 +797,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
         if disabled:
             try:
-                self.user.email_disable_member.access()
+                self.user.email_disable_member_access()
             except Exception as e:
                 capture_exception(e)
             try:
