@@ -578,6 +578,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 return CompleteSignupResult(CompleteSignupOutcome.STATE_LOCKED)
 
             if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
+                # Admin re-admission is the manual intervention the lock
+                # was waiting for — clear it so the member is never both
+                # active and locked (the state_locked invariant).
+                if locked.state_locked:
+                    locked.state_locked = False
+                    locked.save(update_fields=["state_locked"])
                 locked.add_default_access()
             else:
                 if locked.subscription_status not in ("active", "pending"):
@@ -631,8 +637,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 locked.add_default_access()
 
         self.activate(request)
+        trigger_label = getattr(triggered_by, "value", str(triggered_by))
         self.user.log_event(
-            f"Activated via {triggered_by.value} (from {previous_state}).",
+            f"Activated via {trigger_label} (from {previous_state}).",
             "profile",
         )
         return CompleteSignupResult(CompleteSignupOutcome.ACTIVATED)
@@ -747,8 +754,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 )
 
         self.deactivate(request)
+        trigger_label = getattr(triggered_by, "value", str(triggered_by))
         self.user.log_event(
-            f"Cancelled via {triggered_by.value}.",
+            f"Cancelled via {trigger_label}.",
             "profile",
         )
         return CompleteCancelResult(
@@ -813,6 +821,40 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 sms.SMS().send_activated_access(self.phone)
             except Exception as e:
                 capture_exception(e)
+
+    def set_state_locked(self, locked, request=None):
+        # Standalone admin toggle for state_locked. Locking is only
+        # permitted for a settled non-member — a non-active member with
+        # no live Stripe subscription — which keeps the state_locked
+        # invariant (locked => not active, no live sub) intact. Unlocking
+        # is always allowed. Returns False if a lock was refused by that
+        # guard, True otherwise.
+        with transaction.atomic():
+            profile = Profile.objects.select_for_update().get(pk=self.pk)
+
+            if locked and (
+                profile.state == "active" or profile.subscription_status != "inactive"
+            ):
+                return False
+
+            if profile.state_locked == locked:
+                self.state_locked = locked
+                return True
+
+            profile.state_locked = locked
+            profile.save(update_fields=["state_locked"])
+
+            action = "locked" if locked else "unlocked"
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} {action} the "
+                    f"account state for {self.get_full_name()}.",
+                    "admin",
+                )
+            self.user.log_event(f"Account state {action} by admin.", "admin")
+
+        self.state_locked = locked
+        return True
 
     def activate(self, request=None, on_transition=None):
         # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup

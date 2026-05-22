@@ -16,6 +16,11 @@ urlpatterns = [
         name="MemberAdminDisabledAccess",
     ),
     path(
+        "api/admin/members/<int:member_id>/state-lock/",
+        views.MemberStateLock.as_view(),
+        name="MemberStateLock",
+    ),
+    path(
         "api/admin/members/<int:member_id>/cancel-membership/",
         views.MemberCancelMembership.as_view(),
         name="MemberCancelMembership",

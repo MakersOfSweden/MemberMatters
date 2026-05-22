@@ -378,6 +378,32 @@ class MemberCancelMembership(StripeAPIView):
         return Response({"success": True})
 
 
+class MemberStateLock(APIView):
+    """
+    post: Lock or unlock a member's state against automated changes.
+
+    Body: {"locked": true|false}. Locking is refused (409) for an active
+    member or one with a live subscription — see Profile.set_state_locked
+    and the state_locked invariant.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = User.objects.get(id=member_id)
+        locked = request.data.get("locked")
+        if not isinstance(locked, bool):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        if not member.profile.set_state_locked(locked, request=request):
+            return Response(
+                {"success": False, "message": "adminTools.lockNotAllowed"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response({"success": True})
+
+
 class Doors(APIView):
     """
     get: returns a list of doors.
