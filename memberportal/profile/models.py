@@ -521,6 +521,17 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         for interlock in Interlock.objects.filter(all_members=True):
             self.interlocks.add(interlock)
 
+    def remove_default_access(self):
+        # Remove pre-staged default-access rows on a cancellation path that
+        # bypasses deactivate() (noob / accountonly cancel). Targeted
+        # .remove() preserves bespoke admin grants (rows whose
+        # Doors/Interlock has all_members=False) — see L15 in BUGS_FOUND.md
+        # for why blanket .clear() is the wrong shape.
+        from access.models import Doors, Interlock
+
+        self.doors.remove(*Doors.objects.filter(all_members=True))
+        self.interlocks.remove(*Interlock.objects.filter(all_members=True))
+
     def _log_state_lock_refusal(self, triggered_by, action):
         # Four sinks: audit log (admin UI), aggregator (logger), Sentry
         # (alerting), admin email (operator nudge to review).
@@ -712,6 +723,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             previous_state = locked.state
 
             if previous_state in ("inactive", "accountonly"):
+                # accountonly bypasses deactivate(), so drop any pre-staged
+                # default-access rows here. inactive has already been
+                # through deactivate() and keeps its M2M intentionally
+                # (get_tags filters by state).
+                if previous_state == "accountonly":
+                    locked.remove_default_access()
                 return CompleteCancelResult(
                     outcome=CompleteCancelOutcome.ALREADY_DEACTIVATED,
                     previous_state=previous_state,
@@ -729,6 +746,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 )
 
             if previous_state == "noob":
+                # noob never goes through deactivate(), so drop any
+                # pre-staged default-access rows here.
+                locked.remove_default_access()
                 if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED:
                     lapsed_subject = "Your membership signup has lapsed"
                     lapsed_message = (
@@ -771,7 +791,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         )
         return CompleteCancelResult(
             outcome=CompleteCancelOutcome.DEACTIVATED,
-            previous_state="active",
+            previous_state=previous_state,
         )
 
     def set_admin_disabled_access(self, disabled, request=None):
