@@ -4,6 +4,15 @@
       <q-spinner size="4em" />
     </template>
 
+    <template v-else-if="signupStage === 'locked'">
+      <div class="q-pa-lg text-center" style="max-width: 480px">
+        <div class="text-h6 q-mb-sm">
+          {{ $t('paymentPlans.lockedTitle') }}
+        </div>
+        <p>{{ $t('paymentPlans.lockedMessage') }}</p>
+      </div>
+    </template>
+
     <template
       v-else-if="['needs_plan', 'account_only', 'lapsed'].includes(signupStage)"
     >

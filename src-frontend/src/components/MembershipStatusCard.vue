@@ -14,8 +14,15 @@
     </div>
 
     <q-card-section class="q-pt-sm">
+      <!-- account blocked by an admin -->
+      <template v-if="isLocked">
+        <p class="q-mb-none">
+          {{ $t('membershipStatusCard.lockedDescription') }}
+        </p>
+      </template>
+
       <!-- signup checklist: new members, or returning members awaiting invoice payment -->
-      <template v-if="isSignupInProgress">
+      <template v-else-if="isSignupInProgress">
         <template v-if="requiredSteps === null">
           <q-spinner color="primary" size="sm" />
         </template>
@@ -281,6 +288,9 @@ export default {
     },
     signupStage() {
       return this.profile?.signupStage;
+    },
+    isLocked() {
+      return this.signupStage === 'locked';
     },
     paymentPending() {
       return this.profile.financial.subscriptionState === 'pending';
