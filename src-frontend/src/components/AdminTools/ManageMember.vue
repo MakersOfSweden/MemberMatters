@@ -3,6 +3,24 @@
     <h3 class="q-mt-none q-mb-md">
       {{ profileForm.firstName }} {{ profileForm.lastName }}
       <span v-if="profileForm.screenName">({{ profileForm.screenName }})</span>
+      <q-icon
+        v-if="selectedMember.stateLocked"
+        :name="icons.lock"
+        color="warning"
+        size="md"
+        class="q-ml-sm"
+      >
+        <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
+      </q-icon>
+      <q-icon
+        v-if="selectedMember.adminDisabledAccess"
+        :name="icons.accessDisabled"
+        color="negative"
+        size="md"
+        class="q-ml-sm"
+      >
+        <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
+      </q-icon>
     </h3>
     <q-card
       class="q-mb-none"
@@ -30,32 +48,58 @@
             :class="{ 'q-px-sm': $q.screen.xs, 'q-px-lg': !$q.screen.xs }"
           >
             <q-btn
-              v-if="selectedMember.state === 'inactive'"
               class="q-mr-sm q-mb-sm"
-              color="positive"
-              :label="$t('adminTools.enableAccess')"
-              :loading="stateLoading"
-              @click="setMemberState('active')"
+              :color="
+                selectedMember.adminDisabledAccess ? 'positive' : 'warning'
+              "
+              :label="
+                selectedMember.adminDisabledAccess
+                  ? $t('adminTools.resumeAccess')
+                  : $t('adminTools.pauseAccess')
+              "
+              :loading="adminDialogs.toggleAccess.loading"
+              @click="openToggleAccessDialog"
             />
             <q-btn
-              v-else-if="
-                selectedMember.state === 'noob' ||
-                selectedMember.state === 'accountonly'
-              "
+              v-if="isSettledNonMember"
               class="q-mr-sm q-mb-sm"
               color="primary"
               :label="$t('adminTools.makeMember')"
-              :loading="stateLoading"
-              @click="activateMember()"
+              :loading="adminDialogs.makeMember.loading"
+              @click="openMakeMemberDialog"
             />
             <q-btn
               v-else
               class="q-mr-sm q-mb-sm"
               color="negative"
-              :label="$t('adminTools.disableAccess')"
-              :loading="stateLoading"
-              @click="setMemberState('inactive')"
+              :label="$t('adminTools.cancelMembership')"
+              :loading="adminDialogs.cancelMembership.loading"
+              @click="openCancelMembershipDialog"
             />
+            <q-btn
+              class="q-mr-sm q-mb-sm"
+              :color="
+                selectedMember.stateLocked
+                  ? 'positive'
+                  : isSettledNonMember
+                  ? 'warning'
+                  : 'grey-7'
+              "
+              :label="
+                selectedMember.stateLocked
+                  ? $t('adminTools.unlockAccount')
+                  : $t('adminTools.lockAccount')
+              "
+              :disable="!selectedMember.stateLocked && !isSettledNonMember"
+              :loading="adminDialogs.lock.loading"
+              @click="openLockDialog"
+            >
+              <q-tooltip
+                v-if="!selectedMember.stateLocked && !isSettledNonMember"
+              >
+                {{ $t('adminTools.lockUnavailableTooltip') }}
+              </q-tooltip>
+            </q-btn>
 
             <q-btn-dropdown
               class="q-mr-sm q-mb-sm"
@@ -1269,6 +1313,154 @@
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
+    <!-- Toggle Access dialog (admin_disabled_access) -->
+    <q-dialog v-model="adminDialogs.toggleAccess.isOpen">
+      <q-card style="min-width: 360px">
+        <q-card-section>
+          <div class="text-h6">
+            {{
+              selectedMember.adminDisabledAccess
+                ? $t('adminTools.resumeAccessTitle')
+                : $t('adminTools.pauseAccessTitle')
+            }}
+          </div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <p>
+            {{
+              selectedMember.adminDisabledAccess
+                ? $t('adminTools.resumeAccessDescription')
+                : $t('adminTools.pauseAccessDescription')
+            }}
+          </p>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('button.cancel')"
+            :disable="adminDialogs.toggleAccess.loading"
+            v-close-popup
+          />
+          <q-btn
+            color="primary"
+            :label="$t('button.confirm')"
+            :loading="adminDialogs.toggleAccess.loading"
+            @click="submitToggleAccess"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Make Member dialog -->
+    <q-dialog v-model="adminDialogs.makeMember.isOpen">
+      <q-card style="min-width: 360px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('adminTools.makeMemberTitle') }}</div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <p>{{ $t('adminTools.makeMemberDescription') }}</p>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('button.cancel')"
+            :disable="adminDialogs.makeMember.loading"
+            v-close-popup
+          />
+          <q-btn
+            color="primary"
+            :label="$t('button.confirm')"
+            :loading="adminDialogs.makeMember.loading"
+            @click="submitMakeMember"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Cancel Membership dialog -->
+    <q-dialog v-model="adminDialogs.cancelMembership.isOpen">
+      <q-card style="min-width: 400px">
+        <q-card-section>
+          <div class="text-h6">
+            {{ $t('adminTools.cancelMembershipTitle') }}
+          </div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <p>{{ $t('adminTools.cancelMembershipDescription') }}</p>
+          <template v-if="hasLiveSub">
+            <div class="q-mb-sm text-weight-medium">
+              {{ $t('adminTools.cancelTimingLabel') }}
+            </div>
+            <q-option-group
+              v-model="adminDialogs.cancelMembership.timing"
+              :options="[
+                {
+                  label: $t('adminTools.cancelTimingAtPeriodEnd'),
+                  value: 'at_period_end',
+                },
+                {
+                  label: $t('adminTools.cancelTimingImmediately'),
+                  value: 'immediately',
+                },
+              ]"
+            />
+          </template>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('button.cancel')"
+            :disable="adminDialogs.cancelMembership.loading"
+            v-close-popup
+          />
+          <q-btn
+            color="primary"
+            :label="$t('button.confirm')"
+            :loading="adminDialogs.cancelMembership.loading"
+            @click="submitCancelMembership"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Lock / Unlock account dialog -->
+    <q-dialog v-model="adminDialogs.lock.isOpen">
+      <q-card style="min-width: 360px">
+        <q-card-section>
+          <div class="text-h6">
+            {{
+              selectedMember.stateLocked
+                ? $t('adminTools.unlockAccountTitle')
+                : $t('adminTools.lockAccountTitle')
+            }}
+          </div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <p>
+            {{
+              selectedMember.stateLocked
+                ? $t('adminTools.unlockAccountDescription')
+                : $t('adminTools.lockAccountDescription')
+            }}
+          </p>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('button.cancel')"
+            :disable="adminDialogs.lock.loading"
+            v-close-popup
+          />
+          <q-btn
+            color="primary"
+            :label="$t('button.confirm')"
+            :loading="adminDialogs.lock.loading"
+            @click="submitLock"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-dialog v-model="smsModalIsOpen">
       <q-card>
         <q-card-section>
@@ -1363,7 +1555,7 @@ import formMixin from '@mixins/formMixin';
 import icons from '../../icons';
 import formatMixin from '@mixins/formatMixin';
 import { mapGetters } from 'vuex';
-import { MemberBillingInfo, MemberProfile, MemberState } from 'types/member';
+import { MemberBillingInfo, MemberProfile } from 'types/member';
 import { defineComponent } from 'vue';
 import {
   parsePhoneNumberFromString,
@@ -1391,7 +1583,16 @@ export default defineComponent({
   },
   data() {
     return {
-      stateLoading: false,
+      adminDialogs: {
+        toggleAccess: { isOpen: false, loading: false },
+        makeMember: { isOpen: false, loading: false },
+        cancelMembership: {
+          isOpen: false,
+          loading: false,
+          timing: 'at_period_end',
+        },
+        lock: { isOpen: false, loading: false },
+      },
       welcomeLoading: false,
       ensureStripeLoading: false,
       tab: 'profile',
@@ -1548,9 +1749,6 @@ export default defineComponent({
         })
         .finally(() => {
           this.$emit('memberUpdated');
-          setTimeout(() => {
-            this.stateLoading = false;
-          }, 1200);
         });
     },
     getMemberLogs() {
@@ -1568,44 +1766,20 @@ export default defineComponent({
         })
         .finally(() => {
           this.$emit('memberUpdated');
-          setTimeout(() => {
-            this.stateLoading = false;
-          }, 1200);
         });
     },
-    setMemberState(state: MemberState) {
-      this.stateLoading = true;
+    openToggleAccessDialog() {
+      this.adminDialogs.toggleAccess.isOpen = true;
+    },
+    submitToggleAccess() {
+      this.adminDialogs.toggleAccess.loading = true;
       this.$axios
-        .post(`/api/admin/members/${this.member.id}/state/${state}/`)
-        .catch(() => {
-          this.$q.dialog({
-            title: this.$t('error.error'),
-            message: this.$t('error.requestFailed'),
-          });
+        .post(`/api/admin/members/${this.member.id}/admin-disabled-access/`, {
+          disabled: !this.selectedMember.adminDisabledAccess,
         })
-        .finally(() => {
+        .then(() => {
+          this.adminDialogs.toggleAccess.isOpen = false;
           this.$emit('memberUpdated');
-          setTimeout(() => {
-            this.stateLoading = false;
-          }, 1200);
-        });
-    },
-    activateMember() {
-      this.stateLoading = true;
-      this.$axios
-        .post(`/api/admin/members/${this.member.id}/makemember/`)
-        .then((response) => {
-          if (response.data.success) {
-            this.$q.dialog({
-              title: this.$t('adminTools.makeMemberSuccess'),
-              message: this.$t('adminTools.makeMemberSuccessDescription'),
-            });
-          } else {
-            this.$q.dialog({
-              title: this.$t('error.error'),
-              message: this.$t(response.data.message),
-            });
-          }
         })
         .catch(() => {
           this.$q.dialog({
@@ -1614,10 +1788,75 @@ export default defineComponent({
           });
         })
         .finally(() => {
+          this.adminDialogs.toggleAccess.loading = false;
+        });
+    },
+    openMakeMemberDialog() {
+      this.adminDialogs.makeMember.isOpen = true;
+    },
+    submitMakeMember() {
+      this.adminDialogs.makeMember.loading = true;
+      this.$axios
+        .post(`/api/admin/members/${this.member.id}/make-member/`)
+        .then(() => {
+          this.adminDialogs.makeMember.isOpen = false;
           this.$emit('memberUpdated');
-          setTimeout(() => {
-            this.stateLoading = false;
-          }, 1200);
+        })
+        .catch(() => {
+          this.$q.dialog({
+            title: this.$t('error.error'),
+            message: this.$t('error.requestFailed'),
+          });
+        })
+        .finally(() => {
+          this.adminDialogs.makeMember.loading = false;
+        });
+    },
+    openCancelMembershipDialog() {
+      this.adminDialogs.cancelMembership.timing = 'at_period_end';
+      this.adminDialogs.cancelMembership.isOpen = true;
+    },
+    submitCancelMembership() {
+      this.adminDialogs.cancelMembership.loading = true;
+      this.$axios
+        .post(`/api/admin/members/${this.member.id}/cancel-membership/`, {
+          timing: this.adminDialogs.cancelMembership.timing,
+        })
+        .then(() => {
+          this.adminDialogs.cancelMembership.isOpen = false;
+          this.$emit('memberUpdated');
+        })
+        .catch(() => {
+          this.$q.dialog({
+            title: this.$t('error.error'),
+            message: this.$t('error.requestFailed'),
+          });
+        })
+        .finally(() => {
+          this.adminDialogs.cancelMembership.loading = false;
+        });
+    },
+    openLockDialog() {
+      this.adminDialogs.lock.isOpen = true;
+    },
+    submitLock() {
+      this.adminDialogs.lock.loading = true;
+      this.$axios
+        .post(`/api/admin/members/${this.member.id}/state-lock/`, {
+          locked: !this.selectedMember.stateLocked,
+        })
+        .then(() => {
+          this.adminDialogs.lock.isOpen = false;
+          this.$emit('memberUpdated');
+        })
+        .catch(() => {
+          this.$q.dialog({
+            title: this.$t('error.error'),
+            message: this.$t('error.requestFailed'),
+          });
+        })
+        .finally(() => {
+          this.adminDialogs.lock.loading = false;
         });
     },
     optOutEmailExport() {
@@ -1700,6 +1939,17 @@ export default defineComponent({
       // @ts-ignore
       delete newMember.access;
       return newMember;
+    },
+    // A settled non-member: not active and without a live subscription.
+    // Button 2 reads "Make Member" for these; the Lock button is enabled.
+    isSettledNonMember(): boolean {
+      return (
+        this.selectedMember.state !== 'active' &&
+        this.selectedMember.subscriptionStatus === 'inactive'
+      );
+    },
+    hasLiveSub(): boolean {
+      return this.selectedMember.subscriptionStatus !== 'inactive';
     },
     icons() {
       return icons;

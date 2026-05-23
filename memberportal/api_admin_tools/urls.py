@@ -6,14 +6,24 @@ from . import views
 urlpatterns = [
     path("api/admin/members/", views.GetMembers.as_view(), name="GetMembers"),
     path(
-        "api/admin/members/<int:member_id>/state/<str:state>/",
-        views.MemberState.as_view(),
-        name="MemberState",
+        "api/admin/members/<int:member_id>/make-member/",
+        views.MakeMember.as_view(),
+        name="MakeMember",
     ),
     path(
-        "api/admin/members/<int:member_id>/makemember/",
-        views.MakeMember.as_view(),
-        name="ActivateMember",
+        "api/admin/members/<int:member_id>/admin-disabled-access/",
+        views.MemberAdminDisabledAccess.as_view(),
+        name="MemberAdminDisabledAccess",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/state-lock/",
+        views.MemberStateLock.as_view(),
+        name="MemberStateLock",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/cancel-membership/",
+        views.MemberCancelMembership.as_view(),
+        name="MemberCancelMembership",
     ),
     path(
         "api/admin/members/<int:member_id>/access/",

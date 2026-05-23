@@ -22,7 +22,6 @@ from django.db import transaction
 from profile.models import Profile
 from profile.phone import to_e164
 
-
 # Matches the regex on Profile.phone (migration 0023). Pre-check so we
 # can skip rows that already conform — keeps the command idempotent.
 E164_RE = re.compile(r"^\+[1-9]\d{1,14}$")

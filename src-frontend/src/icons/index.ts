@@ -76,6 +76,7 @@ export default {
   interlock: 'mdi-tools',
   lock: 'mdi-lock-outline',
   unlock: 'mdi-lock-open-variant-outline',
+  accessDisabled: 'mdi-block-helper',
 
   member_count_total: 'mdi-account-multiple',
   member_count_6_months_total: 'mdi-account-multiple',

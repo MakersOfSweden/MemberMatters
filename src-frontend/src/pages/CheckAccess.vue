@@ -5,6 +5,18 @@
     </p>
     <div class="column full-width" style="max-width: 800px">
       <q-banner
+        v-if="profile.adminDisabledAccess"
+        inline-actions
+        rounded
+        class="bg-negative text-white q-ma-md"
+      >
+        <template v-slot:avatar>
+          <q-icon :name="icons.accessDisabled" />
+        </template>
+        {{ $t('access.adminDisabled') }}
+      </q-banner>
+
+      <q-banner
         v-if="profile.memberStatus !== 'active'"
         inline-actions
         rounded

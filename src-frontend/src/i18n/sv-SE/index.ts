@@ -49,10 +49,8 @@ export default {
     usefulResources: 'Medlemsresurser',
     quickCards: 'Genvägar',
     quickActions: 'Snabbåtkomst',
-    signedIn:
-      'Du är inloggad. Logga ut när du går.',
-    signinSuccess:
-      'Lyckad inloggning. Kom ihåg att logga ut när du går.',
+    signedIn: 'Du är inloggad. Logga ut när du går.',
+    signinSuccess: 'Lyckad inloggning. Kom ihåg att logga ut när du går.',
     signoutError:
       'Det uppstod ett problem vid utloggning. Rapportera felet om det uppstår igen.',
     signinError:
@@ -67,11 +65,9 @@ export default {
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
     screenNameRequired: 'Ange ett användarnamn.',
-    registrationClosed:
-      'Registrering är just nu stängd.',
+    registrationClosed: 'Registrering är just nu stängd.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
-    requestFailed:
-      "Det har uppstått ett fel. Försök igen senare.",
+    requestFailed: 'Det har uppstått ett fel. Försök igen senare.',
     tooManyRequests:
       'För många försök från ditt nätverk. Vänta en stund och försök sedan igen.',
     fieldRequired: 'Fyll i alla obligatoriska fält.',
@@ -94,8 +90,7 @@ export default {
     pageNotFound: 'Sidan kan inte hittas',
     noValue: 'Inget värde',
     noData: 'Ingen data hittas',
-    stripeNotConfigured:
-      'Betalplattformen Stripe är inte konfigurerad än.',
+    stripeNotConfigured: 'Betalplattformen Stripe är inte konfigurerad än.',
     postmarkNotConfigured:
       'Mailplattformen Postmark är inte konfigurerad korrekt.',
     stripeNotConfiguredFeature:
@@ -105,12 +100,12 @@ export default {
       'Det uppstod ett problem vid kopering. Försök igen eller exportera som csv.',
     400: ' Det uppstod ett fel med ditt anrop. (Error 400)',
     401: ' Du måste vara inloggad för att komma åt denna sida. (Error 401)',
-    403: " Du saknar rättigheter för att komma åt denna sida. (Error 403)",
+    403: ' Du saknar rättigheter för att komma åt denna sida. (Error 403)',
     '403MemberOnly':
       'Du måste vara ha ett aktivt medlemskap för att komma åt denna sida. (Error 403)',
     404: ' Denna sida kan inte hittas. (Error 404)',
     500: ' Det uppstod ett fel på servern. Försök igen senare. (Error 500)',
-    501: " Denna funktion är ännu inte implementerad. (Error 501)",
+    501: ' Denna funktion är ännu inte implementerad. (Error 501)',
   },
   logoutPage: {
     logoutSuccess: 'Utloggning lyckades.',
@@ -118,8 +113,7 @@ export default {
       'Det uppstod ett fel vid utloggning. Uppdatera sidan och försök igen.',
   },
   webcams: {
-    pageDescription:
-      'Våra publika webcam foton uppdateras varje minut.',
+    pageDescription: 'Våra publika webcam foton uppdateras varje minut.',
   },
   about: {
     title: 'Om MemberMatters',
@@ -159,6 +153,7 @@ export default {
     submit: 'Skicka in',
     send: 'Skicka',
     ok: 'Ok',
+    confirm: 'Bekräfta',
     reset: 'Återställ',
     cancel: 'Avbryt',
     close: 'Stäng',
@@ -209,7 +204,7 @@ export default {
     invalidEmail: 'Ange en giltig email.',
     invalidPassword: 'Ange ett giltigt lösenord.',
     invalidPhone: 'Ange ett giltigt telefonnummer.',
-    passwordNotMatch: "Lösenorden matchar inte.",
+    passwordNotMatch: 'Lösenorden matchar inte.',
     cannotBeEmpty: 'Detta fält kan inte vara tomt.',
     futureDate: 'Datum måste vara idag eller i framtiden.',
     tooMany: 'Max är {number}.',
@@ -224,6 +219,7 @@ export default {
     status: 'Status',
   },
   access: {
+    adminDisabled: 'Your access has been disabled by an administrator.',
     pageDescription:
       'Dina rättigheter för åtkomst visas nedan. Kontakta oss om de behöver uppdateras.',
     inactive: 'Medlemskapet är inaktivt. Detta kan påverka din åtkomst.',
@@ -236,7 +232,8 @@ export default {
     defaultAccess: 'Medlemar har åtkomst som default',
     maintenanceLockout: 'Underhållslåsning är påslagen',
     playTheme: 'Spela tema på swipe',
-    exemptSignin: 'Undantag från kravet på inloggning på webbplatsen (om aktiverad)',
+    exemptSignin:
+      'Undantag från kravet på inloggning på webbplatsen (om aktiverad)',
     hiddenToMembers: 'Dold från medlemmar på deras åtkomst-sida',
     user: 'Användare',
     totalSwipes: 'Total Swipes',
@@ -263,8 +260,7 @@ export default {
   form: {
     saved: 'Sparad',
     error: 'Fel vid sparning',
-    pageDescription:
-      'Redigera fälten nedan och de kommer sparas automatiskt.',
+    pageDescription: 'Redigera fälten nedan och de kommer sparas automatiskt.',
     noResults: 'Inga resultat',
     allFieldsRequired: 'Alla fält markerade med * är obligatoriska.',
     featured: 'Utvalda?',
@@ -321,9 +317,10 @@ export default {
     pageDescription: 'Fyll i formuläret nedan för att skapa ett nytt möte.',
     editDescription: 'Fyll i formuläret nedan för att uppdatera ett möte.',
     newMeeting: 'Nytt möte',
-    updatePastMeeting: "Du kan tyvärr inte uppdatera detta fält för gamla möten.",
+    updatePastMeeting:
+      'Du kan tyvärr inte uppdatera detta fält för gamla möten.',
     noUpdateMeetingType:
-      "Du kan tyvärr inte uppdatera detta fält för existerande möten.",
+      'Du kan tyvärr inte uppdatera detta fält för existerande möten.',
     meeting: 'Möte',
     success: 'Mötet skapades.',
     editSuccess: 'Mötet uppdaterades.',
@@ -344,8 +341,8 @@ export default {
 
     meeting: 'Möte',
     yourCity: 'Din stad',
-    proxyName: "Ombudets namn",
-    proxyCity: "Ombudets stad",
+    proxyName: 'Ombudets namn',
+    proxyCity: 'Ombudets stad',
 
     newProxy: 'Nytt ombud',
     editTitle: 'Redigera ombud',
@@ -363,15 +360,14 @@ export default {
       'Klicka på en av knapparna för att lägga till pengar på ditt konto. Detta kommer ' +
       'omedelbart belasta ditt sparade betal-kort som slutar på {savedCard}.',
     noSavedBilling:
-      "Du har inga giltiga betalmetoder. Lägg till en ny betalmetod " +
+      'Du har inga giltiga betalmetoder. Lägg till en ny betalmetod ' +
       'genom att klicka på knappen nedan.',
     manageBilling: 'Betalmetoder',
     selectToContinue: 'Bekräfta din betalmetod',
     addCard: 'Lägg till kort',
     addCardDescription:
-      "Lägg till ditt kort nedan. Vi sparar inte info om ditt betalkort förutom de sista 4 siffrorna och datum för utgång. Vår säkra betallösning som vi använder sparar informationen åt oss.",
-    addCardError:
-      'Det uppstod ett fel med ditt kort. Försök igen senare.',
+      'Lägg till ditt kort nedan. Vi sparar inte info om ditt betalkort förutom de sista 4 siffrorna och datum för utgång. Vår säkra betallösning som vi använder sparar informationen åt oss.',
+    addCardError: 'Det uppstod ett fel med ditt kort. Försök igen senare.',
     saveCard: 'Spara betalkort',
     savedCardTitle: 'Sparade betalkort',
     savedCardDescription: 'Dina sparade betalkort visas här nedan.',
@@ -392,12 +388,12 @@ export default {
   },
   loginRfidCard: {
     swipeCard: 'Dra ditt kort',
-    failed: "Vi kunde tyvärr inte logga in dig. Kontrollera ditt kort.",
+    failed: 'Vi kunde tyvärr inte logga in dig. Kontrollera ditt kort.',
   },
   settings: {
     title: 'Kiosk-inställningar',
     description:
-      "Du har öppnat kiosk-inställningarna. Om detta var ett misstak, vänligen stäng detta " +
+      'Du har öppnat kiosk-inställningarna. Om detta var ett misstak, vänligen stäng detta ' +
       'fönster.',
     rfidScanner: {
       title: 'RFID Scanner',
@@ -459,7 +455,41 @@ export default {
     new: 'Nya',
     accountOnly: 'Endast konto',
     enableAccess: 'Tillåt Åtkomst',
-    disableAccess: 'Stäng av åtkomst',
+    pauseAccess: 'Pausa åtkomst',
+    resumeAccess: 'Återuppta åtkomst',
+    pauseAccessTitle: 'Pausa åtkomsten för den här medlemmen?',
+    resumeAccessTitle: 'Återuppta åtkomsten för den här medlemmen?',
+    pauseAccessDescription:
+      'Medlemmen förlorar dörråtkomsten omedelbart. Status och prenumeration påverkas inte — använd Avsluta medlemskap om du vill ändra även dessa.',
+    resumeAccessDescription:
+      'Åtkomstpausen hävs. Om medlemmens status är aktiv återfås dörråtkomsten omedelbart.',
+    accessDisabledTooltip: 'Åtkomst inaktiverad av en administratör.',
+    makeMemberTitle: 'Gör den här medlemmen aktiv?',
+    makeMemberDescription:
+      'Aktiverar medlemmen och tilldelar standardåtkomst till dörrar / förreglingar, förbi den vanliga registreringskontrollen.',
+    cancelMembership: 'Avsluta medlemskap',
+    cancelMembershipTitle: 'Avsluta den här medlemmens medlemskap?',
+    cancelMembershipDescription:
+      'Avslutar medlemmens Stripe-prenumeration om någon är aktiv och inaktiverar medlemmen.',
+    cancelTimingLabel: 'När ska avslutet träda i kraft?',
+    cancelTimingAtPeriodEnd:
+      'Vid slutet av den aktuella betalningsperioden (medlemmen behåller åtkomsten tills dess)',
+    cancelTimingImmediately:
+      'Omedelbart (raderar prenumerationen, ogiltigförklarar öppna fakturor)',
+    lockAccount: 'Lås konto',
+    unlockAccount: 'Lås upp konto',
+    lockAccountTitle: 'Lås det här kontot?',
+    lockAccountDescription:
+      'Ett låst konto kan inte återaktiveras eller registreras igen förrän en administratör låser upp det.',
+    unlockAccountTitle: 'Lås upp det här kontot?',
+    unlockAccountDescription:
+      'Medlemmen kommer återigen att kunna registrera sig för en medlemsplan.',
+    lockUnavailableTooltip:
+      'Låsning är endast tillgänglig för icke-aktiva medlemmar utan en pågående prenumeration.',
+    lockNotAllowed:
+      'Kan inte låsa en medlem som är aktiv eller har en pågående prenumeration.',
+    stateLockedTooltip:
+      'Konto låst — automatiserade flöden (webhooks, självbetjäningsregistrering) kommer inte att ändra medlemmens status.',
     sendWelcomeEmail: 'Skicka välkomst-mail',
     sendSms: 'Skicka SMS till medlem',
     sendSmsModalTitle: 'Skicka {name} en sms varning.',
@@ -475,7 +505,7 @@ export default {
     makeMember: 'Skapa medlem',
     makeMemberSuccess: 'Medlem skapad och välkomstmail skickat.',
     makeMemberError: 'Okänt fel när medlem skapades.',
-    makeMemberErrorEmail: "Fel vid utskick av välkomstmail.",
+    makeMemberErrorEmail: 'Fel vid utskick av välkomstmail.',
     makeMemberErrorExists:
       'Personen är redan medlem. För att kolla profil, ändra filtret till "alla" medlemmar.',
     makeMemberSuccessDescription:
@@ -548,6 +578,9 @@ export default {
     offlineStatus: 'Enhet är just nu offline',
   },
   paymentPlans: {
+    lockedTitle: 'Account blocked from signing up',
+    lockedMessage:
+      'Your account has been blocked from signing up. Contact an admin if this is not expected.',
     title: 'Medlemskapsnivåer',
     nodata: 'Det finns inga medlemskapsnivåer.',
     name: 'Namn medlemskapsnivå',
@@ -586,7 +619,7 @@ export default {
     resumeButton: 'Återstarta medlemskap',
     cancelling: 'Ditt medlemskap håller på att avslutas',
     cancellingDescription:
-      "Ditt medlemskap kommer att avslutas på datumet {date}. Om du vill återstarta ditt medlemskap (se ovan), vänligen klicka nedan.",
+      'Ditt medlemskap kommer att avslutas på datumet {date}. Om du vill återstarta ditt medlemskap (se ovan), vänligen klicka nedan.',
     renewalDate: 'Förnyelsedatum',
     signupDate: 'Registreringsdatum',
     paymentMethod: 'Betalningsmetod',
@@ -600,16 +633,15 @@ export default {
   },
   signup: {
     induction: 'Introduktion',
-    requiredSteps:
-      'Du måste färdigställa följande steg för att bli medlem.',
+    requiredSteps: 'Du måste färdigställa följande steg för att bli medlem.',
     completeInduction: 'Gå en introduktion',
     startInduction: 'Starta din introduktion',
     completedInduction: 'Introduktion genomförd',
     registerAccessCard: 'Registrera ditt nyckelkort',
     completeInductionDescription:
-      "Färdgiställ din introduktion genom att klicka på knappen nedan. Behåll denna sida öppen och kom tillbaka när du är klar.",
+      'Färdgiställ din introduktion genom att klicka på knappen nedan. Behåll denna sida öppen och kom tillbaka när du är klar.',
     canvasEmailWarning:
-      "Använd samma email-adress som du hade vid registreringen ({email}) för att dina framsteg ska synkroniseras. Detta är en begränsning i Canvas-plattformen.",
+      'Använd samma email-adress som du hade vid registreringen ({email}) för att dina framsteg ska synkroniseras. Detta är en begränsning i Canvas-plattformen.',
     waitingCompletion: 'Väntar på färdigställande...',
     accessCard: 'Nyckelkort',
     accessCardNumber: 'Nummer Nyckelkort',
@@ -629,13 +661,12 @@ export default {
       'Din åtkomst aktiveras automatiskt när din fakturabetalning är mottagen.',
     error: 'Fel vid inskickning av medelmsansökan',
     errorDescription:
-      "Det blev tyvärr ett oväntat fel när du skickade in din anökan. Vänligen kontakta oss via {email} så hjälper vi dig.",
+      'Det blev tyvärr ett oväntat fel när du skickade in din anökan. Vänligen kontakta oss via {email} så hjälper vi dig.',
     errorMessageDescription: 'Vänligen skicka med felmeddelandet nedan:',
     requirementsNotMet: 'Krav som inte uppnåtts:',
     subscriptionFailed:
       'Vi har tyvärr problem med att skapa ditt abonnemang. Kontrollera saldo på ditt betalkort, försök igen eller kontakta oss för hjälp.',
-    existingMemberSubscription:
-      'Du har redan ett aktivt abonnemang på Stripe.',
+    existingMemberSubscription: 'Du har redan ett aktivt abonnemang på Stripe.',
     skipNotAllowed:
       'Du kan inte skippa registreringen medan du har ett aktivt eller väntande abonnemang. Avsluta ditt abonnemang från medlemskapssidan först.',
     noMoodleAccount:
@@ -716,6 +747,8 @@ export default {
     success: 'Din epost är verifierad. Du kommer bli inloggad strax.',
   },
   membershipStatusCard: {
+    lockedDescription:
+      'This account has been blocked from signing up. Contact an admin if this is not expected.',
     title: 'Medlemskapsstatus',
     stateBadge: {
       noob: 'Kräver installation',
@@ -747,6 +780,7 @@ export default {
       'Du har ett konto men har inte beviljats fullt medlemsåtkomst.',
     renewalDate: 'Förnyelsedatum',
     inDays: 'om {days} dagar',
+    unknown: 'Okänt',
     completeSetup: 'Slutför registrering',
     activateMembership: 'Aktivera medlemskap',
     viewMembership: 'Visa medlemskap',
@@ -754,6 +788,8 @@ export default {
     becomeMember: 'Bli medlem',
   },
   billing: {
+    stateLocked:
+      'Your account has been blocked from signing up. Contact an admin if this is not expected.',
     selectMethod: 'Hur vill du betala?',
     payByCard: 'Automatisk betalning med kort',
     cardDescription:
@@ -771,8 +807,7 @@ export default {
       'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
     invoiceDisabled:
       'Fakturabetalning är inte tillgänglig för närvarande. Välj en annan betalmetod.',
-    newSubscriptionsDisabled:
-      'Registrering av nya medlemskap är stängda.',
+    newSubscriptionsDisabled: 'Registrering av nya medlemskap är stängda.',
     stripeError:
       'Något gick fel i kommunikationen med vår betalleverantör. Försök igen om en stund eller kontakta oss om det inte löser sig.',
   },
