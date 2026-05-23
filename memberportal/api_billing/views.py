@@ -71,7 +71,7 @@ def ensure_stripe_customer(user):
             return True, None
         except stripe.error.StripeError as e:
             capture_exception(e)
-            user.log_event("Error while creating stripe customer.", "stripe")
+            user.log_event("Error while creating stripe customer.", "stripe", str(e))
             return False, "billing.stripeError"
 
 
@@ -107,7 +107,9 @@ class MemberBucksAddCard(StripeAPIView):
             )
         except stripe.error.StripeError as e:
             capture_exception(e)
-            request.user.log_event("Stripe error while creating SetupIntent.", "stripe")
+            request.user.log_event(
+                "Stripe error while creating SetupIntent.", "stripe", str(e)
+            )
             return Response(
                 {"success": False, "message": "billing.stripeError"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -138,6 +140,11 @@ class MemberBucksAddCard(StripeAPIView):
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
+                request.user.log_event(
+                    "Stripe error while attaching payment method.",
+                    "stripe",
+                    str(e),
+                )
                 return Response(
                     {"success": False, "message": "billing.stripeError"},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -198,6 +205,11 @@ class MemberBucksAddCard(StripeAPIView):
                     pass
                 except stripe.error.StripeError as e:
                     capture_exception(e)
+                    request.user.log_event(
+                        "Stripe error while detaching payment method.",
+                        "stripe",
+                        str(e),
+                    )
                     return Response(
                         {"success": False, "message": "billing.stripeError"},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -323,17 +335,20 @@ class PaymentPlanSignup(StripeAPIView):
                         "Failed to finalize invoice immediately; "
                         "Stripe will auto-finalize within ~1 hour.",
                         "stripe",
+                        str(e),
                     )
 
             return subscription, None
 
         except stripe.error.InvalidRequestError as e:
             capture_exception(e)
-            error = e.json_body.get("error")
+            error = (e.json_body or {}).get("error") or {}
+            error_code = error.get("code", "")
+            error_message = error.get("message", "")
 
             if (
-                error["code"] == "resource_missing"
-                and "default payment method" in error["message"]
+                error_code == "resource_missing"
+                and "default payment method" in error_message
             ):
                 request.user.log_event(
                     "InvalidRequestError (missing default payment method) from Stripe while creating subscription.",
@@ -354,8 +369,8 @@ class PaymentPlanSignup(StripeAPIView):
                 )
 
             if (
-                error["code"] == "resource_missing"
-                and "a similar object exists in live mode" in error["message"]
+                error_code == "resource_missing"
+                and "a similar object exists in live mode" in error_message
             ):
                 request.user.log_event(
                     "InvalidRequestError (used test key with production object) from Stripe while "
@@ -367,7 +382,7 @@ class PaymentPlanSignup(StripeAPIView):
                 return None, Response(
                     {
                         "success": False,
-                        "message": error["message"],
+                        "message": error_message,
                     },
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
@@ -847,6 +862,7 @@ def _cancel_failed_subscription(user, subscription_id):
         user.log_event(
             f"Failed to cancel orphaned subscription {subscription_id}.",
             "stripe",
+            str(e),
         )
         _email_admin_orphan_subscription(user, subscription_id)
 
@@ -1034,6 +1050,11 @@ class PaymentPlanResume(StripeAPIView):
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
+                request.user.log_event(
+                    "Stripe error while resuming cancelling subscription.",
+                    "stripe",
+                    str(e),
+                )
                 failed = True
             else:
                 if modified_subscription.cancel_at_period_end:
@@ -1186,6 +1207,12 @@ class PaymentPlanCancel(StripeAPIView):
                                 stripe.Invoice.void_invoice(invoice.id)
                             except stripe.error.StripeError as e:
                                 capture_exception(e)
+                                user.log_event(
+                                    f"Failed to void open invoice "
+                                    f"{invoice.id} during pending-cancel.",
+                                    "stripe",
+                                    str(e),
+                                )
                         stripe.Subscription.delete(
                             subscription_id, invoice_now=False, prorate=False
                         )
@@ -1196,6 +1223,7 @@ class PaymentPlanCancel(StripeAPIView):
                             f"{subscription_id} on Stripe after DB cancel; "
                             "manual cleanup required.",
                             "stripe",
+                            str(e),
                         )
                         failure_subject = (
                             f"Action Required: clean up Stripe subscription "
@@ -1264,6 +1292,11 @@ class PaymentPlanCancel(StripeAPIView):
                 )
             except stripe.error.StripeError as e:
                 capture_exception(e)
+                request.user.log_event(
+                    "Stripe error while scheduling cancel-at-period-end.",
+                    "stripe",
+                    str(e),
+                )
                 failed = True
             else:
                 if not modified_subscription.cancel_at_period_end:
@@ -1668,6 +1701,12 @@ class StripeWebhook(StripeAPIView):
                                 stripe.Invoice.void_invoice(invoice.id)
                             except stripe.error.StripeError as e:
                                 capture_exception(e)
+                                user.log_event(
+                                    f"Failed to void open invoice "
+                                    f"{invoice.id} after subscription cancel.",
+                                    "stripe",
+                                    str(e),
+                                )
                                 failure_subject = (
                                     f"Action Required: void Stripe invoice "
                                     f"{invoice.id} for {full_name}"
@@ -1698,6 +1737,13 @@ class StripeWebhook(StripeAPIView):
                         # are open, so ask admin to audit the cancelled
                         # sub.
                         capture_exception(e)
+                        user.log_event(
+                            f"Failed to list open invoices for cancelled "
+                            f"subscription {subscription_id}; admin must "
+                            "audit Stripe manually.",
+                            "stripe",
+                            str(e),
+                        )
                         failure_subject = (
                             f"Action Required: audit cancelled Stripe "
                             f"subscription {subscription_id} for {full_name}"
