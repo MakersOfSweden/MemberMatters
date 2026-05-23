@@ -446,6 +446,15 @@ class PaymentPlanSignup(StripeAPIView):
                 pk=request.user.profile.pk
             )
 
+            # Re-check under the row lock: an admin lock that races the
+            # outer check would otherwise leave an orphan Stripe sub on a
+            # locked member.
+            if locked_profile.state_locked:
+                return Response(
+                    {"success": False, "message": "billing.stateLocked"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             if locked_profile.membership_plan:
                 return Response({"success": False}, status=status.HTTP_409_CONFLICT)
 
@@ -936,6 +945,14 @@ class PaymentPlanResume(StripeAPIView):
             locked_profile = Profile.objects.select_for_update().get(
                 pk=request.user.profile.pk
             )
+
+            # Re-check under the row lock — see PaymentPlanSignup.post for
+            # the orphan-Stripe-sub rationale.
+            if locked_profile.state_locked:
+                return Response(
+                    {"success": False, "message": "billing.stateLocked"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
             if locked_profile.stripe_subscription_id:
                 return Response({"success": False}, status=status.HTTP_409_CONFLICT)
@@ -1432,9 +1449,60 @@ class StripeWebhook(StripeAPIView):
                     locked_profile.subscription_first_created = timezone.now()
                     locked_profile.save(update_fields=["subscription_first_created"])
 
+                # A state_locked member is by invariant subscription_status=inactive.
+                # If an invoice.paid arrives anyway (late/out-of-order delivery, or
+                # an admin manually marked an old invoice paid in Stripe), preserve
+                # the lock — do NOT flip subscription_status to "active" and do
+                # NOT auto-activate. Notify the admin so they can investigate.
+                if (
+                    locked_profile.state_locked
+                    and locked_profile.state != "active"
+                    and invoice_status == "paid"
+                ):
+                    locked_profile.user.log_event(
+                        "Invoice paid for a state_locked member — held; "
+                        "admin must unlock + reconcile.",
+                        "stripe",
+                    )
+
+                    held_full_name = locked_profile.get_full_name()
+                    held_user_email = locked_profile.user.email
+
+                    def _on_commit_locked_paid_admin(
+                        full_name=held_full_name,
+                        user_email=held_user_email,
+                        user=locked_profile.user,
+                    ):
+                        admin_subject = (
+                            f"Action Required: locked member {full_name} "
+                            "had an invoice paid"
+                        )
+                        admin_message = (
+                            f"{full_name} ({user_email}) is currently "
+                            "state-locked, but Stripe just reported a paid "
+                            "invoice on their subscription. The portal has "
+                            "NOT activated them. Investigate whether to "
+                            "unlock + activate, or to void the Stripe "
+                            "subscription."
+                        )
+                        try:
+                            send_email_to_admin(
+                                subject=admin_subject,
+                                template_vars={
+                                    "title": admin_subject,
+                                    "message": admin_message,
+                                },
+                                user=user,
+                                reply_to=user.email,
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                    transaction.on_commit(_on_commit_locked_paid_admin)
+
                 # If they aren't an active member, are allowed to signup, and have paid the invoice
                 # then lets activate their account (this could be a new OR returning member)
-                if (
+                elif (
                     locked_profile.state != "active"
                     and locked_profile.can_signup()["success"]
                     and invoice_status == "paid"
