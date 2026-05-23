@@ -1,7 +1,7 @@
 <template>
-  <div class="row items-stretch">
+  <div class="quick-cards-grid">
     <template v-if="enableSiteSignIn">
-      <div v-if="siteSignedIn" class="q-pa-md col-12 col-sm-6 col-md-4">
+      <div v-if="siteSignedIn" class="q-pa-md">
         <a @click="signInCard.click" :disabled="signinDisable">
           <q-card class="q-pa-md column justify-center items-center">
             <q-banner
@@ -23,7 +23,7 @@
         </a>
       </div>
 
-      <div v-else class="q-pa-md col-12 col-sm-6 col-md-4">
+      <div v-else class="q-pa-md">
         <a @click="signInCard.click" :disabled="signinDisable">
           <q-card class="q-pa-xl column justify-center items-center">
             <p class="text-h4">
@@ -35,15 +35,15 @@
       </div>
     </template>
 
-    <div v-if="enableMembershipStatusCard" class="q-pa-md col-12 col-sm-6 col-md-4">
+    <div v-if="enableMembershipStatusCard" class="q-pa-md">
       <membership-status-card />
     </div>
 
-    <div v-if="enableMembersOnSite" class="q-pa-md col-12 col-sm-6 col-md-4">
+    <div v-if="enableMembersOnSite" class="q-pa-md">
       <members-onsite-card />
     </div>
 
-    <div v-if="enableReportIssue" class="q-pa-md col-12 col-sm-6 col-md-4">
+    <div v-if="enableReportIssue" class="q-pa-md">
       <report-issue-card />
     </div>
   </div>
@@ -157,5 +157,13 @@ export default {
 <style scoped>
 a {
   text-decoration: none;
+}
+.quick-cards-grid {
+  display: grid;
+  /* auto-fill keeps unused slots empty; min(...) prevents overflow on narrow containers. */
+  grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr));
+}
+.quick-cards-grid > * {
+  min-width: 0;
 }
 </style>

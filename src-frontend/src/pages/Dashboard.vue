@@ -1,6 +1,6 @@
 <template>
   <q-page class="row flex content-start justify-center">
-    <div v-if="loggedIn">
+    <div v-if="loggedIn" class="dashboard-root">
       <div class="column flex content-start justify-center">
         <q-banner
           v-if="
@@ -22,19 +22,16 @@
         <h5 class="q-ma-md">
           {{ $t('dashboard.quickCards') }}
         </h5>
-        <div class="row">
-          <quick-cards />
-        </div>
+        <quick-cards />
       </template>
 
       <h5 class="q-ma-md">
         {{ $t('dashboard.usefulResources') }}
       </h5>
-      <div class="row flex items-stretch justify-start">
+      <div class="dashboard-grid">
         <dashboard-card
           v-for="card in homepageCards"
           :key="card.title"
-          class="col-12 col-sm-6 col-md-4"
           :title="card.title"
           :icon="card.icon"
           :description="card.description"
@@ -85,8 +82,18 @@ export default {
 </script>
 
 <style lang="sass" scoped>
-.row
+// Shared containing block for every dashboard row.
+.dashboard-root
   width: 100%
   max-width: $maxWidth
   margin: auto
+
+.dashboard-grid
+  display: grid
+  // auto-fill keeps unused slots empty; min(...) prevents overflow on narrow containers.
+  grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr))
+  align-items: stretch
+
+  > *
+    min-width: 0
 </style>
