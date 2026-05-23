@@ -16,9 +16,17 @@
     <q-card-section class="q-pt-sm">
       <!-- account blocked by an admin -->
       <template v-if="isLocked">
-        <p class="q-mb-none">
-          {{ $t('membershipStatusCard.lockedDescription') }}
-        </p>
+        <div class="row items-center no-wrap">
+          <q-icon
+            :name="icons.lock"
+            color="warning"
+            size="sm"
+            class="q-mr-sm"
+          />
+          <div class="col">
+            {{ $t('membershipStatusCard.lockedDescription') }}
+          </div>
+        </div>
       </template>
 
       <!-- signup checklist: new members, or returning members awaiting invoice payment -->
@@ -195,7 +203,7 @@
       </template>
     </q-card-section>
 
-    <q-card-section class="q-pt-none">
+    <q-card-section class="status-card-actions q-pt-none">
       <div class="row">
         <q-btn
           flat
@@ -376,5 +384,11 @@ export default {
 <style scoped>
 .membership-status-card {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.membership-status-card > .status-card-actions {
+  margin-top: auto;
 }
 </style>

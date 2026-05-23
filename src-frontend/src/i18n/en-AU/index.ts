@@ -160,6 +160,7 @@ export default {
     submit: 'Submit',
     send: 'Send',
     ok: 'Ok',
+    confirm: 'Confirm',
     reset: 'Reset',
     cancel: 'Cancel',
     close: 'Close',

@@ -153,6 +153,7 @@ export default {
     submit: 'Skicka in',
     send: 'Skicka',
     ok: 'Ok',
+    confirm: 'Bekräfta',
     reset: 'Återställ',
     cancel: 'Avbryt',
     close: 'Stäng',
