@@ -142,6 +142,22 @@ class MemberCancelMembership(StripeAPIView):
             profile.complete_cancel(
                 CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL, request=request
             )
+            admin_subject = (
+                f"{request.user.get_full_name()} cancelled "
+                f"{profile.get_full_name()}'s membership (no live subscription)."
+            )
+            try:
+                send_email_to_admin(
+                    subject=admin_subject,
+                    template_vars={
+                        "title": admin_subject,
+                        "message": admin_subject,
+                    },
+                    user=request.user,
+                    reply_to=request.user.email,
+                )
+            except Exception as e:
+                capture_exception(e)
             return Response({"success": True})
 
         timing = request.data.get("timing", "at_period_end")
@@ -283,6 +299,42 @@ class MemberCancelMembership(StripeAPIView):
                         f"period (period_end={period_end_dt.isoformat()}).",
                         "stripe",
                     )
+
+            member_subject = "Your membership has been cancelled"
+            member_message = (
+                "An admin has cancelled your membership effective "
+                "immediately. Your subscription has been ended and any open "
+                "invoices voided. If this is unexpected, please let us know."
+            )
+            admin_subject = (
+                f"{request.user.get_full_name()} cancelled "
+                f"{full_name}'s membership (immediately)."
+            )
+            actor = request.user
+            member_user = locked.user
+
+            # Registered before _on_commit_stripe_cleanup / _on_commit_complete_cancel
+            # so the explanation email lands before deactivate()'s access-
+            # disabled notification, matching the at-period-end ordering.
+            def _on_commit_notifications():
+                try:
+                    member_user.email_notification(member_subject, member_message)
+                except Exception as e:
+                    capture_exception(e)
+                try:
+                    send_email_to_admin(
+                        subject=admin_subject,
+                        template_vars={
+                            "title": admin_subject,
+                            "message": admin_subject,
+                        },
+                        user=actor,
+                        reply_to=actor.email,
+                    )
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_on_commit_notifications)
 
             def _on_commit_stripe_cleanup(
                 subscription_id=subscription_id,

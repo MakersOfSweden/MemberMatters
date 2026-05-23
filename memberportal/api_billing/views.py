@@ -1028,23 +1028,36 @@ class PaymentPlanResume(StripeAPIView):
                     subject = f"{request.user.get_full_name()} resumed their cancelling membership plan."
                     request.user.log_event(subject, "stripe")
 
-                    def _on_commit_resume_admin_email(
-                        subject=subject, user=request.user
+                    member_subject = "Your membership has been resumed"
+                    member_message = (
+                        "Your cancellation request has been reversed and "
+                        "your membership will continue billing as normal."
+                    )
+
+                    def _on_commit_resume_notifications(
+                        admin_subject=subject,
+                        user=request.user,
+                        member_subject=member_subject,
+                        member_message=member_message,
                     ):
                         try:
                             send_email_to_admin(
-                                subject=subject,
+                                subject=admin_subject,
                                 template_vars={
-                                    "title": subject,
-                                    "message": subject,
+                                    "title": admin_subject,
+                                    "message": admin_subject,
                                 },
                                 user=user,
                                 reply_to=user.email,
                             )
                         except Exception as e:
                             capture_exception(e)
+                        try:
+                            user.email_notification(member_subject, member_message)
+                        except Exception as e:
+                            capture_exception(e)
 
-                    transaction.on_commit(_on_commit_resume_admin_email)
+                    transaction.on_commit(_on_commit_resume_notifications)
                     return Response({"success": True})
 
         # Outside the atomic — failure email fires regardless of any
@@ -1485,12 +1498,13 @@ class StripeWebhook(StripeAPIView):
                         "stripe",
                     )
 
-                    paid_subject = "Your payment was successful."
+                    paid_subject = "Your payment was received — additional steps needed"
                     paid_message = (
-                        "Thanks for making a membership payment using our online payment system. "
-                        "You haven't yet met all of the requirements for automatically activating your site access. "
-                        "You'll receive confirmation that your site access is enabled soon, or we'll be in touch. "
-                        "If you don't hear from us soon or require assistance, please contact us."
+                        "Thanks for making a membership payment using our "
+                        "online payment system. Your access isn't enabled yet "
+                        "because you still need to complete your induction. "
+                        f"Please log in to {config.SITE_URL} and finish the "
+                        "induction step to activate your membership."
                     )
                     # Capture at decision time — state may shift before on_commit fires.
                     notify_admin = locked_profile.state != "noob"

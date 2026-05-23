@@ -284,6 +284,15 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
             f"If this is unexpected, please let us know.",
         )
 
+    def email_subscription_ended(self):
+        return self.email_notification(
+            f"Your {config.SITE_OWNER} site access has been disabled.",
+            f"Your access to {config.SITE_OWNER} has been disabled because "
+            "your membership subscription has ended. This is usually due to "
+            "a failed membership payment. If this is unexpected, please let "
+            "us know.",
+        )
+
     def email_enable_member_access(self):
         message = f"Great news {self.profile.first_name}, your {config.SITE_OWNER} site access has been enabled."
         subject = f"Your {config.SITE_OWNER} site access has been enabled."
@@ -641,7 +650,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         )
         return CompleteSignupResult(CompleteSignupOutcome.ACTIVATED)
 
-    def deactivate(self, request=None, on_transition=None):
+    def deactivate(self, request=None, on_transition=None, reason="admin"):
         # Lock + re-read state to keep concurrent callers (e.g. Stripe webhook
         # retries racing an admin action) from double-running side effects.
         # External I/O (email/SMS, sync_access) runs after the lock is
@@ -684,7 +693,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # sync_access — leaving an "inactive" member with devices still
         # holding their tag is worse than a missed email.
         try:
-            self.user.email_disable_member_access()
+            if reason == "subscription_ended":
+                self.user.email_subscription_ended()
+            else:
+                self.user.email_disable_member_access()
         except Exception as e:
             capture_exception(e)
         try:
@@ -746,7 +758,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     previous_state=previous_state,
                 )
 
-        self.deactivate(request)
+        reason = (
+            "subscription_ended"
+            if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED
+            else "admin"
+        )
+        self.deactivate(request, reason=reason)
         trigger_label = getattr(triggered_by, "value", str(triggered_by))
         self.user.log_event(
             f"Cancelled via {trigger_label}.",
