@@ -2,6 +2,16 @@
   <div class="q-gutter-md">
     <q-stepper v-model="step" ref="stepper" color="primary" animated>
       <q-step
+        :name="stepIndex('billing')"
+        :title="$tc('signup.billing')"
+        :icon="icons.billing"
+        :active-icon="icons.billing"
+        done
+      >
+        <p class="q-py-md">{{ $t('signup.billingCompletedDescription') }}</p>
+      </q-step>
+
+      <q-step
         v-if="enabledSteps.includes('induction')"
         :name="stepIndex('induction')"
         :title="$tc('signup.induction')"
@@ -263,7 +273,7 @@ export default defineComponent({
     },
     // Order here = visual order in the stepper. Adding a step is one line.
     enabledSteps() {
-      const steps = [];
+      const steps = ['billing'];
       if (this.features.signup.enableInduction) steps.push('induction');
       if (this.features.signup.requireAccessCard) steps.push('accessCard');
       steps.push('confirm');
@@ -271,7 +281,9 @@ export default defineComponent({
     },
   },
   created() {
-    this.step = this.stepIndex(this.enabledSteps[0]);
+    // Billing is a visual breadcrumb only — start on the first real step.
+    const initial = this.enabledSteps.find((s) => s !== 'billing');
+    this.step = this.stepIndex(initial as string);
   },
   mounted() {
     this.updateInductionStatus();

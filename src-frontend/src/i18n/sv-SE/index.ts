@@ -632,6 +632,9 @@ export default {
       "Din profil är för närvarande 'endast konto' Detta beror på att du skippade registrerings-processen förra gången och blev därmed inte medlem. Du är välkommen att forsätta använda detta konto i sin nuvarande form, eller så kan du registrera dig för att bli medlem från menyn ('Medlemskap' > 'Medlemskapsnivåer').",
   },
   signup: {
+    billing: 'Fakturering',
+    billingCompletedDescription:
+      'Ditt abonnemang är klart — du kan färdigställa de återstående stegen nedan.',
     induction: 'Introduktion',
     requiredSteps: 'Du måste färdigställa följande steg för att bli medlem.',
     completeInduction: 'Gå en introduktion',
