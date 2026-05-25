@@ -772,6 +772,8 @@ export default {
     paymentComplete: 'Abonnemang aktivt',
     paymentRequired: 'Betalning för medlemskap krävs',
     paymentPending: 'Faktura skickad — väntar på betalning',
+    termsComplete: 'Villkor godkända',
+    termsRequired: 'Villkor måste godkännas',
     inductionComplete: 'Introduktion genomförd',
     inductionRequired: 'Online-introduktion krävs',
     accessCardComplete: 'Nyckelkort registrerat',

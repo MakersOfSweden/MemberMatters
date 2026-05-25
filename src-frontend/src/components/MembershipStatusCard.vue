@@ -36,108 +36,13 @@
         </template>
         <template v-else-if="hasAnyStep">
           <q-list dense>
-            <q-item v-if="showPaymentStep" dense>
+            <q-item v-for="step in checklistSteps" :key="step.name" dense>
               <q-item-section avatar>
-                <q-icon
-                  :name="
-                    paymentComplete
-                      ? icons.success
-                      : profile.financial.subscriptionState === 'pending'
-                      ? icons.warning
-                      : icons.fail
-                  "
-                  :color="
-                    paymentComplete
-                      ? 'positive'
-                      : profile.financial.subscriptionState === 'pending'
-                      ? 'warning'
-                      : nextStep === 'payment'
-                      ? 'negative'
-                      : 'grey-5'
-                  "
-                />
+                <q-icon :name="iconForStep(step)" :color="colorForStep(step)" />
               </q-item-section>
-              <q-item-section
-                :class="
-                  paymentComplete
-                    ? 'text-strike text-grey-6'
-                    : nextStep === 'payment'
-                    ? 'text-weight-bold'
-                    : 'text-grey-6'
-                "
-              >
-                <q-item-label>{{
-                  $t('membershipStatusCard.payment')
-                }}</q-item-label>
-                <q-item-label caption>{{
-                  paymentComplete
-                    ? $t('membershipStatusCard.paymentComplete')
-                    : profile.financial.subscriptionState === 'pending'
-                    ? $t('membershipStatusCard.paymentPending')
-                    : $t('membershipStatusCard.paymentRequired')
-                }}</q-item-label>
-              </q-item-section>
-            </q-item>
-
-            <q-item v-if="showInductionStep" dense>
-              <q-item-section avatar>
-                <q-icon
-                  :name="inductionComplete ? icons.success : icons.fail"
-                  :color="
-                    inductionComplete
-                      ? 'positive'
-                      : nextStep === 'induction'
-                      ? 'negative'
-                      : 'grey-5'
-                  "
-                />
-              </q-item-section>
-              <q-item-section
-                :class="
-                  inductionComplete
-                    ? 'text-strike text-grey-6'
-                    : nextStep === 'induction'
-                    ? 'text-weight-bold'
-                    : 'text-grey-6'
-                "
-              >
-                <q-item-label>{{ $t('signup.induction') }}</q-item-label>
-                <q-item-label caption>{{
-                  inductionComplete
-                    ? $t('membershipStatusCard.inductionComplete')
-                    : $t('membershipStatusCard.inductionRequired')
-                }}</q-item-label>
-              </q-item-section>
-            </q-item>
-
-            <q-item v-if="showAccessCardStep" dense>
-              <q-item-section avatar>
-                <q-icon
-                  :name="accessCardComplete ? icons.success : icons.fail"
-                  :color="
-                    accessCardComplete
-                      ? 'positive'
-                      : nextStep === 'accessCard'
-                      ? 'negative'
-                      : 'grey-5'
-                  "
-                />
-              </q-item-section>
-              <q-item-section
-                :class="
-                  accessCardComplete
-                    ? 'text-strike text-grey-6'
-                    : nextStep === 'accessCard'
-                    ? 'text-weight-bold'
-                    : 'text-grey-6'
-                "
-              >
-                <q-item-label>{{ $t('signup.accessCard') }}</q-item-label>
-                <q-item-label caption>{{
-                  accessCardComplete
-                    ? $t('membershipStatusCard.accessCardComplete')
-                    : $t('membershipStatusCard.accessCardRequired')
-                }}</q-item-label>
+              <q-item-section :class="textClassForStep(step)">
+                <q-item-label>{{ step.label }}</q-item-label>
+                <q-item-label caption>{{ captionForStep(step) }}</q-item-label>
               </q-item-section>
             </q-item>
           </q-list>
@@ -278,21 +183,52 @@ export default {
     icons() {
       return icons;
     },
-    showPaymentStep() {
-      return this.features.enableMembershipPayments;
-    },
-    showInductionStep() {
-      return this.features.signup?.enableInduction;
-    },
-    showAccessCardStep() {
-      return this.features.signup?.requireAccessCard;
+    // Order here = visual order in the checklist. Adding a step is one entry.
+    // `complete` is null until requiredSteps loads from /api/billing/can-signup/.
+    checklistSteps() {
+      const steps = [];
+      if (this.features.enableMembershipPayments) {
+        steps.push({
+          name: 'payment',
+          complete: this.paymentComplete,
+          pending: this.paymentPending,
+          label: this.$t('membershipStatusCard.payment'),
+          captionComplete: this.$t('membershipStatusCard.paymentComplete'),
+          captionRequired: this.$t('membershipStatusCard.paymentRequired'),
+          captionPending: this.$t('membershipStatusCard.paymentPending'),
+        });
+      }
+      if ((this.features.signup?.termsAcceptanceCards || []).length > 0) {
+        steps.push({
+          name: 'terms',
+          complete: this.termsComplete,
+          label: this.$t('signup.termsAcceptance'),
+          captionComplete: this.$t('membershipStatusCard.termsComplete'),
+          captionRequired: this.$t('membershipStatusCard.termsRequired'),
+        });
+      }
+      if (this.features.signup?.enableInduction) {
+        steps.push({
+          name: 'induction',
+          complete: this.inductionComplete,
+          label: this.$t('signup.induction'),
+          captionComplete: this.$t('membershipStatusCard.inductionComplete'),
+          captionRequired: this.$t('membershipStatusCard.inductionRequired'),
+        });
+      }
+      if (this.features.signup?.requireAccessCard) {
+        steps.push({
+          name: 'accessCard',
+          complete: this.accessCardComplete,
+          label: this.$t('signup.accessCard'),
+          captionComplete: this.$t('membershipStatusCard.accessCardComplete'),
+          captionRequired: this.$t('membershipStatusCard.accessCardRequired'),
+        });
+      }
+      return steps;
     },
     hasAnyStep() {
-      return (
-        this.showPaymentStep ||
-        this.showInductionStep ||
-        this.showAccessCardStep
-      );
+      return this.checklistSteps.length > 0;
     },
     signupStage() {
       return this.profile?.signupStage;
@@ -318,16 +254,18 @@ export default {
       return this.isSignupInProgress ? 'noob' : this.profile.memberStatus;
     },
     nextStep() {
-      // When invoice is pending, payment is "in progress" (awaiting invoice) — skip to next actionable step
-      if (this.showPaymentStep && !this.paymentComplete && !this.paymentPending)
-        return 'payment';
-      if (this.showInductionStep && !this.inductionComplete) return 'induction';
-      if (this.showAccessCardStep && !this.accessCardComplete)
-        return 'accessCard';
-      return null;
+      // Pending (e.g. awaiting invoice payment) is not actionable from here.
+      const next = this.checklistSteps.find((s) => !s.complete && !s.pending);
+      return next?.name || null;
     },
     paymentComplete() {
       return this.profile.financial.subscriptionState === 'active';
+    },
+    termsComplete() {
+      return (
+        this.requiredSteps !== null &&
+        !this.requiredSteps.includes('termsAcceptance')
+      );
     },
     inductionComplete() {
       return (
@@ -376,6 +314,29 @@ export default {
         return this.$t('membershipStatusCard.activateMembership');
       }
       return null;
+    },
+  },
+  methods: {
+    iconForStep(step) {
+      if (step.complete) return this.icons.success;
+      if (step.pending) return this.icons.warning;
+      return this.icons.fail;
+    },
+    colorForStep(step) {
+      if (step.complete) return 'positive';
+      if (step.pending) return 'warning';
+      if (this.nextStep === step.name) return 'negative';
+      return 'grey-5';
+    },
+    textClassForStep(step) {
+      if (step.complete) return 'text-strike text-grey-6';
+      if (this.nextStep === step.name) return 'text-weight-bold';
+      return 'text-grey-6';
+    },
+    captionForStep(step) {
+      if (step.complete) return step.captionComplete;
+      if (step.pending) return step.captionPending;
+      return step.captionRequired;
     },
   },
 };

@@ -787,6 +787,8 @@ export default {
     paymentComplete: 'Subscription active',
     paymentRequired: 'Membership payment required',
     paymentPending: 'Invoice sent — awaiting payment',
+    termsComplete: 'Terms accepted',
+    termsRequired: 'Terms acceptance required',
     inductionComplete: 'Induction completed',
     inductionRequired: 'Online induction required',
     accessCardComplete: 'Access card registered',
