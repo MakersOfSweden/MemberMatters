@@ -14,8 +14,7 @@
     >
       <q-banner class="bg-info text-white">
         {{
-          features.registrationDisabledMessage ||
-          $t('error.registrationClosed')
+          features.registrationDisabledMessage || $t('error.registrationClosed')
         }}
       </q-banner>
       <div class="row justify-end q-mt-md">

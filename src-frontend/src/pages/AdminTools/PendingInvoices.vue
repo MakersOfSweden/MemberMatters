@@ -71,7 +71,10 @@
         <q-card-section v-if="selectedInvoice" class="q-pt-none">
           <div class="q-mb-sm">
             <strong>{{ selectedInvoice.memberName }}</strong>
-            — {{ formatAmount(selectedInvoice.amountDue, selectedInvoice.currency) }}
+            —
+            {{
+              formatAmount(selectedInvoice.amountDue, selectedInvoice.currency)
+            }}
           </div>
           <p class="text-caption text-grey-7 q-mb-md">
             {{ $t('pendingInvoices.markPaidHelp') }}
@@ -221,7 +224,7 @@ export default {
       this.$axios
         .post(
           `/api/admin/billing/invoices/${this.selectedInvoice.invoiceId}/mark-paid/`,
-          { comment: this.comment },
+          { comment: this.comment }
         )
         .then(() => {
           this.$q.notify({

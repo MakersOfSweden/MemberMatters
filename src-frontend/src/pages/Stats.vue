@@ -31,7 +31,10 @@
 
       <template v-if="StatisticsLoaded">
         <template v-for="(value, key) in this.statistics" :key="key">
-          <div v-if="shouldShowMetric(key)" class="col-lg-6 col-12 q-px-md q-pt-md">
+          <div
+            v-if="shouldShowMetric(key)"
+            class="col-lg-6 col-12 q-px-md q-pt-md"
+          >
             <q-card class="full-width">
               <q-card-section>
                 <div class="row flex flex-center">

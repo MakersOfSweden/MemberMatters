@@ -100,13 +100,23 @@
           {{ $tc('memberbucks.selectToContinue') }}
         </div>
 
-        <div v-if="features.enableInvoiceBilling && features.enableMembershipPayments" class="q-mb-md" style="max-width: 500px">
-          <div class="text-subtitle1 q-mb-sm">{{ $t('billing.selectMethod') }}</div>
+        <div
+          v-if="
+            features.enableInvoiceBilling && features.enableMembershipPayments
+          "
+          class="q-mb-md"
+          style="max-width: 500px"
+        >
+          <div class="text-subtitle1 q-mb-sm">
+            {{ $t('billing.selectMethod') }}
+          </div>
           <q-list bordered separator class="rounded-borders">
             <q-item
               clickable
               v-ripple
-              :class="{ 'billing-method-active': selectedBillingMethod === 'card' }"
+              :class="{
+                'billing-method-active': selectedBillingMethod === 'card',
+              }"
               @click="selectedBillingMethod = 'card'"
             >
               <q-item-section avatar>
@@ -116,14 +126,20 @@
                 <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
               </q-item-section>
               <q-item-section side>
-                <q-radio v-model="selectedBillingMethod" val="card" color="primary" />
+                <q-radio
+                  v-model="selectedBillingMethod"
+                  val="card"
+                  color="primary"
+                />
               </q-item-section>
             </q-item>
 
             <q-item
               clickable
               v-ripple
-              :class="{ 'billing-method-active': selectedBillingMethod === 'invoice' }"
+              :class="{
+                'billing-method-active': selectedBillingMethod === 'invoice',
+              }"
               @click="selectedBillingMethod = 'invoice'"
             >
               <q-item-section avatar>
@@ -133,15 +149,28 @@
                 <q-item-label>{{ $t('billing.payByInvoice') }}</q-item-label>
               </q-item-section>
               <q-item-section side>
-                <q-radio v-model="selectedBillingMethod" val="invoice" color="primary" />
+                <q-radio
+                  v-model="selectedBillingMethod"
+                  val="invoice"
+                  color="primary"
+                />
               </q-item-section>
             </q-item>
           </q-list>
 
           <div class="text-caption q-mt-sm q-px-sm">
-            {{ selectedBillingMethod === 'card' ? $t('billing.cardDescription') : $t('billing.invoiceDescription') }}
+            {{
+              selectedBillingMethod === 'card'
+                ? $t('billing.cardDescription')
+                : $t('billing.invoiceDescription')
+            }}
           </div>
-          <div v-if="selectedBillingMethod === 'invoice' && features.invoiceBillingNote" class="text-caption q-mt-xs q-px-sm">
+          <div
+            v-if="
+              selectedBillingMethod === 'invoice' && features.invoiceBillingNote
+            "
+            class="text-caption q-mt-xs q-px-sm"
+          >
             {{ features.invoiceBillingNote }}
           </div>
         </div>
@@ -233,7 +262,13 @@
         <div v-if="finishSuccess" class="row">
           <q-banner class="bg-success text-white">
             <div class="text-h5">{{ $tc('paymentPlans.signupSuccess') }}</div>
-            <p>{{ selectedBillingMethod === 'invoice' ? $tc('paymentPlans.signupSuccessInvoiceDescription') : $tc('paymentPlans.signupSuccessDescription') }}</p>
+            <p>
+              {{
+                selectedBillingMethod === 'invoice'
+                  ? $tc('paymentPlans.signupSuccessInvoiceDescription')
+                  : $tc('paymentPlans.signupSuccessDescription')
+              }}
+            </p>
           </q-banner>
         </div>
 
@@ -250,7 +285,11 @@
             :disable="disableFinish"
             @click="finishSignup"
             color="primary"
-            :label="selectedBillingMethod === 'invoice' ? $tc('tiers.finishInvoice') : $tc('tiers.finish')"
+            :label="
+              selectedBillingMethod === 'invoice'
+                ? $tc('tiers.finishInvoice')
+                : $tc('tiers.finish')
+            "
           />
         </div>
       </q-step>

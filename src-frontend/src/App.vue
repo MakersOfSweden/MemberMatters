@@ -36,7 +36,13 @@ export default defineComponent({
     };
   },
   computed: {
-    ...mapGetters('config', ['siteName', 'keys', 'features', 'theme', 'images']),
+    ...mapGetters('config', [
+      'siteName',
+      'keys',
+      'features',
+      'theme',
+      'images',
+    ]),
     ...mapGetters('profile', ['loggedIn']),
     ...mapGetters('auth', ['refreshToken']),
   },
