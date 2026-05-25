@@ -2,12 +2,12 @@
   <div class="q-gutter-md">
     <q-stepper v-model="step" ref="stepper" color="primary" animated>
       <q-step
-        v-if="features.signup.enableInduction"
-        :name="1"
+        v-if="enabledSteps.includes('induction')"
+        :name="stepIndex('induction')"
         :title="$tc('signup.induction')"
         :icon="icons.induction"
         :active-icon="icons.induction"
-        :done="step > 1"
+        :done="step > stepIndex('induction')"
       >
         <div class="text-h6 q-py-md">
           {{ $tc('signup.completeInduction') }}
@@ -86,12 +86,12 @@
       </q-step>
 
       <q-step
-        v-if="features.signup.requireAccessCard"
-        :name="2"
+        v-if="enabledSteps.includes('accessCard')"
+        :name="stepIndex('accessCard')"
         :title="$tc('signup.accessCard')"
         :icon="icons.accessCard"
         :active-icon="icons.accessCard"
-        :done="step > 2"
+        :done="step > stepIndex('accessCard')"
       >
         <div class="text-h6 q-py-md">
           {{ $tc('signup.assignAccessCard') }}
@@ -157,11 +157,11 @@
       </q-step>
 
       <q-step
-        :name="3"
+        :name="stepIndex('confirm')"
         :title="$tc('confirm')"
         :icon="icons.success"
         :active-icon="icons.success"
-        :done="step > 2"
+        :done="step >= stepIndex('confirm')"
       >
         <template v-if="awaitingPayment">
           <q-banner class="bg-info text-white">
@@ -239,18 +239,9 @@ import { api } from 'boot/axios';
 export default defineComponent({
   name: 'SignupRequiredSteps',
   data() {
-    const signup = this.$store.getters['config/features'].signup;
-    // Land on the first step that's actually rendered. With induction or
-    // RFID disabled, the matching q-step has v-if=false; defaulting to 1
-    // would leave us on a hidden step until check-induction's async
-    // notRequired response auto-bumped us off.
-    const initialStep = signup.enableInduction
-      ? 1
-      : signup.requireAccessCard
-      ? 2
-      : 3;
     return {
-      step: initialStep,
+      // Set in created() once enabledSteps is available.
+      step: 0,
       inductionComplete: false,
       accessCardComplete: false,
       accessCard: null,
@@ -270,6 +261,17 @@ export default defineComponent({
     icons() {
       return icons;
     },
+    // Order here = visual order in the stepper. Adding a step is one line.
+    enabledSteps() {
+      const steps = [];
+      if (this.features.signup.enableInduction) steps.push('induction');
+      if (this.features.signup.requireAccessCard) steps.push('accessCard');
+      steps.push('confirm');
+      return steps;
+    },
+  },
+  created() {
+    this.step = this.stepIndex(this.enabledSteps[0]);
   },
   mounted() {
     this.updateInductionStatus();
@@ -298,6 +300,25 @@ export default defineComponent({
     clearInterval(this.interval);
   },
   methods: {
+    stepIndex(name: string) {
+      return this.enabledSteps.indexOf(name);
+    },
+    // Skips 'accessCard' when the user already has a card on file
+    // (re-signup); finalizes when the next step is 'confirm'.
+    advanceFrom(name: string) {
+      let target = this.stepIndex(name) + 1;
+      while (
+        this.enabledSteps[target] === 'accessCard' &&
+        this.accessCardComplete
+      ) {
+        target++;
+      }
+      if (target >= this.stepIndex('confirm')) {
+        this.completeSignup();
+      } else {
+        this.step = target;
+      }
+    },
     async updateInductionStatus() {
       let result = await api.post('/api/billing/check-induction/');
       this.inductionComplete = result.data.success;
@@ -308,18 +329,11 @@ export default defineComponent({
       }
     },
     inductionCompleted() {
-      // Step is only at 1 while waiting for induction. If can-signup
-      // already advanced us to 3, an in-flight induction poll must not
-      // increment further (would land on a non-existent step 4).
+      // Guard against a late poll firing after can-signup already
+      // advanced us off the induction step.
       clearInterval(this.interval);
-      if (this.step !== 1) return;
-      if (this.accessCardComplete) {
-        // RFID step is hidden (v-if=false) or already satisfied — skip
-        // straight to confirm instead of briefly landing on step 2.
-        this.completeSignup();
-      } else {
-        this.step++;
-      }
+      if (this.step !== this.stepIndex('induction')) return;
+      this.advanceFrom('induction');
     },
     ...mapActions('profile', ['getProfile']),
     async completeSignup() {
@@ -347,11 +361,8 @@ export default defineComponent({
           this.signupError = true;
         })
         .finally(() => {
-          // Land on the final "Submitted" step regardless of caller —
-          // submitAccessCard arrives from step 2, inductionCompleted (with
-          // accessCardComplete) from step 2, and the can-signup-success
-          // mount branch from step 1.
-          this.step = 3;
+          // Land on the final "Submitted" step regardless of caller.
+          this.step = this.stepIndex('confirm');
         });
     },
     async submitAccessCard() {
@@ -362,7 +373,7 @@ export default defineComponent({
         })
         .then((result) => {
           if (result.data.success) {
-            this.completeSignup();
+            this.advanceFrom('accessCard');
           } else {
             this.showAccessCardError(result.data?.message);
           }
