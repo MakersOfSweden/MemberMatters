@@ -530,6 +530,18 @@ class CanSignup(APIView):
         return Response(request.user.profile.can_signup())
 
 
+class AcceptTerms(APIView):
+    """
+    post: records that the member has accepted the configured Terms &
+    Conditions cards. Server is the source of truth for what was
+    accepted, so no body is required.
+    """
+
+    def post(self, request):
+        request.user.profile.update_terms_accepted_at()
+        return Response({"success": True})
+
+
 class AssignAccessCard(APIView):
     """
     post: assigns the access card to the member during first-time signup.

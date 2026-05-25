@@ -437,6 +437,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
     last_seen = models.DateTimeField(default=None, blank=True, null=True)
     last_induction = models.DateTimeField(default=None, blank=True, null=True)
+    terms_accepted_at = models.DateTimeField(default=None, blank=True, null=True)
 
     stripe_customer_id = models.CharField(
         max_length=100, blank=True, null=True, unique=True, default=None
@@ -978,6 +979,11 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         self.last_induction = timezone.now()
         return self.save(update_fields=["last_induction"])
 
+    def update_terms_accepted_at(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
+        self.terms_accepted_at = timezone.now()
+        return self.save(update_fields=["terms_accepted_at"])
+
     def is_signed_into_site(self):
         sessions = SiteSession.objects.filter(user=self.user, signout_date=None)
 
@@ -1123,6 +1129,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     def can_signup(self):
         """Checks if a member can signup. Returns {"success": True/False, "reasons": [String<list of reasons>]}"""
         required_steps = []
+
+        try:
+            terms_cards = json.loads(config.TERMS_ACCEPTANCE_CARDS)
+        except (ValueError, TypeError):
+            terms_cards = []
+
+        if terms_cards and self.terms_accepted_at is None:
+            required_steps.append("termsAcceptance")
 
         if (
             config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS

@@ -42,6 +42,7 @@
     "crypto-js": "^4.1.1",
     "csv-stringify": "^6.5.1",
     "dayjs": "^1.11.1",
+    "dompurify": "^3.4.5",
     "events": "^3.3.0",
     "html-to-image": "^0.1.3",
     "http-proxy": "^1.18.1",

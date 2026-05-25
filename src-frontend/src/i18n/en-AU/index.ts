@@ -645,6 +645,12 @@ export default {
       "Your profile is currently set to 'account only'. This is because you skipped the signup process and did not become a member. You're welcome to continue using this account for our online services, or you can signup to become a member from the menu ('Membership' > 'Membership Plan').",
   },
   signup: {
+    billing: 'Billing',
+    billingCompletedDescription:
+      'Your subscription is set up — you can complete the remaining steps below.',
+    termsAcceptance: 'Terms & Conditions',
+    acceptTerms: 'Please review and accept the following before continuing.',
+    termsAcceptError: 'We couldn’t record your acceptance. Please try again.',
     induction: 'Induction',
     requiredSteps:
       'You must complete the following steps to complete your membership.',
@@ -781,6 +787,8 @@ export default {
     paymentComplete: 'Subscription active',
     paymentRequired: 'Membership payment required',
     paymentPending: 'Invoice sent — awaiting payment',
+    termsComplete: 'Terms accepted',
+    termsRequired: 'Terms acceptance required',
     inductionComplete: 'Induction completed',
     inductionRequired: 'Online induction required',
     accessCardComplete: 'Access card registered',

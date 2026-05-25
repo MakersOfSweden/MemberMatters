@@ -72,6 +72,7 @@ export default {
   bump: 'mdi-door-open',
   induction: 'mdi-account-hard-hat',
   accessCard: 'mdi-card-account-details',
+  terms: 'mdi-script-text-outline',
   doorOpen: 'mdi-door-open',
   interlock: 'mdi-tools',
   lock: 'mdi-lock-outline',
