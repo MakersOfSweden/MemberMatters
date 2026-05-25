@@ -104,6 +104,10 @@ CONSTANCE_CONFIG = {
         "[]",
         "Same syntax as HOME_PAGE_CARDS but icons are not used. If nothing is specified we will use HOME_PAGE_CARDS.",
     ),
+    "TERMS_ACCEPTANCE_CARDS": (
+        "[]",
+        'A JSON array of cards shown as a required Terms & Conditions step during signup. Each card: {"icon": "mdi-...", "title": "...", "body_html": "<p>...</p>", "checkbox_text": "..."}. The step is skipped when the array is empty.',
+    ),
     # Stripe config
     "ENABLE_STRIPE": (True, "Enable use of Stripe for payments."),
     "STRIPE_PUBLISHABLE_KEY": ("", "Set this to your Stripe PUBLIC API key."),
@@ -551,6 +555,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "SIGNUP_REQUIRE_PRIVACY_CONSENT",
                 "SIGNUP_PRIVACY_POLICY_URL",
                 "SIGNUP_PRIVACY_POLICY_TEXT",
+                "TERMS_ACCEPTANCE_CARDS",
                 "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL",
             ),
         ),

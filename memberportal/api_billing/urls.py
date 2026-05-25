@@ -43,6 +43,11 @@ urlpatterns = [
         name="CheckInductionStatus",
     ),
     path(
+        "api/billing/accept-terms/",
+        views.AcceptTerms.as_view(),
+        name="AcceptTerms",
+    ),
+    path(
         "api/billing/access-card/",
         views.AssignAccessCard.as_view(),
         name="AssignAccessCard",

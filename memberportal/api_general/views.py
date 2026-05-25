@@ -32,6 +32,13 @@ import hashlib
 logger = logging.getLogger("general")
 
 
+def _parse_terms_acceptance_cards():
+    try:
+        return json.loads(config.TERMS_ACCEPTANCE_CARDS)
+    except (ValueError, TypeError):
+        return []
+
+
 class GetConfig(APIView):
     """
     get: This method returns the site config used to customise the front end.
@@ -66,6 +73,7 @@ class GetConfig(APIView):
                 "requirePrivacyConsent": config.SIGNUP_REQUIRE_PRIVACY_CONSENT,
                 "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
                 "privacyPolicyText": config.SIGNUP_PRIVACY_POLICY_TEXT,
+                "termsAcceptanceCards": _parse_terms_acceptance_cards(),
                 "requireScreenName": config.REQUIRE_SCREEN_NAME,
                 "defaultPhoneRegion": config.PROFILE_DEFAULT_PHONE_REGION,
             },
