@@ -12,6 +12,40 @@
       </q-step>
 
       <q-step
+        v-if="enabledSteps.includes('terms')"
+        :name="stepIndex('terms')"
+        :title="$tc('signup.termsAcceptance')"
+        :icon="icons.terms"
+        :active-icon="icons.terms"
+        :done="step > stepIndex('terms')"
+      >
+        <div class="text-h6 q-py-md">{{ $tc('signup.acceptTerms') }}</div>
+        <div class="row">
+          <terms-acceptance-card
+            v-for="(card, i) in termsAcceptanceCards"
+            :key="i"
+            :icon="card.icon"
+            :title="card.title"
+            :body-html="card.body_html"
+            :checkbox-text="card.checkbox_text"
+            v-model="acceptedFlags[i]"
+            class="col-12 col-md-6"
+          />
+        </div>
+
+        <div class="row justify-start q-mt-md">
+          <q-space />
+          <q-btn
+            :disable="!allAccepted || termsSubmitting"
+            :loading="termsSubmitting"
+            @click="submitTerms"
+            color="primary"
+            :label="$tc('button.continue')"
+          />
+        </div>
+      </q-step>
+
+      <q-step
         v-if="enabledSteps.includes('induction')"
         :name="stepIndex('induction')"
         :title="$tc('signup.induction')"
@@ -245,10 +279,14 @@ import { defineComponent } from 'vue';
 import { mapGetters, mapActions } from 'vuex';
 import icons from '@icons';
 import { api } from 'boot/axios';
+import TermsAcceptanceCard from '@components/Billing/TermsAcceptanceCard.vue';
 
 export default defineComponent({
   name: 'SignupRequiredSteps',
+  components: { TermsAcceptanceCard },
   data() {
+    const cards =
+      this.$store.getters['config/features'].signup.termsAcceptanceCards || [];
     return {
       // Set in created() once enabledSteps is available.
       step: 0,
@@ -261,6 +299,9 @@ export default defineComponent({
       signupErrorItems: [],
       awaitingPayment: false,
       inductionScore: 0,
+      acceptedFlags: new Array(cards.length).fill(false) as boolean[],
+      termsSubmitting: false,
+      termsAccepted: false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       interval: null as any,
     };
@@ -274,10 +315,17 @@ export default defineComponent({
     // Order here = visual order in the stepper. Adding a step is one line.
     enabledSteps() {
       const steps = ['billing'];
+      if (this.termsAcceptanceCards.length > 0) steps.push('terms');
       if (this.features.signup.enableInduction) steps.push('induction');
       if (this.features.signup.requireAccessCard) steps.push('accessCard');
       steps.push('confirm');
       return steps;
+    },
+    termsAcceptanceCards() {
+      return this.features.signup.termsAcceptanceCards || [];
+    },
+    allAccepted(): boolean {
+      return this.acceptedFlags.every(Boolean);
     },
   },
   created() {
@@ -302,6 +350,13 @@ export default defineComponent({
         // if we don't need the access card, that step is complete
         this.accessCardComplete =
           !result.data.requiredSteps.includes('accessCard');
+        this.termsAccepted =
+          !result.data.requiredSteps.includes('termsAcceptance');
+        // We optimistically landed on terms in created(); bump past if
+        // the backend says the user already accepted.
+        if (this.termsAccepted && this.step === this.stepIndex('terms')) {
+          this.advanceFrom('terms');
+        }
       }
     });
   },
@@ -376,6 +431,20 @@ export default defineComponent({
           // Land on the final "Submitted" step regardless of caller.
           this.step = this.stepIndex('confirm');
         });
+    },
+    async submitTerms() {
+      this.termsSubmitting = true;
+      try {
+        await api.post('/api/billing/accept-terms/');
+        this.advanceFrom('terms');
+      } catch {
+        this.$q.dialog({
+          title: this.$tc('error.error'),
+          message: this.$tc('signup.termsAcceptError'),
+        });
+      } finally {
+        this.termsSubmitting = false;
+      }
     },
     async submitAccessCard() {
       this.accessCardLoading = true;

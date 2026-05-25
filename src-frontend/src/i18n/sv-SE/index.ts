@@ -635,6 +635,9 @@ export default {
     billing: 'Fakturering',
     billingCompletedDescription:
       'Ditt abonnemang är klart — du kan färdigställa de återstående stegen nedan.',
+    termsAcceptance: 'Villkor',
+    acceptTerms: 'Läs igenom och godkänn följande innan du fortsätter.',
+    termsAcceptError: 'Vi kunde inte registrera ditt godkännande. Försök igen.',
     induction: 'Introduktion',
     requiredSteps: 'Du måste färdigställa följande steg för att bli medlem.',
     completeInduction: 'Gå en introduktion',

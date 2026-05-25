@@ -648,6 +648,9 @@ export default {
     billing: 'Billing',
     billingCompletedDescription:
       'Your subscription is set up — you can complete the remaining steps below.',
+    termsAcceptance: 'Terms & Conditions',
+    acceptTerms: 'Please review and accept the following before continuing.',
+    termsAcceptError: 'We couldn’t record your acceptance. Please try again.',
     induction: 'Induction',
     requiredSteps:
       'You must complete the following steps to complete your membership.',
