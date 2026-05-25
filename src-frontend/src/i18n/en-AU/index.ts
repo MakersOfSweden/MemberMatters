@@ -272,6 +272,8 @@ export default {
     allFieldsRequired: 'All fields marked * are required.',
     basicDetailsLocked:
       'Your email, name, and phone number cannot be changed here. Please contact an admin if you need to update these.',
+    emailChangeContactAdmin:
+      'Your email address cannot be changed here. Please contact an admin if you need to update it.',
     featured: 'Featured?',
     email: 'Email',
     rfidCard: 'RFID Card',

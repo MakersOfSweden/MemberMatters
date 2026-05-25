@@ -16,10 +16,14 @@
         outlined
         type="email"
         :label="requiredLabel($t('form.email'))"
-        :readonly="!canEditBasicDetails"
+        :readonly="!canEditBasicDetails || !canEditEmail"
         lazy-rules
         :rules="[(val) => validateEmail(val) || $t('validation.invalidEmail')]"
-      />
+      >
+        <q-tooltip v-if="!canEditEmail && canEditBasicDetails">
+          {{ $t('form.emailChangeContactAdmin') }}
+        </q-tooltip>
+      </q-input>
 
       <q-input
         v-model="form.firstName"
@@ -140,6 +144,9 @@ export default {
     },
     canEditBasicDetails() {
       return this.features?.profile?.canEditBasicDetails !== false;
+    },
+    canEditEmail() {
+      return this.features?.profile?.canEditEmail !== false;
     },
     // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
     phoneRegion() {

@@ -377,6 +377,10 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
     ),
+    "MEMBER_CAN_EDIT_EMAIL": (
+        True,
+        "If true, members can change their own email address on the profile page (subject to MEMBER_CAN_EDIT_BASIC_DETAILS also being true). If false, the email field is locked and members must contact an admin to change it. Name and phone editing are unaffected by this setting.",
+    ),
     "PROFILE_DEFAULT_PHONE_REGION": (
         "AU",
         "Default region (ISO-3166 alpha-2 code, e.g. AU or SE) used to interpret phone numbers entered without an international +country-code prefix. Numbers are stored in E.164 format.",
@@ -554,6 +558,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
             "Member Profile",
             (
                 "MEMBER_CAN_EDIT_BASIC_DETAILS",
+                "MEMBER_CAN_EDIT_EMAIL",
                 "PROFILE_DEFAULT_PHONE_REGION",
             ),
         ),

@@ -71,6 +71,7 @@ class GetConfig(APIView):
             },
             "profile": {
                 "canEditBasicDetails": config.MEMBER_CAN_EDIT_BASIC_DETAILS,
+                "canEditEmail": config.MEMBER_CAN_EDIT_EMAIL,
             },
             "enableWebcams": config.ENABLE_WEBCAMS,
             "siteBanner": config.SITE_BANNER,
@@ -505,12 +506,13 @@ class ProfileDetail(generics.GenericAPIView):
         p = request.user.profile
         body = json.loads(request.body)
         can_edit_basic = config.MEMBER_CAN_EDIT_BASIC_DETAILS
+        can_edit_email = can_edit_basic and config.MEMBER_CAN_EDIT_EMAIL
         # Empty string maps to NULL so unset handles don't collide on the
         # case-insensitive unique constraint.
         screen_name = (body.get("screenName") or "").strip() or None
         email = None
 
-        if can_edit_basic:
+        if can_edit_email:
             email = (body.get("email") or "").lower()
 
             # check if email is specified
@@ -561,12 +563,13 @@ class ProfileDetail(generics.GenericAPIView):
                 profile_fields = ["screen_name", "vehicle_registration_plate"]
 
                 if can_edit_basic:
-                    request.user.email = email
                     p.first_name = body.get("firstName")
                     p.last_name = body.get("lastName")
                     p.phone = phone
                     profile_fields += ["first_name", "last_name", "phone"]
-                    request.user.save(update_fields=["email"])
+                    if can_edit_email:
+                        request.user.email = email
+                        request.user.save(update_fields=["email"])
 
                 # update_fields restricts UPDATE to columns this view
                 # owns — concurrent writes elsewhere on the row (Stripe
@@ -578,7 +581,7 @@ class ProfileDetail(generics.GenericAPIView):
             # Race with a concurrent register/update: pre-checks passed
             # but a unique constraint tripped on insert. Re-check to
             # identify which collision occurred.
-            if can_edit_basic and (
+            if can_edit_email and (
                 User.objects.filter(email__iexact=email)
                 .exclude(pk=request.user.pk)
                 .exists()
