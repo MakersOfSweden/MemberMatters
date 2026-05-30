@@ -623,8 +623,8 @@ export default {
     renewalDate: 'Förnyelsedatum',
     signupDate: 'Registreringsdatum',
     paymentMethod: 'Betalningsmetod',
-    paymentMethodCard: 'Kort (automatisk)',
-    paymentMethodInvoice: 'Faktura (manuell)',
+    paymentMethodCard: 'Automatisk förnyelse',
+    paymentMethodInvoice: 'Manuell förnyelse',
     subscriptionInfo: 'Abonnemangs-info',
     accountOnlyWarning:
       "Din profil är för närvarande 'endast konto'. Detta beror på att du skippade denna process förra gången. Du är välkommen att forsätta använda detta konto i sin nuvarande form, eller så kan du registrera dig för att bli medlem nedan. ",
@@ -798,21 +798,21 @@ export default {
   billing: {
     stateLocked:
       'Your account has been blocked from signing up. Contact an admin if this is not expected.',
-    selectMethod: 'Hur vill du betala?',
-    payByCard: 'Automatisk betalning med kort',
+    selectMethod: 'Hur vill du att ditt medlemskap ska förnyas?',
+    payByCard: 'Automatisk förnyelse',
     cardDescription:
-      'Ange dina kortuppgifter så dras din medlemsavgift automatiskt varje faktureringsperiod. Ingen manuell åtgärd krävs — ditt medlemskap förblir aktivt så länge ditt kort är giltigt.',
-    payByInvoice: 'Manuell betalning med faktura',
+      'Ditt medlemskap förnyas automatiskt. Varje faktureringsperiods betalning dras från kortet som finns sparat. Ingen åtgärd krävs; ditt medlemskap förblir aktivt så länge ditt kort är giltigt.',
+    payByInvoice: 'Manuell förnyelse',
     invoiceDescription:
-      'Du får en faktura via e-post varje faktureringsperiod som du betalar manuellt. Ditt medlemskap aktiveras när betalningen är mottagen och förnyas varje period så länge fakturan betalas i tid.',
+      'Du förnyar ditt medlemskap manuellt. Vi mejlar dig en faktura varje faktureringsperiod som du betalar själv. Ditt medlemskap aktiveras när betalningen är mottagen och förblir aktivt varje period så länge fakturan betalas i tid.',
     invoiceAmount: 'Fakturabelopp: {amount}',
     viewInvoice: 'Visa Faktura',
     awaitingInvoicePayment:
       'Ditt medlemskap väntar. En faktura har skickats till din e-post — din åtkomst aktiveras när betalningen är mottagen.',
     invoiceMethodMemberbucksInfo:
-      'Du betalar ditt medlemskap via faktura — inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
+      'Ditt medlemskap har manuell förnyelse, så inget kort behövs för medlemskapsbetalningen. Du kan ändå lägga till ett kort nedan om du vill fylla på Spacebucks.',
     invoiceMethodNoCardNeeded:
-      'Du betalar ditt medlemskap via faktura — inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
+      'Ditt medlemskap har manuell förnyelse, så inget kort behövs. Din medlemskapsfaktura skickas till din e-post varje faktureringsperiod.',
     invoiceDisabled:
       'Fakturabetalning är inte tillgänglig för närvarande. Välj en annan betalmetod.',
     newSubscriptionsDisabled: 'Registrering av nya medlemskap är stängda.',

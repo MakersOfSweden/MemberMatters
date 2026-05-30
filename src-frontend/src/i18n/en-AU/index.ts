@@ -636,8 +636,8 @@ export default {
     renewalDate: 'Renewal Date',
     signupDate: 'Signup Date',
     paymentMethod: 'Payment Method',
-    paymentMethodCard: 'Card (automatic)',
-    paymentMethodInvoice: 'Invoice (manual)',
+    paymentMethodCard: 'Automatic Renewal',
+    paymentMethodInvoice: 'Manual Renewal',
     subscriptionInfo: 'Subscription Info',
     accountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped this process last time. You're welcome to continue using this account for our online services, or you can signup to become a member below. ",
@@ -813,21 +813,21 @@ export default {
   billing: {
     stateLocked:
       'Your account has been blocked from signing up. Contact an admin if this is not expected.',
-    selectMethod: 'How would you like to pay?',
-    payByCard: 'Automatic payment by card',
+    selectMethod: 'How would you like your membership to renew?',
+    payByCard: 'Automatic Renewal',
     cardDescription:
-      'Enter your card details and your membership payment will be collected automatically each billing cycle. No manual action needed — your membership stays active as long as your card is valid.',
-    payByInvoice: 'Manual payment by invoice',
+      "Your membership renews automatically. Each billing cycle's payment is collected from the card on file. No action needed; your membership stays active as long as your card is valid.",
+    payByInvoice: 'Manual Renewal',
     invoiceDescription:
-      'You will receive an invoice by email each billing cycle that you pay manually. Your membership will be activated once payment is received, and renewed each cycle as long as the invoice is paid on time.',
+      'You renew your membership manually. We email you an invoice each billing cycle that you pay yourself. Your membership is activated once payment is received, and stays active each cycle as long as the invoice is paid on time.',
     invoiceAmount: 'Invoice amount: {amount}',
     viewInvoice: 'View Invoice',
     awaitingInvoicePayment:
       'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
     invoiceMethodMemberbucksInfo:
-      'You pay your membership by invoice — no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
+      'Your membership is on manual renewal, so no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
     invoiceMethodNoCardNeeded:
-      'You pay your membership by invoice — no card is needed. Your membership invoice will be emailed to you each billing cycle.',
+      'Your membership is on manual renewal, so no card is needed. Your membership invoice will be emailed to you each billing cycle.',
     invoiceDisabled:
       'Invoice billing is not currently available. Please choose another payment method.',
     newSubscriptionsDisabled:

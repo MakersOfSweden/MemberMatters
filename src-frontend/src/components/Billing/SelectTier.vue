@@ -115,29 +115,6 @@
               clickable
               v-ripple
               :class="{
-                'billing-method-active': selectedBillingMethod === 'card',
-              }"
-              @click="selectedBillingMethod = 'card'"
-            >
-              <q-item-section avatar>
-                <q-icon name="mdi-credit-card-outline" />
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
-              </q-item-section>
-              <q-item-section side>
-                <q-radio
-                  v-model="selectedBillingMethod"
-                  val="card"
-                  color="primary"
-                />
-              </q-item-section>
-            </q-item>
-
-            <q-item
-              clickable
-              v-ripple
-              :class="{
                 'billing-method-active': selectedBillingMethod === 'invoice',
               }"
               @click="selectedBillingMethod = 'invoice'"
@@ -152,6 +129,29 @@
                 <q-radio
                   v-model="selectedBillingMethod"
                   val="invoice"
+                  color="primary"
+                />
+              </q-item-section>
+            </q-item>
+
+            <q-item
+              clickable
+              v-ripple
+              :class="{
+                'billing-method-active': selectedBillingMethod === 'card',
+              }"
+              @click="selectedBillingMethod = 'card'"
+            >
+              <q-item-section avatar>
+                <q-icon name="mdi-credit-card-outline" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <q-radio
+                  v-model="selectedBillingMethod"
+                  val="card"
                   color="primary"
                 />
               </q-item-section>
@@ -346,6 +346,14 @@ export default defineComponent({
   },
   mounted() {
     this.getTiers();
+    // Manual renewal (invoice) is the first/default option, but only when
+    // it's actually offered — mirror the picker's own visibility gate.
+    if (
+      this.features.enableInvoiceBilling &&
+      this.features.enableMembershipPayments
+    ) {
+      this.selectedBillingMethod = 'invoice';
+    }
   },
   methods: {
     ...mapActions('profile', ['getProfile']),
