@@ -3,6 +3,10 @@
     <q-form ref="formRef" @submit="onSubmit">
       <p class="text-caption q-mb-md">{{ $t('form.allFieldsRequired') }}</p>
 
+      <p class="text-caption text-grey-6 q-mb-md">
+        {{ $t('form.memberNumber') }}: {{ profile.id }}
+      </p>
+
       <q-banner
         v-if="!canEditBasicDetails"
         rounded

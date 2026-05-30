@@ -261,6 +261,7 @@ export default {
   form: {
     saved: 'Sparad',
     error: 'Fel vid sparning',
+    memberNumber: 'Medlemsnummer',
     pageDescription: 'Redigera fälten nedan och de kommer sparas automatiskt.',
     noResults: 'Inga resultat',
     allFieldsRequired: 'Alla fält markerade med * är obligatoriska.',

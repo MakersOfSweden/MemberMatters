@@ -267,6 +267,7 @@ export default {
   form: {
     saved: 'Saved',
     error: 'Error Saving',
+    memberNumber: 'Member Number',
     pageDescription:
       'Edit any of the fields below and they will be automatically saved.',
     noResults: 'No Results',
