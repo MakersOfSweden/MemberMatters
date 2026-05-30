@@ -675,6 +675,9 @@ export default {
     submitted: 'Membership application submitted',
     submittedDescription:
       "Your membership application has been submitted and you are now a 'member applicant'. Your membership will be accepted soon, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information.",
+    submittedNoEmail: 'Membership complete',
+    submittedDescriptionNoEmail:
+      'Your membership is all set and your site access has been enabled. Welcome aboard!',
     continueToDashboard: 'Continue to dashboard',
     awaitingPaymentTitle: 'All requirements complete!',
     awaitingInvoicePayment:

@@ -245,13 +245,25 @@
 
         <template v-else>
           <div class="text-h6 q-py-md">
-            {{ $tc('signup.submitted') }}
+            {{
+              $tc(
+                applicationEmailEnabled
+                  ? 'signup.submitted'
+                  : 'signup.submittedNoEmail'
+              )
+            }}
           </div>
 
           <div class="row items-stretch">
             <div style="width: 100%">
               <p>
-                {{ $t('signup.submittedDescription') }}
+                {{
+                  $t(
+                    applicationEmailEnabled
+                      ? 'signup.submittedDescription'
+                      : 'signup.submittedDescriptionNoEmail'
+                  )
+                }}
               </p>
             </div>
 
@@ -326,6 +338,9 @@ export default defineComponent({
     },
     allAccepted(): boolean {
       return this.acceptedFlags.every(Boolean);
+    },
+    applicationEmailEnabled(): boolean {
+      return this.features.signup.enableMembershipApplicationEmail;
     },
   },
   created() {

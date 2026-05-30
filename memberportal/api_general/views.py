@@ -76,6 +76,7 @@ class GetConfig(APIView):
                 "termsAcceptanceCards": _parse_terms_acceptance_cards(),
                 "requireScreenName": config.REQUIRE_SCREEN_NAME,
                 "defaultPhoneRegion": config.PROFILE_DEFAULT_PHONE_REGION,
+                "enableMembershipApplicationEmail": config.ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL,
             },
             "profile": {
                 "canEditBasicDetails": config.MEMBER_CAN_EDIT_BASIC_DETAILS,

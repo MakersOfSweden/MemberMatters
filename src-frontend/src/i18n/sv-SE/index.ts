@@ -661,6 +661,9 @@ export default {
     submitted: 'Ansökan för medlemskap inskickad',
     submittedDescription:
       "Din ansökan för medlemskap har skickats in och du är nu en 'ansökande medlem'. Ditt medlemskap kommer godkännas snart, men vi har gett dig åtkomst till sidan direkt. Du kommer få ett mail som bekräftar ditt nyckelkort har aktiverats. Om du av någon anledning får avslag på medlemskapet så kommer du få ett mail med mer information.",
+    submittedNoEmail: 'Medlemskap klart',
+    submittedDescriptionNoEmail:
+      'Ditt medlemskap är klart och din åtkomst till sidan har aktiverats. Välkommen!',
     continueToDashboard: 'Forsätt till dashboard',
     awaitingPaymentTitle: 'Alla krav uppfyllda!',
     awaitingInvoicePayment:

@@ -249,8 +249,8 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
 
             self.email_notification(subject, message)
 
-        subject = f"A new person just became a member applicant: {self.profile.get_full_name()}"
-        message = f"{self.profile.get_full_name()} just completed all steps required to sign up and is now a member applicant. Their site access has been enabled and membership will automatically be accepted within 7 days without objection."
+        subject = f"A new person just completed signup: {self.profile.get_full_name()}"
+        message = f"{self.profile.get_full_name()} just completed all steps required to sign up and now has full membership. Their site access has been enabled."
         template_vars = {"message": message}
 
         return send_email_to_admin(
