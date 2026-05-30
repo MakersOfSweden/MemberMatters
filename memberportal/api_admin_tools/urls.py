@@ -123,4 +123,9 @@ urlpatterns = [
         views.ManageSettings.as_view(),
         name="ManageSettings",
     ),
+    path(
+        "api/admin/signup-preview/",
+        views.SignupPreview.as_view(),
+        name="SignupPreview",
+    ),
 ]

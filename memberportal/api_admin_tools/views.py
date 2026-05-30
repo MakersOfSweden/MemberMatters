@@ -11,6 +11,7 @@ from django.db.models import F, Sum, Value, CharField, Count, Max
 from django.db.models.functions import Concat
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import permissions
 from rest_framework import status
@@ -1451,3 +1452,38 @@ class MarkInvoicePaid(StripeAPIView):
         )
 
         return Response({"success": True})
+
+
+class SignupPreview(APIView):
+    """
+    get: Renders the welcome email exactly as members receive it, plus the
+    terms & conditions cards, so admins can preview signup content. Quick
+    admin tool — no member context, just the configured content.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request):
+        # Mirror Profile.email_welcome()'s card source so the preview matches.
+        raw_cards = config.WELCOME_EMAIL_CARDS or config.HOME_PAGE_CARDS
+        try:
+            cards = json.loads(raw_cards)
+        except (ValueError, TypeError):
+            cards = []
+
+        email_vars = {"title": f"Welcome to {config.SITE_OWNER}", "cards": cards}
+        welcome_email_html = render_to_string(
+            "email_welcome.html", {"email": email_vars, "config": config}
+        )
+
+        try:
+            terms_cards = json.loads(config.TERMS_ACCEPTANCE_CARDS)
+        except (ValueError, TypeError):
+            terms_cards = []
+
+        return Response(
+            {
+                "welcomeEmailHtml": welcome_email_html,
+                "termsAcceptanceCards": terms_cards,
+            }
+        )

@@ -28,6 +28,7 @@ export default {
     devices: 'Enheter',
     kiosks: 'Kiosks',
     pendingInvoices: 'Väntande fakturor',
+    signupPreview: 'Signup Preview',
 
     memberTools: 'Medlemsverktyg',
     reportIssue: 'Rapportera ett problem',

@@ -28,6 +28,7 @@ export default {
     devices: 'Devices',
     kiosks: 'Kiosks',
     pendingInvoices: 'Pending Invoices',
+    signupPreview: 'Signup Preview',
 
     memberTools: 'Member Tools',
     reportIssue: 'Report Issue',
