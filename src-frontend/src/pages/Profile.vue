@@ -46,6 +46,12 @@
       @click="digitalId = true"
     />
 
+    <p class="text-body2 text-grey-8 q-mt-xl">
+      {{ $t('form.memberNumber') }}:<span class="q-ml-sm text-weight-bold">{{
+        profile.id
+      }}</span>
+    </p>
+
     <q-dialog v-model="digitalId">
       <digital-id-card />
     </q-dialog>
