@@ -17,7 +17,7 @@
         <q-separator />
 
         <q-card-section>
-          {{ description }}
+          <div v-html="sanitizedDescription" />
         </q-card-section>
       </div>
 
@@ -61,6 +61,7 @@
 
 <script>
 import { Platform } from 'quasar';
+import DOMPurify from 'dompurify';
 
 export default {
   name: 'DashboardCard',
@@ -101,6 +102,14 @@ export default {
   computed: {
     Platform() {
       return Platform;
+    },
+    sanitizedDescription() {
+      // Allow links (with target/rel) so cards can link out; everything
+      // else falls back to DOMPurify's safe defaults. Matches the policy
+      // used by the terms-acceptance and welcome-email cards.
+      return DOMPurify.sanitize(this.description, {
+        ADD_ATTR: ['target', 'rel'],
+      });
     },
   },
 };
