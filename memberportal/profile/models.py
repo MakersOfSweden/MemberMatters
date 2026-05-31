@@ -1003,6 +1003,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         # state == "noob" below
         if not self.membership_plan:
             return "needs_plan"
+        # Required steps before payment status: an invoice signup goes
+        # "pending" at billing time, i.e. before terms/induction/access card.
+        if not self.can_signup()["success"]:
+            return "needs_requirements"
         if self.subscription_status == "pending":
             return "awaiting_payment"
         return "needs_requirements"
