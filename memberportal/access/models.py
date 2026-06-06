@@ -267,6 +267,11 @@ class AccessControlledDevice(
             raise Exception("Unknown device type")
 
         for profile in ProfileQueryset.all():
+            # Skip any non-numeric RFID values — firmware cannot interpret them
+            # and they cause all subsequent tags in the sync list to be rejected.
+            if not profile.rfid.isdigit():
+                continue
+
             # If the site sign in feature is disabled, or the device is exempt
             # from sign in, then all tags are authorised.
             # Otherwise check if the member is signed in to the site

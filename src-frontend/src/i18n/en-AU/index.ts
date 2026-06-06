@@ -214,6 +214,7 @@ export default {
     invalidPhone: 'Please enter a valid phone number.',
     passwordNotMatch: "Sorry, but your passwords don't match.",
     cannotBeEmpty: 'This field cannot be empty.',
+    rfidMustBeNumeric: 'RFID tag must contain digits only.',
     futureDate: 'Date must be today or in the future.',
     tooMany: 'Sorry, the maximum is {number}.',
     rfidAlreadyInUse: 'RFID is already assigned to {name}.',
@@ -711,6 +712,7 @@ export default {
       'You already have an access card registered. Please contact us if it needs to be replaced.',
     alreadyInUse:
       "That access card is already registered to another member. Please double-check the number, or contact us if you think it's a mistake.",
+    mustBeNumeric: 'Access card number must contain digits only.',
   },
   tiers: {
     disabledFeature:

@@ -200,6 +200,10 @@
                   outlined
                   :label="$t('form.rfidCard')"
                   :rules="[
+                    (val) =>
+                      validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+                    (val) =>
+                      /^\d+$/.test(val) || $t('validation.rfidMustBeNumeric'),
                     (val) => checkRfidUniqueness(val),
                   ]"
                 />
