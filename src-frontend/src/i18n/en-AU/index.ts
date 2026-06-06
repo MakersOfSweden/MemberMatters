@@ -216,6 +216,7 @@ export default {
     cannotBeEmpty: 'This field cannot be empty.',
     futureDate: 'Date must be today or in the future.',
     tooMany: 'Sorry, the maximum is {number}.',
+    rfidAlreadyInUse: 'RFID is already assigned to {name}.',
   },
   tableHeading: {
     id: 'ID',
