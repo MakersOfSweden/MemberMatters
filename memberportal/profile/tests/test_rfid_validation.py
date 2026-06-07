@@ -27,3 +27,11 @@ def test_non_numeric_rfid_rejected(profile):
 
 def test_short_numeric_rfid_accepted(profile):
     _set_rfid(profile, "1")
+
+
+def test_empty_rfid_accepted(profile):
+    _set_rfid(profile, "")  # blank=True
+
+
+def test_none_rfid_accepted(profile):
+    _set_rfid(profile, None)  # null=True
