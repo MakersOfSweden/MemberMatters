@@ -215,6 +215,7 @@ export default {
     passwordNotMatch: "Sorry, but your passwords don't match.",
     cannotBeEmpty: 'This field cannot be empty.',
     rfidMustBeNumeric: 'RFID tag must contain digits only.',
+    rfidTooLong: 'RFID tag must be 8 digits or fewer.',
     futureDate: 'Date must be today or in the future.',
     tooMany: 'Sorry, the maximum is {number}.',
     rfidAlreadyInUse: 'RFID is already assigned to {name}.',
@@ -713,6 +714,7 @@ export default {
     alreadyInUse:
       "That access card is already registered to another member. Please double-check the number, or contact us if you think it's a mistake.",
     mustBeNumeric: 'Access card number must contain digits only.',
+    tooLong: 'Access card number must be 8 digits or fewer.',
   },
   tiers: {
     disabledFeature:

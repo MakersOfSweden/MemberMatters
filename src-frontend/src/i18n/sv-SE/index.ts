@@ -207,6 +207,8 @@ export default {
     invalidPhone: 'Ange ett giltigt telefonnummer.',
     passwordNotMatch: 'Lösenorden matchar inte.',
     cannotBeEmpty: 'Detta fält kan inte vara tomt.',
+    rfidMustBeNumeric: 'RFID-taggen får bara innehålla siffror.',
+    rfidTooLong: 'RFID-taggen får vara högst 8 siffror.',
     futureDate: 'Datum måste vara idag eller i framtiden.',
     tooMany: 'Max är {number}.',
   },

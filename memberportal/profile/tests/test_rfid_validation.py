@@ -35,3 +35,12 @@ def test_empty_rfid_accepted(profile):
 
 def test_none_rfid_accepted(profile):
     _set_rfid(profile, None)  # null=True
+
+
+def test_numeric_rfid_accepted(profile):
+    _set_rfid(profile, "12345343")  # 8 digits, boundary
+
+
+def test_rfid_too_long_rejected(profile):
+    with pytest.raises(ValidationError):
+        _set_rfid(profile, "123456789")  # 9 digits
