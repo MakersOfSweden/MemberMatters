@@ -209,6 +209,7 @@ export default {
     cannotBeEmpty: 'Detta fält kan inte vara tomt.',
     rfidMustBeNumeric: 'RFID-taggen får bara innehålla siffror.',
     rfidTooLong: 'RFID-taggen får vara högst 8 siffror.',
+    rfidAlreadyInUse: 'RFID-taggen är redan tilldelad {name}.',
     futureDate: 'Datum måste vara idag eller i framtiden.',
     tooMany: 'Max är {number}.',
   },
@@ -697,6 +698,8 @@ export default {
       'Du har redan ett nyckelkort registrerat. Kontakta oss om det behöver bytas.',
     alreadyInUse:
       'Det nyckelkortet är redan registrerat på en annan medlem. Dubbelkolla numret eller kontakta oss om du tror det är ett misstag.',
+    mustBeNumeric: 'Nyckelkortsnumret får bara innehålla siffror.',
+    tooLong: 'Nyckelkortsnumret får vara högst 8 siffror.',
   },
   tiers: {
     disabledFeature:
