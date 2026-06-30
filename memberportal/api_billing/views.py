@@ -561,6 +561,18 @@ class AssignAccessCard(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if not access_card.isdigit():
+            return Response(
+                {"success": False, "message": "accessCard.mustBeNumeric"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(access_card) > 8:
+            return Response(
+                {"success": False, "message": "accessCard.tooLong"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Lock + re-read so a concurrent admin (state/rfid mutation) or
         # the same user double-submitting can't slip writes past these
         # checks. The cross-profile RFID-collision case is still caught
@@ -627,7 +639,6 @@ class AssignAccessCard(APIView):
             "Member self-bound RFID.",
             "profile",
         )
-
         return Response({"success": True})
 
 

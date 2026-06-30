@@ -426,7 +426,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     )
 
     rfid = models.CharField(
-        "RFID Tag", max_length=20, unique=True, null=True, blank=True
+        "RFID Tag",
+        max_length=8,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(r"^\d{1,8}$", "RFID tag must be 1-8 digits.")],
     )
     doors = models.ManyToManyField("access.Doors", blank=True)
     interlocks = models.ManyToManyField("access.Interlock", blank=True)

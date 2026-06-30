@@ -199,6 +199,16 @@
                   v-model="profileForm.rfidCard"
                   outlined
                   :label="$t('form.rfidCard')"
+                  maxlength="8"
+                  :rules="[
+                    (val) =>
+                      !val ||
+                      /^\d+$/.test(val) ||
+                      $t('validation.rfidMustBeNumeric'),
+                    (val) =>
+                      !val || val.length <= 8 || $t('validation.rfidTooLong'),
+                    (val) => checkRfidUniqueness(val),
+                  ]"
                 />
 
                 <q-input
@@ -1660,6 +1670,24 @@ export default defineComponent({
       this.profileForm.vehicleRegistrationPlate =
         this.selectedMember.vehicleRegistrationPlate ?? '';
       this.initialFormSnapshot = JSON.stringify(this.profileForm);
+    },
+    async checkRfidUniqueness(val: string) {
+      if (!val) return true;
+      try {
+        const res = await this.$axios.get(
+          `/api/admin/rfid-check/?rfid=${encodeURIComponent(
+            val
+          )}&excludeMemberId=${this.member.id}`
+        );
+        if (res.data.inUse) {
+          return this.$t('validation.rfidAlreadyInUse', {
+            name: res.data.usedBy,
+          });
+        }
+        return true;
+      } catch {
+        return true;
+      }
     },
     onSubmit() {
       this.success = false;

@@ -51,6 +51,11 @@ urlpatterns = [
         name="MemberProfile",
     ),
     path(
+        "api/admin/rfid-check/",
+        views.RFIDCheck.as_view(),
+        name="RFIDCheck",
+    ),
+    path(
         "api/admin/members/<int:member_id>/billing/",
         views.MemberBillingInfo.as_view(),
         name="MemberBillingInfo",

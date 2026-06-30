@@ -1,0 +1,29 @@
+name: Django Unit Tests
+
+on: [pull_request]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y default-libmysqlclient-dev pkg-config
+
+      - name: Install Python dependencies
+        run: pip install -r memberportal/requirements.txt
+
+      - name: Install pytest
+        run: pip install pytest pytest-django factory_boy
+
+      - name: Run unit tests
+        working-directory: memberportal
+        env:
+          MM_DB_LOCATION: /tmp/db.sqlite3
+          MM_LOG_LOCATION: /tmp/django.log
+        run: python -m pytest

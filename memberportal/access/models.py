@@ -267,6 +267,15 @@ class AccessControlledDevice(
             raise Exception("Unknown device type")
 
         for profile in ProfileQueryset.all():
+            # RFID values (which we receive as the facility code and ID code
+            # combined in 26-bit Wiegand format) are entered as an integer
+            # from 1 to 67108861 (not all values are valid due to some parity
+            # bits). Anything which causes `atoi` to fail in the CheepCheep
+            # firmware (i.e. not digits) needs to be rejected here, and
+            # anything more than 8 digits is impossible so should be rejected.
+            if not profile.rfid.isdigit() or len(profile.rfid) > 8:
+                continue
+
             # If the site sign in feature is disabled, or the device is exempt
             # from sign in, then all tags are authorised.
             # Otherwise check if the member is signed in to the site
