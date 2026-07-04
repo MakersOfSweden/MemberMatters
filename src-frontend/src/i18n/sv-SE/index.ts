@@ -41,7 +41,7 @@ export default {
     profile: 'Profil',
     checkAccess: 'Åtkomsträttigheter',
     memberbucks: 'Spacebucks',
-    membershipPlan: 'Medlemskap',
+    membershipPlan: 'Medlemskapsplan',
 
     Error404: 'Sidan finns inte',
     Error403: 'Error 403',
