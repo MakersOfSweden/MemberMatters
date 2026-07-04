@@ -356,6 +356,7 @@
               'registrationDate',
               'lastUpdatedProfile',
               'lastSeen',
+              'termsAcceptedAt',
             ]"
             :key="item"
           >

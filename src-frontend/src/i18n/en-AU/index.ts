@@ -542,6 +542,7 @@ export default {
     lastUpdatedProfile: 'Last Updated Profile',
     registrationDate: 'Registration Date',
     lastSeen: 'Last Seen',
+    termsAcceptedAt: 'Terms Accepted',
     billing: 'Billing',
     memberState: 'Member State',
     memberbucksTransactions: 'Spacebucks Transactions',

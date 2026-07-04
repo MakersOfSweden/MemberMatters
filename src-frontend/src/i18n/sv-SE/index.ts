@@ -530,6 +530,7 @@ export default {
     lastUpdatedProfile: 'Senast uppdaterade profil',
     registrationDate: 'Registreringsdatum',
     lastSeen: 'Senast aktiv',
+    termsAcceptedAt: 'Villkor godkända',
     billing: 'Betalning',
     memberState: 'Medlemsstatus',
     memberbucksTransactions: 'Spacebucks Transaktioner',
