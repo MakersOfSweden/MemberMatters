@@ -57,6 +57,7 @@
                 class="q-mb-sm"
                 outlined
                 emit-value
+                map-options
                 :options="filterOptions"
                 :label="$t('adminTools.filterOptions')"
                 dense
@@ -90,6 +91,7 @@
           style="min-width: 100px"
           outlined
           emit-value
+          map-options
           :options="filterOptions"
           :label="$t('adminTools.filterOptions')"
           dense

@@ -150,6 +150,7 @@
           <q-input
             v-model="profileForm.rfidCard"
             outlined
+            bottom-slots
             :label="$t('form.rfidCard')"
           />
 
