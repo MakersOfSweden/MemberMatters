@@ -66,6 +66,9 @@
                 <div>
                   <div class="text-caption">{{ $tc('tiers.selected') }}</div>
                   <div class="text-h6">{{ selectedTier.name }}</div>
+                  <div v-if="selectedTier.description" class="text-subtitle2">
+                    {{ selectedTier.description }}
+                  </div>
                 </div>
               </div>
             </q-card-section>
