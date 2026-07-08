@@ -87,7 +87,6 @@ export const MemberBillingInfoSchema = z.object({
 });
 
 export interface MemberBillingInfo {
-  subscription: MemberSubscription | null;
   memberbucks: {
     balance: number;
     stripe_card_last_digits: string;
@@ -95,4 +94,12 @@ export interface MemberBillingInfo {
     transactions: MemberbucksTransaction[];
     lastPurchase: Date;
   };
+}
+
+// Served by a separate endpoint from MemberBillingInfo so its Stripe call
+// doesn't block the DB-only memberbucks data.
+export interface MemberSubscriptionInfo {
+  subscription: MemberSubscription | null;
+  // true when Stripe couldn't be reached
+  subscriptionUnavailable: boolean;
 }

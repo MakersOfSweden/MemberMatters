@@ -56,6 +56,11 @@ urlpatterns = [
         name="MemberBillingInfo",
     ),
     path(
+        "api/admin/members/<int:member_id>/subscription/",
+        views.MemberSubscriptionInfo.as_view(),
+        name="MemberSubscriptionInfo",
+    ),
+    path(
         "api/admin/members/<int:member_id>/logs/",
         views.MemberLogs.as_view(),
         name="MemberLogs",

@@ -557,6 +557,7 @@ export default {
     billingPlan: 'Betalplan',
     startDate: 'Startdatum',
     noSubscription: 'Inget abonnemang hittades på denna medlem.',
+    subscriptionUnavailable: 'Kunde inte hämta abonnemangsdata från Stripe.',
     noMembers: 'Inga medlemmar hittades som matchar din sökning.',
   },
   doors: {

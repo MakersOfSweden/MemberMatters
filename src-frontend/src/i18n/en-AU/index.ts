@@ -569,6 +569,7 @@ export default {
     billingPlan: 'Billing Plan',
     startDate: 'Start Date',
     noSubscription: 'No subscription was found for this member.',
+    subscriptionUnavailable: 'Could not fetch subscription data from Stripe.',
     noMembers: 'No members were found that match your filter or search query.',
   },
   doors: {
