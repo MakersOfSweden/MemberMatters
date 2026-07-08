@@ -58,6 +58,20 @@
         :icon="icons.dollar"
         :done="step > 2"
       >
+        <div class="q-pa-md">
+          <q-card class="bg-white text-black" style="max-width: 500px">
+            <q-card-section>
+              <div class="row items-center no-wrap">
+                <q-icon :name="icons.plans" size="sm" class="q-mr-md" />
+                <div>
+                  <div class="text-caption">{{ $tc('tiers.selected') }}</div>
+                  <div class="text-h6">{{ selectedTier.name }}</div>
+                </div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+
         <template v-if="selectedTier.plans && selectedTier.plans.length === 0">
           <div class="text-center text-h6">
             {{ $tc('paymentPlans.noPlans') }}
@@ -80,6 +94,7 @@
 
           <div class="row justify-start">
             <q-btn
+              v-if="tiers.length > 1"
               class="q-mt-md"
               @click="backToTiers"
               flat
@@ -360,6 +375,10 @@ export default defineComponent({
     getTiers() {
       this.$axios.get('/api/billing/tiers/').then((response) => {
         this.tiers = response.data;
+        // Only one membership plan to choose — skip to the payment plan step.
+        if (this.tiers.length === 1) {
+          this.selectedTierEvent(this.tiers[0]);
+        }
       });
     },
     skipSignup() {
