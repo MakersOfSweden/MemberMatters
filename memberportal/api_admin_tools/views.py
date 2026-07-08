@@ -80,6 +80,33 @@ class GetMembers(APIView):
         return Response(filtered)
 
 
+class SignupProgress(APIView):
+    """
+    get: Returns noob/inactive members with their signup-step progress so an
+    admin can triage who needs help without opening each profile.
+    """
+
+    permission_classes = (permissions.IsAdminUser | HasAPIKey,)
+
+    def get(self, request):
+        # select_related the plan/tier so signup_stage()'s membership_plan
+        # access doesn't fire a query per member.
+        profiles = (
+            Profile.objects.filter(state__in=["noob", "inactive"])
+            .select_related("user", "membership_plan__member_tier")
+            .all()
+        )
+
+        result = []
+        for p in profiles:
+            data = p.get_basic_profile()
+            data["requiredSteps"] = p.can_signup()["requiredSteps"]
+            data["signupStage"] = p.signup_stage
+            result.append(data)
+
+        return Response(result)
+
+
 class MakeMember(APIView):
     """
     post: Activate a member ("Make Member") — admin override.

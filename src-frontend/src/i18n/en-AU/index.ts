@@ -19,6 +19,7 @@ export default {
 
     meetings: 'Meetings',
     members: 'Members', // for routes
+    signupProgress: 'Signup Progress',
     manageMember: 'Manage Member',
     doors: 'Doors',
     manageDoor: 'Manage Door',
@@ -450,6 +451,14 @@ export default {
     'There was an error fetching new data. Any data that you see may not be up ' +
     'to date.',
   progress: 'Progress: {percent}%',
+  signupProgress: {
+    description:
+      'Signup progress for all new and inactive members, so you can see at a glance who needs help completing their signup.',
+    nextStep: 'Next step',
+    complete: 'Complete',
+    pending: 'Pending',
+    required: 'Outstanding',
+  },
   adminTools: {
     title: 'Tools',
     optOutEmailExport: 'Opt out of email export',

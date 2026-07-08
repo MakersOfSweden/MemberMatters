@@ -74,6 +74,14 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/Members.vue'),
       },
       {
+        icon: icons.signupProgress,
+        to: '/manage/signup-progress',
+        name: 'signupProgress',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/SignupProgress.vue'),
+      },
+      {
         icon: icons.members,
         to: '/manage/members/:memberId',
         name: 'manageMember',

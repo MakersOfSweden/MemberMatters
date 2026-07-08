@@ -6,6 +6,11 @@ from . import views
 urlpatterns = [
     path("api/admin/members/", views.GetMembers.as_view(), name="GetMembers"),
     path(
+        "api/admin/signup-progress/",
+        views.SignupProgress.as_view(),
+        name="SignupProgress",
+    ),
+    path(
         "api/admin/members/<int:member_id>/make-member/",
         views.MakeMember.as_view(),
         name="MakeMember",

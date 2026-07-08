@@ -19,6 +19,7 @@ export default {
 
     meetings: 'Möten',
     members: 'Medlemmar', // for routes
+    signupProgress: 'Registreringsstatus',
     manageMember: 'hantera Medlem',
     doors: 'Dörrar',
     manageDoor: 'Hantera Dörrar',
@@ -439,6 +440,14 @@ export default {
     'Det uppstod ett fel vid hämtning av ny data. Data som du ser kan vara  ' +
     'utdaterad.',
   progress: 'Progress: {percent}%',
+  signupProgress: {
+    description:
+      'Registreringsstatus för alla nya och inaktiva medlemmar, så att du snabbt ser vilka som behöver hjälp att slutföra sin registrering.',
+    nextStep: 'Nästa steg',
+    complete: 'Klart',
+    pending: 'Väntar',
+    required: 'Återstår',
+  },
   adminTools: {
     title: 'Verktyg',
     optOutEmailExport: 'Opt out för email export',
