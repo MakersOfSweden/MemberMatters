@@ -34,6 +34,8 @@
     </template>
 
     <template v-else>
+      <membership-state-banner class="full-width q-mb-md" />
+
       <selected-tier :plan="membershipPlan" :tier="currentTier" />
 
       <q-banner
@@ -150,6 +152,7 @@ import SelectTier from '@components/Billing/SelectTier.vue';
 import SelectedTier from '@components/Billing/SelectedTier.vue';
 import SignupRequiredSteps from '@components/Billing/SignupRequiredSteps.vue';
 import MemberBucksManageBilling from 'components/MemberBucksManageBilling.vue';
+import MembershipStateBanner from '@components/MembershipStateBanner.vue';
 
 export default defineComponent({
   name: 'MembershipTierPage',
@@ -158,6 +161,7 @@ export default defineComponent({
     SelectTier,
     SelectedTier,
     SignupRequiredSteps,
+    MembershipStateBanner,
   },
   data() {
     return {

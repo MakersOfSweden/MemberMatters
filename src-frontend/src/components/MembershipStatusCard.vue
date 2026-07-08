@@ -7,11 +7,7 @@
       </div>
     </q-card-section>
 
-    <div
-      :class="`bg-${stateBadgeColor} text-white text-center text-subtitle1 text-weight-medium q-py-sm q-mb-sm`"
-    >
-      {{ $t(`membershipStatusCard.stateBanner.${bannerKey}`) }}
-    </div>
+    <membership-state-banner class="q-mb-sm" />
 
     <q-card-section class="q-pt-sm">
       <!-- account blocked by an admin -->
@@ -131,9 +127,11 @@
 import { mapGetters } from 'vuex';
 import icons from '@icons';
 import dayjs from 'dayjs';
+import MembershipStateBanner from '@components/MembershipStateBanner.vue';
 
 export default {
   name: 'MembershipStatusCard',
+  components: { MembershipStateBanner },
   data() {
     return {
       requiredSteps: null,
@@ -250,9 +248,6 @@ export default {
     isInactiveMember() {
       return this.signupStage === 'lapsed';
     },
-    bannerKey() {
-      return this.isSignupInProgress ? 'noob' : this.profile.memberStatus;
-    },
     nextStep() {
       // Pending (e.g. awaiting invoice payment) is not actionable from here.
       const next = this.checklistSteps.find((s) => !s.complete && !s.pending);
@@ -277,15 +272,6 @@ export default {
         this.requiredSteps !== null &&
         !this.requiredSteps.includes('accessCard')
       );
-    },
-    stateBadgeColor() {
-      const colors = {
-        noob: 'orange',
-        active: 'positive',
-        inactive: 'yellow-8',
-        accountonly: 'grey-7',
-      };
-      return colors[this.bannerKey] || 'grey-7';
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;
