@@ -34,6 +34,8 @@
     </template>
 
     <template v-else>
+      <membership-state-banner class="full-width q-mb-md" />
+
       <selected-tier :plan="membershipPlan" :tier="currentTier" />
 
       <q-banner
@@ -47,8 +49,9 @@
         </template>
         {{ $t('billing.awaitingInvoicePayment') }}
         <template v-slot:action>
+          <q-spinner v-if="loadingSubscription" color="white" size="sm" />
           <q-btn
-            v-if="subscriptionInfo?.invoiceUrl"
+            v-else-if="subscriptionInfo?.invoiceUrl"
             flat
             no-caps
             text-color="white"
@@ -80,15 +83,29 @@
 
       <div
         v-if="
-          this.subscriptionInfo?.currentPeriodEnd &&
-          subscriptionStatus !== 'cancelling'
+          subscriptionStatus !== 'cancelling' &&
+          (subscriptionInfo?.currentPeriodEnd ||
+            (subscriptionExpected &&
+              (loadingSubscription || subscriptionUnavailable)))
         "
         class="q-mb-md"
       >
         <div class="text-h6 q-py-md">
           {{ $t('paymentPlans.subscriptionInfo') }}
         </div>
-        <q-card>
+
+        <div v-if="loadingSubscription" class="q-pa-md">
+          <q-spinner color="primary" size="md" />
+        </div>
+
+        <q-banner
+          v-else-if="subscriptionUnavailable"
+          class="bg-warning text-white rounded-borders"
+        >
+          {{ $t('paymentPlans.subscriptionUnavailable') }}
+        </q-banner>
+
+        <q-card v-else>
           <q-list bordered separator>
             <q-item>
               <q-item-section>
@@ -150,6 +167,7 @@ import SelectTier from '@components/Billing/SelectTier.vue';
 import SelectedTier from '@components/Billing/SelectedTier.vue';
 import SignupRequiredSteps from '@components/Billing/SignupRequiredSteps.vue';
 import MemberBucksManageBilling from 'components/MemberBucksManageBilling.vue';
+import MembershipStateBanner from '@components/MembershipStateBanner.vue';
 
 export default defineComponent({
   name: 'MembershipTierPage',
@@ -158,12 +176,15 @@ export default defineComponent({
     SelectTier,
     SelectedTier,
     SignupRequiredSteps,
+    MembershipStateBanner,
   },
   data() {
     return {
       disableButton: false,
       loadingButton: false,
       cancelSuccess: false,
+      loadingSubscription: true,
+      subscriptionUnavailable: false,
       subscriptionInfo: {
         billingCycleAnchor: null,
         currentPeriodEnd: null,
@@ -194,6 +215,12 @@ export default defineComponent({
     subscriptionStatus() {
       return this.profile.financial.subscriptionState;
     },
+    subscriptionExpected() {
+      return (
+        this.subscriptionStatus === 'active' ||
+        this.subscriptionStatus === 'pending'
+      );
+    },
     billingMethod() {
       return this?.profile?.financial?.billingMethod;
     },
@@ -222,11 +249,23 @@ export default defineComponent({
   methods: {
     ...mapActions('profile', ['getProfile']),
     getSubscriptionInfo() {
-      this.$axios.get('/api/billing/myplan/').then((result) => {
-        if (result.data.success) {
-          this.subscriptionInfo = result.data.subscription;
-        }
-      });
+      this.loadingSubscription = true;
+      this.subscriptionUnavailable = false;
+      this.$axios
+        .get('/api/billing/myplan/')
+        .then((result) => {
+          if (result.data.success) {
+            this.subscriptionInfo = result.data.subscription;
+          } else if (result.data.unavailable) {
+            this.subscriptionUnavailable = true;
+          }
+        })
+        .catch(() => {
+          this.subscriptionUnavailable = true;
+        })
+        .finally(() => {
+          this.loadingSubscription = false;
+        });
     },
     cancelPlan() {
       this.$q

@@ -369,6 +369,14 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
     ),
+    "FORCE_SIGNUP_COMPLETION": (
+        True,
+        "Redirect new members to the membership plan screen until they finish signing up. "
+        "Members who have completed every signup step and are only waiting on their first "
+        "invoice payment keep full access to the portal, as do locked accounts and staff. "
+        "Has no effect unless ENABLE_STRIPE_MEMBERSHIP_PAYMENTS is on, since the membership "
+        "plan screen is what members are redirected to.",
+    ),
     "ENABLE_REGISTRATION": (
         True,
         "Allow new user registration. When false, the Register endpoint returns 503 and the registration page shows REGISTRATION_DISABLED_MESSAGE.",
@@ -557,6 +565,7 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "SIGNUP_PRIVACY_POLICY_TEXT",
                 "TERMS_ACCEPTANCE_CARDS",
                 "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL",
+                "FORCE_SIGNUP_COMPLETION",
             ),
         ),
         (

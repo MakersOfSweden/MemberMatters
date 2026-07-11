@@ -799,10 +799,15 @@ class SubscriptionInfo(StripeAPIView):
             return Response({"success": False})
 
         else:
-            s = stripe.Subscription.retrieve(
-                request.user.profile.stripe_subscription_id,
-                expand=["latest_invoice"],
-            )
+            try:
+                s = stripe.Subscription.retrieve(
+                    request.user.profile.stripe_subscription_id,
+                    expand=["latest_invoice"],
+                )
+            except stripe.error.StripeError as e:
+                # Degrade gracefully rather than 500 when Stripe is slow/down.
+                capture_exception(e)
+                return Response({"success": False, "unavailable": True})
 
             if s:
                 invoice_url = None
