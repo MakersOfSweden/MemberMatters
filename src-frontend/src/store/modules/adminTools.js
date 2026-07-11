@@ -12,6 +12,16 @@ export default {
     interlocks: [],
     memberbucksDevices: [],
     tiers: [],
+    // Kept in the store so the members list survives navigating to a member.
+    membersFilter: '',
+    membersState: 'active',
+    // rowsPerPage default depends on screen size, so MembersList sets it.
+    membersPagination: {
+      sortBy: 'date',
+      descending: true,
+      page: 1,
+      rowsPerPage: null,
+    },
   },
   getters: {
     meetings: (state) => state.meetings,
@@ -21,6 +31,9 @@ export default {
     interlocks: (state) => state.interlocks,
     memberbucksDevices: (state) => state.memberbucksDevices,
     tiers: (state) => state.tiers,
+    membersFilter: (state) => state.membersFilter,
+    membersState: (state) => state.membersState,
+    membersPagination: (state) => state.membersPagination,
   },
   mutations: {
     setMeetings(state, payload) {
@@ -43,6 +56,15 @@ export default {
     },
     setTiers(state, payload) {
       state.tiers = payload;
+    },
+    setMembersFilter(state, payload) {
+      state.membersFilter = payload;
+    },
+    setMembersState(state, payload) {
+      state.membersState = payload;
+    },
+    setMembersPagination(state, payload) {
+      state.membersPagination = payload;
     },
   },
   actions: {
