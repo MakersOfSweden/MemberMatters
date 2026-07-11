@@ -121,7 +121,6 @@ import {
 
 interface SignupRow extends MemberProfile {
   requiredSteps: string[];
-  signupStage: string;
 }
 
 export default defineComponent({

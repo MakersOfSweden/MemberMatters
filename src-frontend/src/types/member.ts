@@ -68,24 +68,6 @@ export type MemberbucksTransaction = z.infer<
   typeof MemberbucksTransactionSchema
 >;
 
-export const MemberBillingInfoSchema = z.object({
-  subscription: z
-    .object({
-      status: SubscriptionStateSchema,
-      plan: z.string(),
-      startDate: z.date(),
-      endDate: z.date(),
-    })
-    .nullable(),
-  memberbucks: z.object({
-    balance: z.number(),
-    stripe_card_last_digits: z.string(),
-    stripe_card_expiry: z.string(),
-    transactions: z.array(MemberbucksTransactionSchema),
-    lastPurchase: z.date(),
-  }),
-});
-
 export interface MemberBillingInfo {
   memberbucks: {
     balance: number;

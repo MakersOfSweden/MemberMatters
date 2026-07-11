@@ -89,11 +89,11 @@ class SignupProgress(APIView):
     permission_classes = (permissions.IsAdminUser | HasAPIKey,)
 
     def get(self, request):
-        # select_related the plan/tier so signup_stage()'s membership_plan
-        # access doesn't fire a query per member.
+        # select_related the user so get_basic_profile()'s user access
+        # doesn't fire a query per member.
         profiles = (
             Profile.objects.filter(state__in=["noob", "inactive"])
-            .select_related("user", "membership_plan__member_tier")
+            .select_related("user")
             .all()
         )
 
@@ -101,7 +101,6 @@ class SignupProgress(APIView):
         for p in profiles:
             data = p.get_basic_profile()
             data["requiredSteps"] = p.can_signup()["requiredSteps"]
-            data["signupStage"] = p.signup_stage
             result.append(data)
 
         return Response(result)
