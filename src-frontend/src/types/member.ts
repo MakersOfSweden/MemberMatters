@@ -36,6 +36,7 @@ export const MemberProfileSchema = z.object({
   updateProfileRequired: z.boolean(),
   lastSeen: z.string().nullable(),
   lastInduction: z.string().nullable(),
+  termsAcceptedAt: z.string().nullable(),
   stripe: z.object({
     cardExpiry: z.string(),
     last4: z.string(),
@@ -67,26 +68,7 @@ export type MemberbucksTransaction = z.infer<
   typeof MemberbucksTransactionSchema
 >;
 
-export const MemberBillingInfoSchema = z.object({
-  subscription: z
-    .object({
-      status: SubscriptionStateSchema,
-      plan: z.string(),
-      startDate: z.date(),
-      endDate: z.date(),
-    })
-    .nullable(),
-  memberbucks: z.object({
-    balance: z.number(),
-    stripe_card_last_digits: z.string(),
-    stripe_card_expiry: z.string(),
-    transactions: z.array(MemberbucksTransactionSchema),
-    lastPurchase: z.date(),
-  }),
-});
-
 export interface MemberBillingInfo {
-  subscription: MemberSubscription | null;
   memberbucks: {
     balance: number;
     stripe_card_last_digits: string;
@@ -94,4 +76,12 @@ export interface MemberBillingInfo {
     transactions: MemberbucksTransaction[];
     lastPurchase: Date;
   };
+}
+
+// Served by a separate endpoint from MemberBillingInfo so its Stripe call
+// doesn't block the DB-only memberbucks data.
+export interface MemberSubscriptionInfo {
+  subscription: MemberSubscription | null;
+  // true when Stripe couldn't be reached
+  subscriptionUnavailable: boolean;
 }

@@ -1052,6 +1052,11 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 if self.last_induction
                 else None
             ),
+            "termsAcceptedAt": (
+                self.terms_accepted_at.strftime("%m/%d/%Y, %H:%M:%S")
+                if self.terms_accepted_at
+                else None
+            ),
             "stripe": {
                 "cardExpiry": self.stripe_card_expiry,
                 "last4": self.stripe_card_last_digits,

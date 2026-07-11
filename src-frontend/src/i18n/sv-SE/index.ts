@@ -19,6 +19,7 @@ export default {
 
     meetings: 'Möten',
     members: 'Medlemmar', // for routes
+    signupProgress: 'Registreringsstatus',
     manageMember: 'hantera Medlem',
     doors: 'Dörrar',
     manageDoor: 'Hantera Dörrar',
@@ -439,6 +440,14 @@ export default {
     'Det uppstod ett fel vid hämtning av ny data. Data som du ser kan vara  ' +
     'utdaterad.',
   progress: 'Progress: {percent}%',
+  signupProgress: {
+    description:
+      'Registreringsstatus för alla nya och inaktiva medlemmar, så att du snabbt ser vilka som behöver hjälp att slutföra sin registrering.',
+    nextStep: 'Nästa steg',
+    complete: 'Klart',
+    pending: 'Väntar',
+    required: 'Återstår',
+  },
   adminTools: {
     title: 'Verktyg',
     optOutEmailExport: 'Opt out för email export',
@@ -530,6 +539,7 @@ export default {
     lastUpdatedProfile: 'Senast uppdaterade profil',
     registrationDate: 'Registreringsdatum',
     lastSeen: 'Senast aktiv',
+    termsAcceptedAt: 'Villkor godkända',
     billing: 'Betalning',
     memberState: 'Medlemsstatus',
     memberbucksTransactions: 'Spacebucks Transaktioner',
@@ -556,6 +566,7 @@ export default {
     billingPlan: 'Betalplan',
     startDate: 'Startdatum',
     noSubscription: 'Inget abonnemang hittades på denna medlem.',
+    subscriptionUnavailable: 'Kunde inte hämta abonnemangsdata från Stripe.',
     noMembers: 'Inga medlemmar hittades som matchar din sökning.',
   },
   doors: {
