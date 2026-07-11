@@ -84,9 +84,9 @@
       <div
         v-if="
           subscriptionStatus !== 'cancelling' &&
-          (loadingSubscription ||
-            subscriptionUnavailable ||
-            subscriptionInfo?.currentPeriodEnd)
+          (subscriptionInfo?.currentPeriodEnd ||
+            (subscriptionExpected &&
+              (loadingSubscription || subscriptionUnavailable)))
         "
         class="q-mb-md"
       >
@@ -214,6 +214,12 @@ export default defineComponent({
     },
     subscriptionStatus() {
       return this.profile.financial.subscriptionState;
+    },
+    subscriptionExpected() {
+      return (
+        this.subscriptionStatus === 'active' ||
+        this.subscriptionStatus === 'pending'
+      );
     },
     billingMethod() {
       return this?.profile?.financial?.billingMethod;

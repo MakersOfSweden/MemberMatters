@@ -22,7 +22,7 @@ export default {
       );
     },
     bannerKey() {
-      return this.isSignupInProgress ? 'noob' : this.profile.memberStatus;
+      return this.isSignupInProgress ? 'noob' : this.profile?.memberStatus;
     },
     stateBadgeColor() {
       const colors = {
