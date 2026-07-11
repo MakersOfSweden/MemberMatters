@@ -80,6 +80,32 @@ class GetMembers(APIView):
         return Response(filtered)
 
 
+class SignupProgress(APIView):
+    """
+    get: Returns noob/inactive members with their signup-step progress so an
+    admin can triage who needs help without opening each profile.
+    """
+
+    permission_classes = (permissions.IsAdminUser | HasAPIKey,)
+
+    def get(self, request):
+        # select_related the user so get_basic_profile()'s user access
+        # doesn't fire a query per member.
+        profiles = (
+            Profile.objects.filter(state__in=["noob", "inactive"])
+            .select_related("user")
+            .all()
+        )
+
+        result = []
+        for p in profiles:
+            data = p.get_basic_profile()
+            data["requiredSteps"] = p.can_signup()["requiredSteps"]
+            result.append(data)
+
+        return Response(result)
+
+
 class MakeMember(APIView):
     """
     post: Activate a member ("Make Member") — admin override.
@@ -1134,40 +1160,17 @@ class ManageMembershipTierPlan(StripeAPIView):
 
 class MemberBillingInfo(StripeAPIView):
     """
-    get: This method gets a member's billing info.
+    get: This method gets a member's memberbucks/billing info. Subscription
+    details live in MemberSubscriptionInfo so the slow Stripe call there
+    doesn't hold up this (DB-only) data.
     """
 
     permission_classes = (permissions.IsAdminUser | HasAPIKey,)
 
     def get(self, request, member_id):
         member = User.objects.get(id=member_id)
-        current_plan = member.profile.membership_plan
 
         billing_info = {}
-
-        if current_plan:
-            s = None
-
-            # if we have a subscription id, fetch the details
-            if member.profile.stripe_subscription_id:
-                s = stripe.Subscription.retrieve(
-                    member.profile.stripe_subscription_id,
-                )
-
-            # if we got subscription details
-            if s:
-                billing_info["subscription"] = {
-                    "status": member.profile.subscription_status,
-                    "billingCycleAnchor": s.billing_cycle_anchor,
-                    "currentPeriodEnd": s.current_period_end,
-                    "cancelAt": s.cancel_at,
-                    "cancelAtPeriodEnd": s.cancel_at_period_end,
-                    "startDate": s.start_date,
-                    "membershipTier": member.profile.membership_plan.member_tier.get_object(),
-                    "membershipPlan": member.profile.membership_plan.get_object(),
-                }
-            else:
-                billing_info["subscription"] = None
 
         # get the most recent memberbucks transactions and order them by date
         recent_transactions = MemberBucks.objects.filter(user=member).order_by("date")[
@@ -1186,6 +1189,53 @@ class MemberBillingInfo(StripeAPIView):
         }
 
         return Response(billing_info)
+
+
+class MemberSubscriptionInfo(StripeAPIView):
+    """
+    get: This method gets a member's subscription info from Stripe. Split out
+    from MemberBillingInfo so a slow/unavailable Stripe doesn't block the rest
+    of the billing tab.
+    """
+
+    permission_classes = (permissions.IsAdminUser | HasAPIKey,)
+
+    def get(self, request, member_id):
+        member = User.objects.get(id=member_id)
+
+        result = {"subscription": None, "subscriptionUnavailable": False}
+
+        if member.profile.membership_plan and member.profile.stripe_subscription_id:
+            try:
+                s = stripe.Subscription.retrieve(
+                    member.profile.stripe_subscription_id,
+                    # expand so invoice-billed members get a payable link
+                    expand=["latest_invoice"],
+                )
+            except stripe.error.StripeError as e:
+                capture_exception(e)
+                result["subscriptionUnavailable"] = True
+                return Response(result)
+
+            invoice_url = None
+            if s.latest_invoice and hasattr(s.latest_invoice, "hosted_invoice_url"):
+                invoice_url = s.latest_invoice.hosted_invoice_url
+
+            result["subscription"] = {
+                "status": member.profile.subscription_status,
+                "billingCycleAnchor": s.billing_cycle_anchor,
+                "currentPeriodEnd": s.current_period_end,
+                "cancelAt": s.cancel_at,
+                "cancelAtPeriodEnd": s.cancel_at_period_end,
+                "startDate": s.start_date,
+                "collectionMethod": s.collection_method,
+                "billingMethod": member.profile.billing_method,
+                "invoiceUrl": invoice_url,
+                "membershipTier": member.profile.membership_plan.member_tier.get_object(),
+                "membershipPlan": member.profile.membership_plan.get_object(),
+            }
+
+        return Response(result)
 
 
 class MemberLogs(APIView):

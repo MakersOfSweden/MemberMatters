@@ -36,6 +36,9 @@ export const MemberSubscriptionSchema = z.object({
   currentPeriodEnd: z.date(),
   startDate: z.date(),
   status: z.string(),
+  billingMethod: z.string().optional(),
+  collectionMethod: z.string().nullable().optional(),
+  invoiceUrl: z.string().nullable().optional(),
   membershipPlan: MemberPlanSchema,
   membershipTier: MemberTierSchema,
 });
