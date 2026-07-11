@@ -628,6 +628,8 @@ export default {
     paymentMethodCard: 'Automatisk förnyelse',
     paymentMethodInvoice: 'Manuell förnyelse',
     subscriptionInfo: 'Abonnemangs-info',
+    subscriptionUnavailable:
+      'Kunde inte läsa in abonnemangsuppgifterna just nu.',
     accountOnlyWarning:
       "Din profil är för närvarande 'endast konto'. Detta beror på att du skippade denna process förra gången. Du är välkommen att forsätta använda detta konto i sin nuvarande form, eller så kan du registrera dig för att bli medlem nedan. ",
     profileAccountOnlyWarning:

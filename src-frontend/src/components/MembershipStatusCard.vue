@@ -55,7 +55,13 @@
           class="q-mb-sm text-caption"
         >
           {{ $t('membershipStatusCard.renewalDate') }}:
-          <template v-if="formattedRenewalDate">
+          <q-spinner
+            v-if="loadingPlan"
+            color="primary"
+            size="xs"
+            class="q-ml-xs"
+          />
+          <template v-else-if="formattedRenewalDate">
             {{ formattedRenewalDate }} ({{
               $t('membershipStatusCard.inDays', { days: daysUntilRenewal })
             }})
@@ -137,6 +143,7 @@ export default {
       requiredSteps: null,
       currentPeriodEnd: null,
       cancelAt: null,
+      loadingPlan: false,
     };
   },
   watch: {
@@ -159,6 +166,7 @@ export default {
       immediate: true,
       handler(active) {
         if (active && this.features.enableMembershipPayments) {
+          this.loadingPlan = true;
           this.$axios
             .get('/api/billing/myplan/')
             .then((response) => {
@@ -170,6 +178,9 @@ export default {
             })
             .catch((e) => {
               console.log(e);
+            })
+            .finally(() => {
+              this.loadingPlan = false;
             });
         }
       },

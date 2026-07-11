@@ -641,6 +641,7 @@ export default {
     paymentMethodCard: 'Automatic Renewal',
     paymentMethodInvoice: 'Manual Renewal',
     subscriptionInfo: 'Subscription Info',
+    subscriptionUnavailable: 'Could not load subscription details right now.',
     accountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped this process last time. You're welcome to continue using this account for our online services, or you can signup to become a member below. ",
     profileAccountOnlyWarning:

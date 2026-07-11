@@ -49,8 +49,9 @@
         </template>
         {{ $t('billing.awaitingInvoicePayment') }}
         <template v-slot:action>
+          <q-spinner v-if="loadingSubscription" color="white" size="sm" />
           <q-btn
-            v-if="subscriptionInfo?.invoiceUrl"
+            v-else-if="subscriptionInfo?.invoiceUrl"
             flat
             no-caps
             text-color="white"
@@ -82,15 +83,29 @@
 
       <div
         v-if="
-          this.subscriptionInfo?.currentPeriodEnd &&
-          subscriptionStatus !== 'cancelling'
+          subscriptionStatus !== 'cancelling' &&
+          (loadingSubscription ||
+            subscriptionUnavailable ||
+            subscriptionInfo?.currentPeriodEnd)
         "
         class="q-mb-md"
       >
         <div class="text-h6 q-py-md">
           {{ $t('paymentPlans.subscriptionInfo') }}
         </div>
-        <q-card>
+
+        <div v-if="loadingSubscription" class="q-pa-md">
+          <q-spinner color="primary" size="md" />
+        </div>
+
+        <q-banner
+          v-else-if="subscriptionUnavailable"
+          class="bg-warning text-white rounded-borders"
+        >
+          {{ $t('paymentPlans.subscriptionUnavailable') }}
+        </q-banner>
+
+        <q-card v-else>
           <q-list bordered separator>
             <q-item>
               <q-item-section>
@@ -168,6 +183,8 @@ export default defineComponent({
       disableButton: false,
       loadingButton: false,
       cancelSuccess: false,
+      loadingSubscription: true,
+      subscriptionUnavailable: false,
       subscriptionInfo: {
         billingCycleAnchor: null,
         currentPeriodEnd: null,
@@ -226,11 +243,23 @@ export default defineComponent({
   methods: {
     ...mapActions('profile', ['getProfile']),
     getSubscriptionInfo() {
-      this.$axios.get('/api/billing/myplan/').then((result) => {
-        if (result.data.success) {
-          this.subscriptionInfo = result.data.subscription;
-        }
-      });
+      this.loadingSubscription = true;
+      this.subscriptionUnavailable = false;
+      this.$axios
+        .get('/api/billing/myplan/')
+        .then((result) => {
+          if (result.data.success) {
+            this.subscriptionInfo = result.data.subscription;
+          } else if (result.data.unavailable) {
+            this.subscriptionUnavailable = true;
+          }
+        })
+        .catch(() => {
+          this.subscriptionUnavailable = true;
+        })
+        .finally(() => {
+          this.loadingSubscription = false;
+        });
     },
     cancelPlan() {
       this.$q
