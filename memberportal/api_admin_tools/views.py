@@ -12,6 +12,9 @@ from django.db.models.functions import Concat
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from rest_framework import permissions
 from rest_framework import status
@@ -40,7 +43,7 @@ from profile.models import (
 )
 from profile.phone import to_e164
 from services import sms
-from services.emails import send_email_to_admin
+from services.emails import send_email_to_admin, send_single_email
 from .models import MemberTier, PaymentPlan
 
 
@@ -1537,3 +1540,97 @@ class SignupPreview(APIView):
                 "termsAcceptanceCards": terms_cards,
             }
         )
+
+
+EMAIL_CONFIG_FIELDS = [
+    ("POSTMARK_API_KEY", "Postmark API key"),
+    ("EMAIL_DEFAULT_FROM", "From address"),
+    ("EMAIL_ADMIN", "Admin email"),
+    ("EMAIL_SYSADMIN", "Sysadmin email"),
+    ("SITE_MAIL_ADDRESS", "Mailing address (email footer)"),
+]
+
+
+def _email_setting_is_configured(key):
+    # Every email setting ships with a placeholder default (PLEASE_CHANGE_ME,
+    # example@example.com, ...). Treat a value as configured only if it's set
+    # and no longer equal to that default.
+    value = getattr(config, key, None)
+    default = settings.CONSTANCE_CONFIG.get(key, (None,))[0]
+    return bool(value) and value != default
+
+
+class EmailConfigStatus(APIView):
+    """
+    get: Reports whether each email-related config setting has been changed from
+    its placeholder default, so admins can spot a misconfigured email setup.
+    Only labels and booleans are returned — never the setting values themselves.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request):
+        return Response(
+            {
+                "fields": [
+                    {
+                        "key": key,
+                        "label": label,
+                        "isSet": _email_setting_is_configured(key),
+                    }
+                    for key, label in EMAIL_CONFIG_FIELDS
+                ],
+            }
+        )
+
+
+class SendTestEmail(APIView):
+    """
+    post: Sends a fixed test email to the supplied address so admins can confirm
+    outbound email is working.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip()
+
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response(
+                {"success": False, "message": "Please enter a valid email address."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # send_single_email() returns True even with no Postmark key (it just
+        # logs a warning), so guard here — otherwise the test button would
+        # report success without ever sending anything.
+        if not _email_setting_is_configured("POSTMARK_API_KEY"):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Email isn't configured — set the Postmark API key first.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            send_single_email(
+                to_email=email,
+                subject="MemberMatters test email",
+                template_vars={
+                    "title": "MemberMatters test email",
+                    "message": "This is a test email from MemberMatters. "
+                    "If you received it, your email configuration is working correctly.",
+                },
+                user=request.user,
+            )
+        except Exception as e:
+            capture_exception(e)
+            return Response(
+                {"success": False, "message": "Failed to send the test email."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response({"success": True})

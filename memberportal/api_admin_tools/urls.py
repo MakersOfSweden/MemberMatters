@@ -138,4 +138,14 @@ urlpatterns = [
         views.SignupPreview.as_view(),
         name="SignupPreview",
     ),
+    path(
+        "api/admin/email/config-status/",
+        views.EmailConfigStatus.as_view(),
+        name="EmailConfigStatus",
+    ),
+    path(
+        "api/admin/email/send-test/",
+        views.SendTestEmail.as_view(),
+        name="SendTestEmail",
+    ),
 ]
