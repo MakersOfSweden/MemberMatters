@@ -247,10 +247,12 @@ class AccessControlledDevice(
                 )
 
     def get_tags(self):
-        # Find profiles that are active and have an RFID tag assigned to them
-        ProfileQueryset = Profile.objects.filter(state="active").exclude(
-            rfid__isnull=True
-        )
+        # Find profiles that are active and have an RFID tag assigned to them.
+        # admin_disabled_access excludes members whose access was paused by an
+        # admin (Toggle Access button) without touching state / subscription.
+        ProfileQueryset = Profile.objects.filter(
+            state="active", admin_disabled_access=False
+        ).exclude(rfid__isnull=True)
         authorised_tags = list()
 
         # Get the device object

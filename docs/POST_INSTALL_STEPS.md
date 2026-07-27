@@ -92,13 +92,29 @@ However, as noted below, currencies will use a hardcoded value set by a configur
   * "GOOGLE_ANALYTICS_MEASUREMENT_ID" - Enter your measurement ID to enable Google analytics. Only the new GA4 measurement IDs are supported. It should look something like G-XXXXXXXXXX.
 
 ### Signup
+  * "ENABLE_REGISTRATION" - master kill-switch for new account creation. When `False`, `POST /api/register/` returns 503 and the registration page shows the disabled message instead of the form. Existing accounts and the login flow are unaffected. Defaults to `True`.
+  * "REGISTRATION_DISABLED_MESSAGE" - message shown to members on the registration page (and as a popup if they click "Register Here" on the login page) when `ENABLE_REGISTRATION` is `False`. Use this for an "at capacity" / "scheduled outage" / "membership is invite-only" message without needing a deploy.
   * "INDUCTION_ENROL_LINK" - URL to enrol in the Canvas LMS induction course.
   * "INDUCTION_COURSE_ID" - ID of the Canvas LMS induction course (usually found in the course URL on the settings page).
   * "MAX_INDUCTION_DAYS" -  Maximum number of days since they were inducted before they require another induction. Set 
     to `0` to disable induction requirement.
   * "MIN_INDUCTION_SCORE" - The minimum score considered a "pass" for the induction course.
-  * "REQUIRE_ACCESS_CARD" - Require the member to submit their RFID access card number during signup.
+  * "REQUIRE_ACCESS_CARD" - Require the member to have an RFID access card assigned before completing signup. Set to
+    `False` to skip the access card step entirely.
+  * "MEMBER_CAN_ENTER_ACCESS_CARD" - Allow members to enter their own RFID card number during signup. Set to `False`
+    to require an admin to assign the card (members will see a "Contact Us" button instead). Only applies if
+    "REQUIRE_ACCESS_CARD" is `True`.
   * "COLLECT_VEHICLE_REGISTRATION_PLATE" - Allow the portal to collect vehicle registration plate number(s).
+  * "SIGNUP_REQUIRE_PRIVACY_CONSENT" - When `True`, the signup page shows a checkbox that the user must tick before
+    registering, confirming that they consent to their personal data being stored. Useful for GDPR / privacy-law
+    compliance.
+  * "SIGNUP_PRIVACY_POLICY_URL" - Optional URL to an external privacy policy document. If set (and
+    `SIGNUP_PRIVACY_POLICY_TEXT` is empty), the consent checkbox label includes a link that opens the policy in a
+    new tab. Leave empty for no link.
+  * "SIGNUP_PRIVACY_POLICY_TEXT" - Optional privacy policy text shown inline in a popup on the signup page. If set,
+    this takes precedence over `SIGNUP_PRIVACY_POLICY_URL` — the consent checkbox label shows a link that opens a
+    dialog displaying this text (line breaks are preserved). Use this if you'd rather keep the policy in
+    MemberMatters than link out to a separate document.
 
 ### Canvas Integration
   * "CANVAS_API_TOKEN" - the API token for the Canvas LMS integration.
@@ -168,7 +184,11 @@ You cannot currently enable specific events, you either get "all or nothing".
   * "STRIPE_SECRET_KEY" - the secret Stripe key. You should create a restricted key - see info below on what permissions you need.
   * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe.
   * "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS" - enable the "Membership Plan" menu page on the front end so members can sign up with the Stripe billing integration. NOTE: make sure you configure these first from the "Admin Tools" > "Membership Plans" page.
+  * "ENABLE_NEW_SUBSCRIPTIONS" - allow members without an existing subscription to start a new one. When `False`, `POST /api/billing/signup/<plan>/` returns 503 and the membership-plan page shows a "new subscriptions closed" banner. **Renewals (Stripe `invoice.paid` webhook), pending invoices being paid, and `PaymentPlanResume` for cancelling members are NOT affected** — existing members keep working normally. Use this for capacity freezes / scheduled outages without breaking renewals. Defaults to `True`.
   * "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS" - the options a member can see when on the MemberBucks top up page (in cents).
+  * "ENABLE_INVOICE_BILLING" - enable the "Pay by Invoice" option during membership signup so members can receive a Stripe invoice instead of paying by card. See the [Pay by Invoice setup](#pay-by-invoice-setup) section below — there is required Stripe Dashboard configuration, without which members can get stuck in the `pending` state indefinitely.
+  * "INVOICE_DAYS_UNTIL_DUE" - number of days before a Stripe invoice for invoice-billed membership becomes due.
+  * "INVOICE_BILLING_NOTE" - optional free-text note shown to members when they pick invoice billing (e.g. bank transfer details).
 
 #### Stripe Restricted Secret Key Permissions
 The following permissions are needed for all Member Matters payment features to work correctly.
@@ -180,6 +200,23 @@ The following permissions are needed for all Member Matters payment features to 
 * Setup Intents - Write
 * PaymentMethods - Write
 * Payment Intents - Write
+* Invoices - Write (required for "Pay by Invoice" billing)
+
+#### Pay by Invoice setup
+
+When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow).
+
+The activation and deactivation flow relies on Stripe webhooks:
+* `invoice.paid` → MemberMatters activates the member.
+* `customer.subscription.deleted` → MemberMatters marks the member `inactive` and clears the subscription.
+
+**Required Stripe Dashboard configuration** (Billing → Settings → Subscriptions and emails → *Manage failed payments*):
+
+After the invoice goes past due, configure Stripe to **cancel the subscription**. Pick a timeframe that matches your space's tolerance (e.g. 60 days). This is what fires `customer.subscription.deleted` and tells MemberMatters to drop the member back to `inactive`. Without this, members who never pay will stay in `pending` state indefinitely — there's no server-side fallback in MemberMatters that deletes the subscription itself.
+
+You do **not** need to configure "Mark invoice as uncollectible" or any other invoice-handling option in Stripe. When MemberMatters receives `customer.subscription.deleted`, it voids any invoices still open against that subscription so nothing lingers in the customer's Stripe portal.
+
+When testing this locally, make sure the `stripe listen` command in the backend README includes `customer.subscription.deleted` (it does by default) so subscription cancellations are forwarded to your dev server.
 
 ### Trello Integration
   * "ENABLE_TRELLO_INTEGRATION" - [Deprecated]
@@ -193,6 +230,25 @@ The following permissions are needed for all Member Matters payment features to 
 ### Theme Swipe Integration
   * "THEME_SWIPE_URL" - a URL to hit on each door/interlock swipe that can trigger a theme song played over your intercom system, or something else.
   * "ENABLE_THEME_SWIPE" - enable the theme song swipe webhook.
+
+### Stats Settings
+  * "ENABLE_STATS_PAGE" - enables the in-portal stats page for non-admins. Admins can always view it.
+  * "STATS_MAX_DAYS" - the maximum window (in days) of historical metrics shown on the stats page.
+  * "METRICS_API_KEY" - **required for Prometheus scraping**. The Celery `calculate_metrics` task computes
+    metric values in a worker process and then POSTs to `/api/update-prom-metrics/` so the values land in the
+    web server's Prometheus registry (where `/metrics` is scraped from). That endpoint requires admin or
+    API-key authentication, so the task needs a key:
+    1. Open Django admin (`/admin`) and log in as a superuser.
+    2. Under **API Key Permissions → API Keys**, click **Add API Key**, give it a name like
+       `metrics-task`, and save. Copy the raw key shown once on the next page (you cannot retrieve it
+       again — it is only displayed at creation time).
+    3. In Constance, paste the raw key into `METRICS_API_KEY` and save.
+
+    If `METRICS_API_KEY` is empty, the metrics rows are still written to the database (so the in-portal
+    stats page works), but the Celery task will skip the Prometheus push and log a warning.
+
+### Members Settings
+  * "ENABLE_LAST_SEEN_PAGE" - shows the last seen listing on members pages when enabled
 
 ### Door Bump API
   * "ENABLE_DOOR_BUMP_API" - Enable an API endpoint that 'bumps' (temporarily unlocks) a door for third party integration.

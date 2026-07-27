@@ -80,12 +80,12 @@ export default {
     },
   },
   computed: {
-    ...mapGetters('profile', ['loggedIn']),
+    ...mapGetters('profile', ['loggedIn', 'profile']),
     ...mapGetters('config', ['features']),
     linkVisible() {
       return !(
         this.featureEnabledFlag.length &&
-        this.features[this.featureEnabledFlag] === false
+        !this.features[this.featureEnabledFlag]
       );
     },
     visibleLinks() {
@@ -103,7 +103,16 @@ export default {
         // all other feature flags
         if (
           link.featureEnabledFlag &&
-          this.features[link.featureEnabledFlag] === false
+          !this.features[link.featureEnabledFlag]
+        ) {
+          return false;
+        }
+
+        // member-state gating; staff bypass
+        if (
+          link.allowedStates &&
+          !this.profile?.permissions?.staff &&
+          !link.allowedStates.includes(this.profile?.memberStatus)
         ) {
           return false;
         }

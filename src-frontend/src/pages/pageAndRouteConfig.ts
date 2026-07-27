@@ -1,6 +1,8 @@
 import icons from '../icons';
 import type { Component } from 'vue';
 
+export type MemberState = 'noob' | 'accountonly' | 'active' | 'inactive';
+
 export type PageAndRouteConfigType = {
   icon: string;
   to?: string;
@@ -13,7 +15,7 @@ export type PageAndRouteConfigType = {
   hiddenMenu?: boolean;
   featureEnabledFlag?: string;
   bgGradient?: boolean;
-  memberOnly?: boolean;
+  allowedStates?: MemberState[];
   children?: PageAndRouteConfigType[];
   defaultParams?: { [key: string]: string };
 };
@@ -53,6 +55,7 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
     name: 'webcams',
     loggedIn: true,
     kiosk: true,
+    allowedStates: ['active'],
     featureEnabledFlag: 'enableWebcams',
     component: () => import('pages/Webcams.vue'),
   },
@@ -69,6 +72,14 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         loggedIn: true,
         admin: true,
         component: () => import('pages/AdminTools/Members.vue'),
+      },
+      {
+        icon: icons.signupProgress,
+        to: '/manage/signup-progress',
+        name: 'signupProgress',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/SignupProgress.vue'),
       },
       {
         icon: icons.members,
@@ -117,6 +128,22 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/ManageTier.vue'),
       },
       {
+        icon: icons.pendingInvoices,
+        to: '/manage/pending-invoices',
+        name: 'pendingInvoices',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/PendingInvoices.vue'),
+      },
+      {
+        icon: icons.email,
+        to: '/manage/signup-preview',
+        name: 'signupPreview',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/SignupPreview.vue'),
+      },
+      {
         icon: icons.interlocks,
         to: '/manage/devices',
         name: 'devices',
@@ -132,15 +159,6 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         admin: true,
         component: () => import('pages/Kiosks.vue'),
       },
-      {
-        icon: icons.stats,
-        to: '/tools/stats/',
-        name: 'stats',
-        loggedIn: true,
-        memberOnly: true,
-        admin: true,
-        component: () => import('pages/Stats.vue'),
-      },
     ],
   },
   {
@@ -148,7 +166,7 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
     name: 'memberTools',
     loggedIn: true,
     kiosk: true,
-    memberOnly: true,
+    allowedStates: ['accountonly', 'active', 'inactive'],
     children: [
       {
         icon: icons.reportIssue,
@@ -156,6 +174,8 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'reportIssue',
         loggedIn: true,
         kiosk: true,
+        allowedStates: ['active'],
+        featureEnabledFlag: 'enableReportIssue',
         component: () => import('pages/ReportIssue.vue'),
       },
       {
@@ -164,7 +184,7 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'proxy',
         loggedIn: true,
         kiosk: true,
-        memberOnly: true,
+        allowedStates: ['active'],
         featureEnabledFlag: 'enableProxyVoting',
         component: () => import('pages/Proxy.vue'),
       },
@@ -174,7 +194,8 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'recentSwipes',
         loggedIn: true,
         kiosk: true,
-        memberOnly: true,
+        allowedStates: ['active'],
+        featureEnabledFlag: 'enableRecentSwipesPage',
         component: () => import('pages/RecentSwipes.vue'),
       },
       {
@@ -183,7 +204,8 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'lastSeen',
         loggedIn: true,
         kiosk: true,
-        memberOnly: true,
+        allowedStates: ['active'],
+        featureEnabledFlag: 'enableLastSeenPage',
         component: () => import('pages/LastSeen.vue'),
       },
       {
@@ -192,7 +214,7 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'stats',
         loggedIn: true,
         kiosk: true,
-        memberOnly: true,
+        allowedStates: ['accountonly', 'active', 'inactive'],
         featureEnabledFlag: 'enableStatsPage',
         component: () => import('pages/Stats.vue'),
       },

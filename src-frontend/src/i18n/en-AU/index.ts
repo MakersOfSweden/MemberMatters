@@ -19,6 +19,7 @@ export default {
 
     meetings: 'Meetings',
     members: 'Members', // for routes
+    signupProgress: 'Signup Progress',
     manageMember: 'Manage Member',
     doors: 'Doors',
     manageDoor: 'Manage Door',
@@ -27,6 +28,8 @@ export default {
     interlocks: 'Interlocks',
     devices: 'Devices',
     kiosks: 'Kiosks',
+    pendingInvoices: 'Pending Invoices',
+    signupPreview: 'Signup Preview',
 
     memberTools: 'Member Tools',
     reportIssue: 'Report Issue',
@@ -65,9 +68,31 @@ export default {
     loginFailed: 'Your username or password was incorrect.',
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
+    screenNameRequired: 'Please enter a screen name.',
+    registrationClosed: 'Registrations are currently closed.',
     downloadFailed: 'Failed to download the file.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",
+    tooManyRequests:
+      'Too many attempts from your network. Please wait a little while and then try again.',
+    fieldRequired: 'Please fill in all required fields.',
+    emailTooLong: 'That email address is too long.',
+    passwordTooShort: 'Your password must be at least 8 characters long.',
+    passwordTooLong: 'Your password must be 128 characters or fewer.',
+    passwordTooCommon:
+      'That password is too common. Please choose a less predictable one.',
+    passwordEntirelyNumeric: "Your password can't be entirely numbers.",
+    passwordTooSimilar:
+      'Your password is too similar to your name or email address.',
+    passwordCompromised:
+      'That password has appeared in a known data breach. Please choose another.',
+    passwordInvalid: 'Please choose a stronger password.',
+    firstNameTooLong: 'Your first name must be 30 characters or fewer.',
+    lastNameTooLong: 'Your last name must be 30 characters or fewer.',
+    screenNameTooLong: 'Your screen name must be 30 characters or fewer.',
+    mobileTooLong: 'Your mobile number must be 16 characters or fewer.',
+    vehiclePlateTooLong:
+      'Your vehicle registration plate must be 30 characters or fewer.',
     pageNotFound: 'Page not found',
     noValue: 'No Value',
     noData: 'No records found',
@@ -112,6 +137,8 @@ export default {
       'This page lists some stats and metrics collected by the member portal.',
     disabled:
       'This feature is currently disabled. Metrics data may not be available or up to date.',
+    adminHint:
+      'Admin hint: no metrics data is being plotted. See the "Stats Settings" section of POST_INSTALL_STEPS for setup details.',
     member_count_total: 'Member Count',
     member_count_6_months_total: 'Member Count (>6 Mths)',
     member_count_12_months_total: 'Member Count (>12 Mths)',
@@ -135,6 +162,7 @@ export default {
     submit: 'Submit',
     send: 'Send',
     ok: 'Ok',
+    confirm: 'Confirm',
     reset: 'Reset',
     cancel: 'Cancel',
     close: 'Close',
@@ -200,6 +228,7 @@ export default {
     status: 'Status',
   },
   access: {
+    adminDisabled: 'Your access has been disabled by an administrator.',
     pageDescription:
       'Your access permissions are shown below. Let us know if this needs updating.',
     inactive: 'Membership is currently inactive. This may affect access.',
@@ -234,21 +263,27 @@ export default {
     pageDescription: 'Report an issue',
     success: 'Your issue was reported successfully.',
     fail: 'There was a problem reporting your issue.',
+    disabled: 'This feature is currently disabled.',
   },
   form: {
     saved: 'Saved',
     error: 'Error Saving',
+    memberNumber: 'Member Number',
     pageDescription:
       'Edit any of the fields below and they will be automatically saved.',
     noResults: 'No Results',
     allFieldsRequired: 'All fields marked * are required.',
+    basicDetailsLocked:
+      'Your email, name, and phone number cannot be changed here. Please contact an admin if you need to update these.',
+    emailChangeContactAdmin:
+      'Your email address cannot be changed here. Please contact an admin if you need to update it.',
     featured: 'Featured?',
-    email: 'Email *',
+    email: 'Email',
     rfidCard: 'RFID Card',
-    firstName: 'First Name *',
-    lastName: 'Last Name *',
-    mobile: 'Mobile Number *',
-    screenName: 'Screen / Nickname *',
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    mobile: 'Mobile Number',
+    screenName: 'Screen / Nickname',
     date: 'Date',
     dateTime: 'Date & Time',
     chair: 'Chair',
@@ -259,7 +294,7 @@ export default {
     playTheme: 'Play Theme Song',
     ipAddress: 'IP Address',
     lastSeen: 'Last Seen',
-    password: 'Password *',
+    password: 'Password',
     registrationDate: 'Registration Date',
     state: 'State',
     id: 'Member ID',
@@ -416,6 +451,14 @@ export default {
     'There was an error fetching new data. Any data that you see may not be up ' +
     'to date.',
   progress: 'Progress: {percent}%',
+  signupProgress: {
+    description:
+      'Signup progress for all new and inactive members, so you can see at a glance who needs help completing their signup.',
+    nextStep: 'Next step',
+    complete: 'Complete',
+    pending: 'Pending',
+    required: 'Outstanding',
+  },
   adminTools: {
     title: 'Tools',
     optOutEmailExport: 'Opt out of email export',
@@ -434,7 +477,41 @@ export default {
     new: 'New',
     accountOnly: 'Account Only',
     enableAccess: 'Enable Access',
-    disableAccess: 'Disable Access',
+    pauseAccess: 'Pause Access',
+    resumeAccess: 'Resume Access',
+    pauseAccessTitle: 'Pause access for this member?',
+    resumeAccessTitle: 'Resume access for this member?',
+    pauseAccessDescription:
+      "This member will lose door access immediately. Their state and subscription won't change — use Cancel Membership if you want those too.",
+    resumeAccessDescription:
+      "This member's access pause will be lifted. If their state is active they'll regain door access immediately.",
+    accessDisabledTooltip: 'Access disabled by an admin.',
+    makeMemberTitle: 'Make this member active?',
+    makeMemberDescription:
+      'Activates the member and grants default door / interlock access, bypassing the usual signup gates.',
+    cancelMembership: 'Cancel Membership',
+    cancelMembershipTitle: 'Cancel this member’s membership?',
+    cancelMembershipDescription:
+      "Cancels the member's Stripe subscription if one is active, and deactivates them.",
+    cancelTimingLabel: 'When should the cancellation take effect?',
+    cancelTimingAtPeriodEnd:
+      'At end of current billing period (member keeps access until then)',
+    cancelTimingImmediately:
+      'Immediately (deletes subscription, voids open invoices)',
+    lockAccount: 'Lock Account',
+    unlockAccount: 'Unlock Account',
+    lockAccountTitle: 'Lock this account?',
+    lockAccountDescription:
+      "A locked account can't be reactivated or sign up again until an admin unlocks it.",
+    unlockAccountTitle: 'Unlock this account?',
+    unlockAccountDescription:
+      'The member will once again be able to sign up to a membership plan.',
+    lockUnavailableTooltip:
+      'Lock is available only for non-active members without a live subscription.',
+    lockNotAllowed:
+      "Can't lock a member who is active or has a live subscription.",
+    stateLockedTooltip:
+      "Account locked — automated flows (webhooks, self-serve signup) won't modify this member's state.",
     sendWelcomeEmail: 'Send welcome email',
     sendSms: 'Send SMS to member',
     sendSmsModalTitle: 'Send {name} a one-way sms alert.',
@@ -456,6 +533,9 @@ export default {
     makeMemberSuccessDescription:
       'This person was made into a member and sent welcome information. To see their profile, change the filter to "all" members.',
     sendWelcomeEmailSuccess: 'Successfully sent the welcome email.',
+    ensureStripeCustomer: 'Ensure Stripe customer',
+    ensureStripeCustomerSuccess:
+      'Stripe customer has been verified/created successfully.',
 
     access: 'Access',
     accessDescription: 'Tap an icon to change access.',
@@ -471,6 +551,7 @@ export default {
     lastUpdatedProfile: 'Last Updated Profile',
     registrationDate: 'Registration Date',
     lastSeen: 'Last Seen',
+    termsAcceptedAt: 'Terms Accepted',
     billing: 'Billing',
     memberState: 'Member State',
     memberbucksTransactions: 'Spacebucks Transactions',
@@ -480,6 +561,7 @@ export default {
       active: 'Active',
       inactive: 'Inactive',
       cancelling: 'Cancelling',
+      pending: 'Pending',
     },
     memberStatusString: {
       noob: 'New Member',
@@ -496,6 +578,7 @@ export default {
     billingPlan: 'Billing Plan',
     startDate: 'Start Date',
     noSubscription: 'No subscription was found for this member.',
+    subscriptionUnavailable: 'Could not fetch subscription data from Stripe.',
     noMembers: 'No members were found that match your filter or search query.',
   },
   doors: {
@@ -520,6 +603,9 @@ export default {
     offlineStatus: 'Device is currently offline',
   },
   paymentPlans: {
+    lockedTitle: 'Account blocked from signing up',
+    lockedMessage:
+      'Your account has been blocked from signing up. Contact an admin if this is not expected.',
     title: 'Membership Payment Plans',
     nodata: 'There are no Membership Payment Plans available.',
     name: 'Plan Name',
@@ -527,6 +613,7 @@ export default {
     recurringDescription: 'Bill for this plan every:',
     remove: 'Remove this Membership Payment Plan',
     add: 'Add a new Membership Payment Plan',
+    edit: 'Edit Payment Plan',
     success: 'Successfully added a new Membership Payment Plan.',
     fail: 'Failed to add a new Membership Payment Plan.',
     select: 'Payment Plan',
@@ -546,6 +633,8 @@ export default {
     signupSuccess: 'Signup success',
     signupSuccessDescription:
       'Your payment was processed successfully. This page will refresh in a moment.',
+    signupSuccessInvoiceDescription:
+      'Your subscription has been created. An invoice has been emailed to you — your membership will be activated once payment is received.',
     cancelButton: 'Cancel my membership',
     cancelConfirmDescription:
       'Are you sure you want to cancel your membership? Your membership will remain active until the end of your current billing period. You can resume it at any point before the end of your current billing period.',
@@ -559,13 +648,23 @@ export default {
       "Your membership is scheduled to be cancelled on {date}. If you'd like to resume your plan (listed above), please tap below.",
     renewalDate: 'Renewal Date',
     signupDate: 'Signup Date',
+    paymentMethod: 'Payment Method',
+    paymentMethodCard: 'Automatic Renewal',
+    paymentMethodInvoice: 'Manual Renewal',
     subscriptionInfo: 'Subscription Info',
+    subscriptionUnavailable: 'Could not load subscription details right now.',
     accountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped this process last time. You're welcome to continue using this account for our online services, or you can signup to become a member below. ",
     profileAccountOnlyWarning:
       "Your profile is currently set to 'account only'. This is because you skipped the signup process and did not become a member. You're welcome to continue using this account for our online services, or you can signup to become a member from the menu ('Membership' > 'Membership Plan').",
   },
   signup: {
+    billing: 'Billing',
+    billingCompletedDescription:
+      'Your subscription is set up — you can complete the remaining steps below.',
+    termsAcceptance: 'Terms & Conditions',
+    acceptTerms: 'Please review and accept the following before continuing.',
+    termsAcceptError: 'We couldn’t record your acceptance. Please try again.',
     induction: 'Induction',
     requiredSteps:
       'You must complete the following steps to complete your membership.',
@@ -590,7 +689,13 @@ export default {
     submitted: 'Membership application submitted',
     submittedDescription:
       "Your membership application has been submitted and you are now a 'member applicant'. Your membership will be accepted soon, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information.",
+    submittedNoEmail: 'Membership complete',
+    submittedDescriptionNoEmail:
+      'Your membership is all set and your site access has been enabled. Welcome aboard!',
     continueToDashboard: 'Continue to dashboard',
+    awaitingPaymentTitle: 'All requirements complete!',
+    awaitingInvoicePayment:
+      'Your access will be activated automatically once your invoice payment is received.',
     error: 'Error submitting membership application',
     errorDescription:
       "We're very sorry but there was an unexpected error when submitting your application. Please contact us at {email} for assistance.",
@@ -600,6 +705,23 @@ export default {
       'Sorry, but there was a problem creating your subscription. Please check the card you used had enough funds, try again, or contact us for help.',
     existingMemberSubscription:
       'Sorry, you already have an active Stripe subscription.',
+    skipNotAllowed:
+      "You can't skip signup while you have an active or pending membership subscription. Please cancel your subscription from the membership page first.",
+    noMoodleAccount:
+      "We couldn't find a Moodle account matching your email address. Please make sure you've created your Moodle account using the same email you used to sign up here, then try again.",
+    moodleUnavailable:
+      "We couldn't reach Moodle to check your induction progress. Please try again in a moment, or contact us if the problem persists.",
+  },
+  accessCard: {
+    memberEntryDisabled:
+      'Self-service access card registration is currently disabled. Please contact us to have your card registered.',
+    required: 'Please enter an access card number.',
+    adminRebindRequired:
+      "You can't change your own access card after activation. Please contact us if your card needs to be replaced.",
+    alreadyBound:
+      'You already have an access card registered. Please contact us if it needs to be replaced.',
+    alreadyInUse:
+      "That access card is already registered to another member. Please double-check the number, or contact us if you think it's a mistake.",
   },
   tiers: {
     disabledFeature:
@@ -619,6 +741,7 @@ export default {
     confirmDelay:
       'Your membership application will be submitted after you complete the next steps.',
     finish: 'Pay & Continue',
+    finishInvoice: 'Confirm & Get Invoice',
     plansFrom: 'From {plan}',
     skipSignup: 'Skip Signup (if you just want an account)',
   },
@@ -650,10 +773,109 @@ export default {
     loginHere: 'Login Here',
     registrationComplete:
       'Registration complete. Please check your email and click the link to verify your email address.',
+    privacyConsent:
+      'I consent to the storage and processing of my personal data.',
+    privacyPolicyLink: 'View privacy policy.',
+    privacyPolicyTitle: 'Privacy Policy',
+    privacyConsentRequired: 'You must consent before registering.',
   },
   verifyEmail: {
     error:
       'There was a problem verifying your email address. We just sent you another link so please try again.',
     success: 'Your email was verified. You will be logged in shortly.',
+  },
+  membershipStatusCard: {
+    lockedDescription:
+      'This account has been blocked from signing up. Contact an admin if this is not expected.',
+    title: 'Membership Status',
+    stateBadge: {
+      noob: 'Needs Setup',
+      active: 'Active',
+      inactive: 'Inactive',
+      accountonly: 'Account Only',
+    },
+    stateBanner: {
+      noob: 'Your membership setup is not complete',
+      active: 'You are an active member',
+      inactive: 'Your membership is currently inactive',
+      accountonly: 'Account only — no active membership',
+    },
+    payment: 'Payment',
+    paymentComplete: 'Subscription active',
+    paymentRequired: 'Membership payment required',
+    paymentPending: 'Invoice sent — awaiting payment',
+    termsComplete: 'Terms accepted',
+    termsRequired: 'Terms acceptance required',
+    inductionComplete: 'Induction completed',
+    inductionRequired: 'Online induction required',
+    accessCardComplete: 'Access card registered',
+    accessCardRequired: 'Access card registration required',
+    setupInProgress: 'Setup in progress.',
+    membershipExpires: 'Membership expires on {date}.',
+    cancellingWarning:
+      'Your subscription is cancelling. Access will end at the next renewal date.',
+    inactiveDescription: 'Your membership is inactive.',
+    accountOnlyTitle: 'Account only — not an active member.',
+    accountOnlyDescription:
+      'You have an account but have not been granted full membership access.',
+    renewalDate: 'Renewal date',
+    inDays: 'in {days} days',
+    unknown: 'Unknown',
+    completeSetup: 'Complete Setup',
+    activateMembership: 'Activate Membership',
+    viewMembership: 'View Membership',
+    viewAccount: 'View Account',
+    becomeMember: 'Become a Member',
+  },
+  billing: {
+    stateLocked:
+      'Your account has been blocked from signing up. Contact an admin if this is not expected.',
+    selectMethod: 'How would you like your membership to renew?',
+    payByCard: 'Automatic Renewal',
+    cardDescription:
+      "Your membership renews automatically. Each billing cycle's payment is collected from the card on file. No action needed; your membership stays active as long as your card is valid.",
+    payByInvoice: 'Manual Renewal',
+    invoiceDescription:
+      'You renew your membership manually. We email you an invoice each billing cycle that you pay yourself. Your membership is activated once payment is received, and stays active each cycle as long as the invoice is paid on time.',
+    invoiceAmount: 'Invoice amount: {amount}',
+    viewInvoice: 'View Invoice',
+    awaitingInvoicePayment:
+      'Your membership is pending. An invoice has been sent to your email — your access will be activated once payment is received.',
+    invoiceMethodMemberbucksInfo:
+      'Your membership is on manual renewal, so no card is needed for membership billing. You can still add a card below if you want to top up Spacebucks.',
+    invoiceMethodNoCardNeeded:
+      'Your membership is on manual renewal, so no card is needed. Your membership invoice will be emailed to you each billing cycle.',
+    invoiceDisabled:
+      'Invoice billing is not currently available. Please choose another payment method.',
+    newSubscriptionsDisabled:
+      'New membership subscriptions are currently closed.',
+    stripeError:
+      "Something went wrong talking to our payment provider. Please try again in a moment, or contact us if it doesn't clear up.",
+  },
+  pendingInvoices: {
+    title: 'Pending Invoices',
+    description:
+      'Members with an outstanding invoice for their membership subscription. Use this panel to record payments received outside of Stripe (bank transfer, cash, etc.).',
+    invoiceDisabledWarning:
+      'Invoice billing is currently disabled, so new members cannot sign up via invoice. Existing invoice subscriptions are still being billed by Stripe — use this page to record off-Stripe payments for those members.',
+    noInvoices: 'No pending invoices.',
+    columnMember: 'Member',
+    columnEmail: 'Email',
+    columnPlan: 'Plan',
+    columnAmount: 'Amount Due',
+    columnCreated: 'Created',
+    columnDue: 'Due',
+    columnActions: 'Actions',
+    viewInStripe: 'View in Stripe',
+    markPaid: 'Mark as Paid',
+    markPaidTitle: 'Mark Invoice as Paid',
+    markPaidHelp:
+      'This marks the invoice as paid out-of-band in Stripe (no card charge). The subscription will activate via the paid webhook. Add an optional note for the audit trail.',
+    commentLabel: 'Comment (optional)',
+    commentPlaceholder: 'e.g. Paid by bank transfer on 2026-04-10',
+    confirmMarkPaid: 'Mark as Paid',
+    markPaidSuccess: 'Invoice marked as paid.',
+    markPaidError: 'Failed to mark invoice as paid.',
+    fetchError: 'Failed to load pending invoices.',
   },
 };

@@ -29,22 +29,28 @@
       </q-banner>
     </div>
 
-    <profile-form class="q-mb-lg" />
+    <profile-form class="q-mb-sm" />
 
-    <q-btn-group push>
-      <q-btn
-        push
-        color="toolbar"
-        label="Digital ID"
-        @click="digitalId = true"
-      />
-      <q-btn
-        push
-        color="primary"
-        label="Change Password"
-        @click="changePassword = true"
-      />
-    </q-btn-group>
+    <q-btn
+      color="primary"
+      :label="$t('changePasswordCard.pageTitle')"
+      class="profile-action-btn q-mb-sm"
+      @click="changePassword = true"
+    />
+
+    <q-btn
+      color="toolbar"
+      :icon="icons.digitalId"
+      :label="$t('digitalId.title')"
+      class="profile-action-btn"
+      @click="digitalId = true"
+    />
+
+    <p class="text-body2 text-grey-8 q-mt-xl">
+      {{ $t('form.memberNumber') }}:<span class="q-ml-sm text-weight-bold">{{
+        profile.id
+      }}</span>
+    </p>
 
     <q-dialog v-model="digitalId">
       <digital-id-card />
@@ -81,3 +87,9 @@ export default {
   },
 };
 </script>
+
+<style lang="sass">
+.profile-action-btn
+  max-width: $maxWidthMedium
+  width: 100%
+</style>

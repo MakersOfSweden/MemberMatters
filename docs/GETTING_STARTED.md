@@ -18,7 +18,30 @@ variables from. You'll need at least the following:
 ```
 # /usr/app/env.list
 MM_ENV=Production
+MM_SECRET_KEY=<generate a long random string, keep it private>
+MM_ALLOWED_HOSTS=portal.example.org,www.example.org
 ```
+
+> **Required in production.** When `MM_ENV=Production`, the container refuses to boot
+> if `MM_SECRET_KEY` or `MM_ALLOWED_HOSTS` is missing — the process exits with
+> `ImproperlyConfigured` before serving any requests.
+>
+> - `MM_SECRET_KEY` is used to sign Django sessions and JWT access tokens. Generate a
+>   long random value (e.g. `python -c "import secrets; print(secrets.token_urlsafe(64))"`),
+>   never reuse the bundled dev key, and treat it like a database password — anyone who
+>   has it can forge a session for any user, including admins.
+> - `MM_ALLOWED_HOSTS` is a comma-separated list of the public hostnames your portal
+>   answers on. Setting it narrows the surface for Host-header attacks (cache poisoning,
+>   spoofed password-reset links).
+>
+> **Multi-container deployments (docker-compose, Kubernetes, CapRover, etc.):** these
+> two variables must be set on **every** service that runs the MemberMatters image —
+> the web app, the Celery worker, and the Celery beat scheduler — because each one
+> imports Django settings at startup. The example `docker/docker-compose.yml` and
+> `docker/caprover.yaml` only declare them on the web app service; if you copy from
+> those templates, propagate the variables to the worker and beat services too (a YAML
+> anchor or `env_file:` shared across services keeps it DRY). The `--env-file` quickstart
+> above is single-container and is unaffected.
 
 Once you've downloaded the docker image and configured your environment variables, you'll need to create a container
 and mount a volume. Replace `/usr/app/` with the location you'd like to store your database and other data.

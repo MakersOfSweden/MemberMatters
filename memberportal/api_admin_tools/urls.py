@@ -6,14 +6,29 @@ from . import views
 urlpatterns = [
     path("api/admin/members/", views.GetMembers.as_view(), name="GetMembers"),
     path(
-        "api/admin/members/<int:member_id>/state/<str:state>/",
-        views.MemberState.as_view(),
-        name="MemberState",
+        "api/admin/signup-progress/",
+        views.SignupProgress.as_view(),
+        name="SignupProgress",
     ),
     path(
-        "api/admin/members/<int:member_id>/makemember/",
+        "api/admin/members/<int:member_id>/make-member/",
         views.MakeMember.as_view(),
-        name="ActivateMember",
+        name="MakeMember",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/admin-disabled-access/",
+        views.MemberAdminDisabledAccess.as_view(),
+        name="MemberAdminDisabledAccess",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/state-lock/",
+        views.MemberStateLock.as_view(),
+        name="MemberStateLock",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/cancel-membership/",
+        views.MemberCancelMembership.as_view(),
+        name="MemberCancelMembership",
     ),
     path(
         "api/admin/members/<int:member_id>/access/",
@@ -31,6 +46,11 @@ urlpatterns = [
         name="MemberSendSms",
     ),
     path(
+        "api/admin/members/<int:member_id>/ensurestripecustomer/",
+        views.MemberEnsureStripeCustomer.as_view(),
+        name="MemberEnsureStripeCustomer",
+    ),
+    path(
         "api/admin/members/<int:member_id>/profile/",
         views.MemberProfile.as_view(),
         name="MemberProfile",
@@ -39,6 +59,11 @@ urlpatterns = [
         "api/admin/members/<int:member_id>/billing/",
         views.MemberBillingInfo.as_view(),
         name="MemberBillingInfo",
+    ),
+    path(
+        "api/admin/members/<int:member_id>/subscription/",
+        views.MemberSubscriptionInfo.as_view(),
+        name="MemberSubscriptionInfo",
     ),
     path(
         "api/admin/members/<int:member_id>/logs/",
@@ -89,6 +114,16 @@ urlpatterns = [
         name="ManageMembershipTierPlan",
     ),
     path(
+        "api/admin/billing/pending-invoices/",
+        views.PendingInvoices.as_view(),
+        name="PendingInvoices",
+    ),
+    path(
+        "api/admin/billing/invoices/<str:invoice_id>/mark-paid/",
+        views.MarkInvoicePaid.as_view(),
+        name="MarkInvoicePaid",
+    ),
+    path(
         "api/admin/settings/",
         views.ManageSettings.as_view(),
         name="ManageSettings",
@@ -97,5 +132,10 @@ urlpatterns = [
         "api/admin/settings/<str:setting_key>/",
         views.ManageSettings.as_view(),
         name="ManageSettings",
+    ),
+    path(
+        "api/admin/signup-preview/",
+        views.SignupPreview.as_view(),
+        name="SignupPreview",
     ),
 ]

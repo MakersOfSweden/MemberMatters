@@ -1,3 +1,4 @@
+{% load email_extras %}
 <!DOCTYPE html>
 <html>
   <head>
@@ -258,9 +259,9 @@
                 >
                   {{card.title}}
                 </h2>
-                <p style="margin: 0; text-align: center">
-                  {{ card.description }}
-                </p>
+                <div style="margin: 0; text-align: left">
+                  {{ card.description|sanitize_html }}
+                </div>
               </td>
             </tr>
 

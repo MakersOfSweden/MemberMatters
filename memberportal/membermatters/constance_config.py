@@ -46,7 +46,7 @@ CONSTANCE_CONFIG = {
     "POST_INDUCTION_URL": (
         "https://eventbrite.com.au",
         "The URL members should visit to book in for a site induction after finishing the online induction."
-        " (displayed during signup if REQUIRE_ACCESS_CARD == False)",
+        " (displayed during signup if REQUIRE_ACCESS_CARD == True and MEMBER_CAN_ENTER_ACCESS_CARD == False)",
     ),
     # Logo and favicon
     "SITE_LOGO": (
@@ -104,6 +104,10 @@ CONSTANCE_CONFIG = {
         "[]",
         "Same syntax as HOME_PAGE_CARDS but icons are not used. If nothing is specified we will use HOME_PAGE_CARDS.",
     ),
+    "TERMS_ACCEPTANCE_CARDS": (
+        "[]",
+        'A JSON array of cards shown as a required Terms & Conditions step during signup. Each card: {"icon": "mdi-...", "title": "...", "body_html": "<p>...</p>", "checkbox_text": "..."}. The step is skipped when the array is empty.',
+    ),
     # Stripe config
     "ENABLE_STRIPE": (True, "Enable use of Stripe for payments."),
     "STRIPE_PUBLISHABLE_KEY": ("", "Set this to your Stripe PUBLIC API key."),
@@ -120,7 +124,50 @@ CONSTANCE_CONFIG = {
         False,
         "Enable integration with stripe for membership payments.",
     ),
+    "ENABLE_NEW_SUBSCRIPTIONS": (
+        True,
+        "Allow members to start NEW membership subscriptions. Renewals (Stripe "
+        "invoice.paid webhook), pending invoices being paid, and "
+        "PaymentPlanResume for cancelling members are NOT affected by this "
+        "toggle. Use this to pause new signups (e.g. capacity freeze) without "
+        "breaking existing members.",
+    ),
+    "ENABLE_INVOICE_BILLING": (
+        False,
+        "Enable the 'Pay by Invoice' option during membership signup. "
+        "When enabled, members may choose to receive a Stripe invoice by email "
+        "instead of paying by card. Membership activation is deferred until the "
+        "invoice is paid. REQUIRED Stripe setup: in Billing → Settings → "
+        "Subscriptions and emails, configure 'Manage failed payments' to cancel "
+        "the subscription after the invoice goes past due. Without this, "
+        "members who never pay stay in 'pending' state indefinitely — it is "
+        "the customer.subscription.deleted webhook (triggered by Stripe's "
+        "auto-cancel) that moves the member back to 'inactive'. MemberMatters "
+        "automatically voids the open invoice when that webhook fires, so no "
+        "additional invoice-handling configuration is required in Stripe.",
+    ),
+    "INVOICE_DAYS_UNTIL_DUE": (
+        31,
+        "Number of days before a Stripe membership invoice is due. "
+        "See ENABLE_INVOICE_BILLING for the required Stripe Dashboard setup "
+        "that handles what happens once an invoice goes past due.",
+    ),
+    "INVOICE_BILLING_NOTE": (
+        "Supported payment methods are: ",
+        "Optional note displayed to members when they select invoice billing during signup. "
+        "Use this for additional payment instructions, bank details, or other information. "
+        "Leave empty to hide.",
+    ),
+    # ==== Membership Status Card ====
+    "ENABLE_MEMBERSHIP_STATUS_CARD": (
+        True,
+        "Enable the membership status quick card on the dashboard.",
+    ),
     # ==== Report Issue Services ====
+    "ENABLE_REPORT_ISSUE": (
+        True,
+        "Enable the report issue feature in the portal.",
+    ),
     # Email config
     "REPORT_ISSUE_ENABLE_EMAIL": (
         True,
@@ -300,7 +347,7 @@ CONSTANCE_CONFIG = {
     ),
     "MAX_INDUCTION_DAYS": (
         180,
-        "The maximum amount of days since a member was last inducted before they have to complete another induction (0 to disable).",
+        "The maximum amount of days since a member was last inducted before they have to complete another induction (0 disables re-induction; first-time induction is still required).",
     ),
     "MIN_INDUCTION_SCORE": (
         99,
@@ -310,9 +357,61 @@ CONSTANCE_CONFIG = {
         True,
         "If an access card is required to be added to a members profile before signup.",
     ),
+    "MEMBER_CAN_ENTER_ACCESS_CARD": (
+        True,
+        "If true, members can enter their own RFID card during signup. If false, they will be prompted to contact an admin (displayed during signup if REQUIRE_ACCESS_CARD == True).",
+    ),
     "COLLECT_VEHICLE_REGISTRATION_PLATE": (
         False,
         "Display a field that collects the member's vehicle registration plate on signup & in the profile page.",
+    ),
+    "REQUIRE_SCREEN_NAME": (
+        True,
+        "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
+    ),
+    "FORCE_SIGNUP_COMPLETION": (
+        True,
+        "Redirect new members to the membership plan screen until they finish signing up. "
+        "Members who have completed every signup step and are only waiting on their first "
+        "invoice payment keep full access to the portal, as do locked accounts and staff. "
+        "Has no effect unless ENABLE_STRIPE_MEMBERSHIP_PAYMENTS is on, since the membership "
+        "plan screen is what members are redirected to.",
+    ),
+    "ENABLE_REGISTRATION": (
+        True,
+        "Allow new user registration. When false, the Register endpoint returns 503 and the registration page shows REGISTRATION_DISABLED_MESSAGE.",
+    ),
+    "REGISTRATION_DISABLED_MESSAGE": (
+        "",
+        "Message shown on the registration page (and as a popup from the login page) when ENABLE_REGISTRATION is false.",
+    ),
+    "MEMBER_CAN_EDIT_BASIC_DETAILS": (
+        True,
+        "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
+    ),
+    "MEMBER_CAN_EDIT_EMAIL": (
+        True,
+        "If true, members can change their own email address on the profile page (subject to MEMBER_CAN_EDIT_BASIC_DETAILS also being true). If false, the email field is locked and members must contact an admin to change it. Name and phone editing are unaffected by this setting.",
+    ),
+    "PROFILE_DEFAULT_PHONE_REGION": (
+        "AU",
+        "Default region (ISO-3166 alpha-2 code, e.g. AU or SE) used to interpret phone numbers entered without an international +country-code prefix. Numbers are stored in E.164 format.",
+    ),
+    "SIGNUP_REQUIRE_PRIVACY_CONSENT": (
+        False,
+        "Display a checkbox on the signup page requiring the user to consent to the storage of their personal data before registering.",
+    ),
+    "SIGNUP_PRIVACY_POLICY_URL": (
+        "",
+        "Optional URL to a privacy policy document. If set, the privacy consent checkbox will link to it. Ignored when SIGNUP_PRIVACY_POLICY_TEXT is also set.",
+    ),
+    "SIGNUP_PRIVACY_POLICY_TEXT": (
+        "",
+        "Optional privacy policy text shown to the user in a popup on the signup page. Takes precedence over SIGNUP_PRIVACY_POLICY_URL if both are set. Leave empty to use the URL (or no link at all).",
+    ),
+    "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL": (
+        True,
+        "Send the 'your membership application has been submitted' email to the user when they finish signup. Note: the admin notification about the new applicant is sent regardless. Disable this if you don't want to promise the unenforced 7-day review window described in that email.",
     ),
     "ENABLE_PROXY_VOTING": (False, "Enables the proxy voting management feature."),
     "ENABLE_WEBCAMS": (
@@ -391,6 +490,18 @@ CONSTANCE_CONFIG = {
         365,
         "The maximum number of days to show on the stats page.",
     ),
+    "METRICS_API_KEY": (
+        "",
+        "API key (Api-Key <key>) used by the Celery metrics task to push Prometheus values back to the web server. Create one in Django admin under 'API Keys' and paste the raw key here.",
+    ),
+    "ENABLE_LAST_SEEN_PAGE": (
+        True,
+        "Enable the Last Seen page that shows member last seen data.",
+    ),
+    "ENABLE_RECENT_SWIPES_PAGE": (
+        True,
+        "Enable the Recent Swipes page for regular members. Admins can always see it.",
+    ),
 }
 
 CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
@@ -409,10 +520,15 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
         (
             "Features",
             (
+                "ENABLE_REGISTRATION",
+                "REGISTRATION_DISABLED_MESSAGE",
                 "ENABLE_WEBCAMS",
                 "ENABLE_PROXY_VOTING",
+                "ENABLE_MEMBERSHIP_STATUS_CARD",
+                "ENABLE_REPORT_ISSUE",
                 "ENABLE_STRIPE",
                 "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS",
+                "ENABLE_NEW_SUBSCRIPTIONS",
                 "ENABLE_MEMBERBUCKS",
                 "ENABLE_DISCOURSE_SSO_PROTOCOL",
                 "ENABLE_DISCORD_INTEGRATION",
@@ -422,9 +538,11 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_PORTAL_SITE_SIGN_IN",
                 "ENABLE_PORTAL_MEMBERS_ON_SITE",
                 "ENABLE_DOOR_BUMP_API",
+                "ENABLE_LAST_SEEN_PAGE",
+                "ENABLE_RECENT_SWIPES_PAGE",
             ),
         ),
-        ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS")),
+        ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS", "METRICS_API_KEY")),
         (
             "Sentry Error Reporting",
             (
@@ -439,7 +557,23 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "MAX_INDUCTION_DAYS",
                 "MIN_INDUCTION_SCORE",
                 "REQUIRE_ACCESS_CARD",
+                "MEMBER_CAN_ENTER_ACCESS_CARD",
                 "COLLECT_VEHICLE_REGISTRATION_PLATE",
+                "REQUIRE_SCREEN_NAME",
+                "SIGNUP_REQUIRE_PRIVACY_CONSENT",
+                "SIGNUP_PRIVACY_POLICY_URL",
+                "SIGNUP_PRIVACY_POLICY_TEXT",
+                "TERMS_ACCEPTANCE_CARDS",
+                "ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL",
+                "FORCE_SIGNUP_COMPLETION",
+            ),
+        ),
+        (
+            "Member Profile",
+            (
+                "MEMBER_CAN_EDIT_BASIC_DETAILS",
+                "MEMBER_CAN_EDIT_EMAIL",
+                "PROFILE_DEFAULT_PHONE_REGION",
             ),
         ),
         (
@@ -481,6 +615,9 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "STRIPE_WEBHOOK_SECRET",
                 "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS",
                 "MEMBERBUCKS_CURRENCY",
+                "ENABLE_INVOICE_BILLING",
+                "INVOICE_DAYS_UNTIL_DUE",
+                "INVOICE_BILLING_NOTE",
             ),
         ),
         (

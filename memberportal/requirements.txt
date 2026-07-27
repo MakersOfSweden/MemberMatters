@@ -25,6 +25,7 @@ django-celery-results~=2.5.1
 django-celery-beat~=2.6.0
 redis~=4.3.1
 twilio~=9.1.0
+phonenumberslite~=9.0.30
 django-prometheus==2.3.1
 psycopg2-binary~=2.9.9
 django-oidc-provider~=0.8.2
@@ -32,3 +33,4 @@ djangorestframework-api-key~=3.0.0
 prometheus-client~=0.20.0
 python-dateutil~=2.9.0
 django-import-export~=3.3.9
+nh3~=0.3.5

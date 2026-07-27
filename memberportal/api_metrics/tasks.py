@@ -40,8 +40,19 @@ def calculate_metrics():
     calculate_memberbucks_balance()
     calculate_memberbucks_transactions()
 
+    if not config.METRICS_API_KEY:
+        logger.warning(
+            "METRICS_API_KEY is not configured; skipping Prometheus push. "
+            "Create an API key in Django admin and set it in constance to enable scraping."
+        )
+        return
+
     try:
-        requests.post(config.SITE_URL + "/api/update-prom-metrics/")
+        requests.post(
+            config.SITE_URL + "/api/update-prom-metrics/",
+            headers={"Authorization": f"Api-Key {config.METRICS_API_KEY}"},
+            timeout=30,
+        )
 
     except Exception as e:
         logger.error(f"Failed to update Prometheus metrics: {e}")

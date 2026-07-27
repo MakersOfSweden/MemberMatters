@@ -27,6 +27,15 @@ export function formatDate(date: Date | number, time = true) {
   return dayjs(parsedDate).local().format('D MMM YYYY');
 }
 
+export function formatDay(date: Date | number) {
+  let parsedDate = date;
+  // mirror formatDate's heuristic for unscaled (seconds-based) timestamps
+  if (typeof date === 'number' && date < 9439200000) {
+    parsedDate = date * 1000;
+  }
+  return dayjs(parsedDate).local().format('D MMM YYYY');
+}
+
 export function formatDateSimple(date: Date, time = true) {
   if (time) return dayjs(date).local().format('DD/MM/YYYY, h:mm a');
   return dayjs(date).local().format('D/MMM/YYYY');
@@ -85,6 +94,7 @@ export default {
   methods: {
     formatCsvList,
     formatDate,
+    formatDay,
     formatDateSimple,
     formatWhen,
     formatBooleanYesNo,

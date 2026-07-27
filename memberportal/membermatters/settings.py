@@ -39,9 +39,28 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 CORS_ALLOW_ALL_ORIGINS = True
 
 if os.environ.get("MM_ENV") == "Production":
+    from django.core.exceptions import ImproperlyConfigured
+
     ENVIRONMENT = "Production"
     CORS_ALLOW_ALL_ORIGINS = False
     DEBUG = False
+
+    # Refuse to boot in production with the bundled dev SECRET_KEY. JWTs
+    # are signed with this; a leaked default key means anyone can forge a
+    # session for any user (including admin).
+    if not os.environ.get("MM_SECRET_KEY"):
+        raise ImproperlyConfigured("MM_SECRET_KEY must be set when MM_ENV=Production.")
+
+    # Pin ALLOWED_HOSTS to the deployment domain(s). Leaving "*" in
+    # production enables Host-header attacks (cache poisoning, password
+    # reset link spoofing). Comma-separated list; e.g.
+    # MM_ALLOWED_HOSTS="portal.example.org,www.example.org".
+    allowed_hosts_env = os.environ.get("MM_ALLOWED_HOSTS", "").strip()
+    if not allowed_hosts_env:
+        raise ImproperlyConfigured(
+            "MM_ALLOWED_HOSTS must be set when MM_ENV=Production."
+        )
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
 
 # Application definition
 INSTALLED_APPS = [
@@ -271,6 +290,11 @@ LOGGING = {
             "level": os.environ.get("MM_LOG_LEVEL_SMS", "INFO"),
             "propagate": False,
         },
+        "canvas": {
+            "handlers": ["console", "file"],
+            "level": os.environ.get("MM_LOG_LEVEL_CANVAS", "INFO"),
+            "propagate": False,
+        },
         "api_general:tasks": {
             "handlers": ["console", "file"],
             "level": os.environ.get("MM_LOG_LEVEL_GENERAL_TASKS", "INFO"),
@@ -320,6 +344,12 @@ LOGGING = {
     },
 }
 
+# Number of reverse proxies in front of Django, so DRF reads the real
+# client IP from X-Forwarded-For when throttling. If unset, all visitors
+# can collapse into one throttle bucket. Bundled nginx = 1; +1 per extra
+# layer (CapRover, Cloudflare).
+_num_proxies = os.environ.get("MM_NUM_PROXIES")
+
 REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "membermatters.custom_exception_handlers.fix_401",
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
@@ -327,6 +357,20 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+    "NUM_PROXIES": int(_num_proxies) if _num_proxies else None,
+    "DEFAULT_THROTTLE_RATES": {
+        # Throttling keys off client IP, and legitimate signups share IPs
+        # (makerspace WiFi, CGNAT), so a low cap rejects real people. This
+        # just stops a trivial script — CAPTCHA (see Register view TODO)
+        # is the real abuse control. Override with MM_THROTTLE_REGISTER.
+        "register": os.environ.get("MM_THROTTLE_REGISTER", "60/hour"),
+        # Split so a legitimate user clicking a reset email (validate +
+        # submit, possibly with a refresh) doesn't share the same bucket
+        # as the abuse path (unauthenticated "send me a reset email").
+        "password_reset_request": "10/hour",
+        "password_reset_use": "40/hour",
+    },
 }
 
 SIMPLE_JWT = {

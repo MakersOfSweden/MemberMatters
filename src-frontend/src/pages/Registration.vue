@@ -8,7 +8,25 @@
       />
     </template>
 
-    <registration-card />
+    <q-card
+      v-if="features.enableRegistration === false"
+      class="q-pa-md registration-closed-card"
+    >
+      <q-banner class="bg-info text-white">
+        {{
+          features.registrationDisabledMessage || $t('error.registrationClosed')
+        }}
+      </q-banner>
+      <div class="row justify-end q-mt-md">
+        <q-btn
+          :label="$t('loginCard.login')"
+          color="primary"
+          :to="{ name: 'login' }"
+        />
+      </div>
+    </q-card>
+
+    <registration-card v-else />
   </q-page>
 </template>
 
@@ -22,7 +40,7 @@ export default {
     RegistrationCard,
   },
   computed: {
-    ...mapGetters('config', ['images']),
+    ...mapGetters('config', ['images', 'features']),
   },
 };
 </script>

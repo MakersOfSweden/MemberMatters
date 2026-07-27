@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from datetime import timedelta, datetime
 import pytz
@@ -16,10 +16,12 @@ from api_admin_tools.models import PaymentPlan
 import json
 import uuid
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
 from services.emails import send_single_email, send_email_to_admin
 from services import sms
+from sentry_sdk import capture_exception
 from django_prometheus.models import ExportModelOperationsMixin
-
 
 logger = logging.getLogger("profile")
 
@@ -241,13 +243,14 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
         )
 
     def email_membership_application(self):
-        subject = "Your membership application has been submitted"
-        message = "Thanks for submitting your membership application! Your membership application has been submitted and you are now a 'member applicant'. Your membership will be officially accepted shortly, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information."
+        if config.ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL:
+            subject = "Your membership application has been submitted"
+            message = "Thanks for submitting your membership application! Your membership application has been submitted and you are now a 'member applicant'. Your membership will be officially accepted shortly, but we have granted site access immediately. You will receive an email confirming that your access card has been enabled. If for some reason your membership is rejected within this period, you will receive an email with further information."
 
-        self.email_notification(subject, message)
+            self.email_notification(subject, message)
 
-        subject = f"A new person just became a member applicant: {self.profile.get_full_name()}"
-        message = f"{self.profile.get_full_name()} just completed all steps required to sign up and is now a member applicant. Their site access has been enabled and membership will automatically be accepted within 7 days without objection."
+        subject = f"A new person just completed signup: {self.profile.get_full_name()}"
+        message = f"{self.profile.get_full_name()} just completed all steps required to sign up and now has full membership. Their site access has been enabled."
         template_vars = {"message": message}
 
         return send_email_to_admin(
@@ -274,29 +277,89 @@ class User(ExportModelOperationsMixin("user"), AbstractBaseUser, PermissionsMixi
 
         return False
 
-    def email_disable_member(self):
+    def email_disable_member_access(self):
         return self.email_notification(
             f"Your {config.SITE_OWNER} site access has been disabled.",
-            f"Your access to {config.SITE_OWNER} has been disabled. This could be due to many reasons, but is "
-            f"usually due to a failed membership payment. If this is unexpected, please let us know.",
+            f"Your access to {config.SITE_OWNER} has been disabled. "
+            f"If this is unexpected, please let us know.",
         )
 
-    def email_enable_member(self):
+    def email_subscription_ended(self):
+        return self.email_notification(
+            f"Your {config.SITE_OWNER} site access has been disabled.",
+            f"Your access to {config.SITE_OWNER} has been disabled because "
+            "your membership subscription has ended. This is usually due to "
+            "a failed membership payment. If this is unexpected, please let "
+            "us know.",
+        )
+
+    def email_enable_member_access(self):
         message = f"Great news {self.profile.first_name}, your {config.SITE_OWNER} site access has been enabled."
         subject = f"Your {config.SITE_OWNER} site access has been enabled."
 
         return self.email_notification(subject, message)
 
     def reset_password(self):
-        self.log_event("Password reset requested", "profile")
-        self.password_reset_key = uuid.uuid4()
-        self.password_reset_expire = timezone.now() + timedelta(hours=24)
-        self.save()
-        self.email_password_reset(
-            f"{config.SITE_URL}/profile/password/reset/{self.password_reset_key}"
-        )
+        with transaction.atomic():
+            self.log_event("Password reset requested", "profile")
+            self.password_reset_key = uuid.uuid4()
+            self.password_reset_expire = timezone.now() + timedelta(hours=24)
+            self.save(update_fields=["password_reset_key", "password_reset_expire"])
+            url = (
+                f"{config.SITE_URL}/profile/password/reset/"
+                f"{self.password_reset_key}"
+            )
+
+            def _send_reset_email(user=self, url=url):
+                try:
+                    user.email_password_reset(url)
+                except Exception as e:
+                    capture_exception(e)
+
+            transaction.on_commit(_send_reset_email)
 
         return True
+
+
+class CompleteSignupOutcome(str, Enum):
+    ACTIVATED = "activated"
+    ALREADY_ACTIVE = "already_active"
+    AWAITING_PAYMENT = "awaiting_payment"
+    REQUIREMENTS_UNMET = "requirements_unmet"
+    NO_SUBSCRIPTION = "no_subscription"
+    STATE_LOCKED = "state_locked"
+
+
+class SignupTriggeredBy(str, Enum):
+    MEMBER_SELF_SERVE = "member_self_serve"
+    SUBSCRIPTION_CREATED = "subscription_created"
+    INVOICE_PAID = "invoice_paid"
+    ADMIN_OVERRIDE_ACTIVATE = "admin_override_activate"
+
+
+@dataclass
+class CompleteSignupResult:
+    outcome: CompleteSignupOutcome
+    required_steps: list = field(default_factory=list)
+
+
+class CancelTriggeredBy(str, Enum):
+    MEMBER_SELF_CANCEL = "member_self_cancel"
+    ADMIN_OVERRIDE_CANCEL = "admin_override_cancel"
+    SUBSCRIPTION_DELETED = "subscription_deleted"
+
+
+class CompleteCancelOutcome(str, Enum):
+    DEACTIVATED = "deactivated"
+    STATE_LOCKED = "state_locked"
+    SIGNUP_LAPSED = "signup_lapsed"
+    ALREADY_DEACTIVATED = "already_deactivated"
+
+
+@dataclass
+class CompleteCancelResult:
+    outcome: CompleteCancelOutcome
+    previous_state: str = ""
 
 
 class Profile(ExportModelOperationsMixin("profile"), models.Model):
@@ -311,6 +374,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         ("inactive", "Inactive"),
         ("active", "Active"),
         ("cancelling", "Cancelling"),
+        ("pending", "Pending"),
     )
 
     class Meta:
@@ -335,15 +399,21 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     )
     created = models.DateTimeField(editable=False)
     modified = models.DateTimeField()
-    screen_name = models.CharField("Screen Name", max_length=30)
+    screen_name = models.CharField(
+        "Screen Name",
+        max_length=30,
+        blank=True,
+        null=True,
+        unique=True,
+        default=None,
+    )
     first_name = models.CharField("First Name", max_length=30)
     last_name = models.CharField("Last Name", max_length=30)
     phone_regex = RegexValidator(
-        regex=r"^\+?1?\d{9,15}$",
-        message="Phone number must be entered in the format: '0417123456'."
-        "Up to 12 characters allowed.",
+        regex=r"^\+[1-9]\d{1,14}$",
+        message="Phone number must be in E.164 format, e.g. +61417123456.",
     )
-    phone = models.CharField(validators=[phone_regex], max_length=12, blank=True)
+    phone = models.CharField(validators=[phone_regex], max_length=16, blank=True)
     state = models.CharField(max_length=11, default="noob", choices=STATES)
     vehicle_registration_plate = models.CharField(max_length=30, blank=True, null=True)
 
@@ -367,9 +437,10 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
     last_seen = models.DateTimeField(default=None, blank=True, null=True)
     last_induction = models.DateTimeField(default=None, blank=True, null=True)
+    terms_accepted_at = models.DateTimeField(default=None, blank=True, null=True)
 
     stripe_customer_id = models.CharField(
-        max_length=100, blank=True, null=True, default=""
+        max_length=100, blank=True, null=True, unique=True, default=None
     )
     stripe_card_expiry = models.CharField(
         max_length=10, blank=True, null=True, default=""
@@ -389,6 +460,27 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     subscription_first_created = models.DateTimeField(
         default=None, blank=True, null=True, editable=False
     )
+
+    BILLING_METHODS = (
+        ("card", "Card"),
+        ("invoice", "Invoice"),
+    )
+
+    billing_method = models.CharField(
+        max_length=10,
+        default="card",
+        choices=BILLING_METHODS,
+    )
+
+    # One-shot guard for the "Signup received, awaiting payment" email
+    # sent by CompleteSignup on invoice signups.
+    pending_signup_email_sent = models.BooleanField(default=False)
+
+    # Revokes door access without cancelling billing or touching `state`.
+    admin_disabled_access = models.BooleanField(default=False)
+
+    # Locks `state` only; `subscription_status` still follows Stripe.
+    state_locked = models.BooleanField(default=False)
 
     def __str__(self):
         return str(self.user)
@@ -418,53 +510,433 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         for interlock in self.interlocks.all():
             interlock.sync()
 
-    def deactivate(self, request=None):
-        if request:
-            request.user.log_event(
-                f"{request.user.profile.get_full_name()} deactivated member ({self.get_full_name()}).",
-                "admin",
-            )
-            self.user.log_event(
-                f"{request.user.profile.get_full_name()} deactivated member.",
-                "admin",
-            )
-        else:
-            self.user.log_event(
-                f"system deactivated member ({self.get_full_name()}).",
-                "profile",
-            )
+    def add_default_access(self):
+        # Pre-stage default door/interlock access. Idempotent (M2M.add).
+        # Safe to call before activation: access.get_tags() filters by
+        # state="active", so these rows do not grant access until the
+        # member is actually activated.
+        from access.models import Doors, Interlock
 
-        self.user.email_disable_member()
-        sms_message = sms.SMS()
-        sms_message.send_deactivated_access(self.phone)
-        self.state = "inactive"
-        self.save()
+        for door in Doors.objects.filter(all_members=True):
+            self.doors.add(door)
+        for interlock in Interlock.objects.filter(all_members=True):
+            self.interlocks.add(interlock)
+
+    def remove_default_access(self):
+        # Remove pre-staged default-access rows on a cancellation path that
+        # bypasses deactivate() (noob / accountonly cancel). Targeted
+        # .remove() preserves bespoke admin grants (rows whose
+        # Doors/Interlock has all_members=False) — see L15 in BUGS_FOUND.md
+        # for why blanket .clear() is the wrong shape.
+        from access.models import Doors, Interlock
+
+        self.doors.remove(*Doors.objects.filter(all_members=True))
+        self.interlocks.remove(*Interlock.objects.filter(all_members=True))
+
+    def _log_state_lock_refusal(self, triggered_by, action):
+        # Four sinks: audit log (admin UI), aggregator (logger), Sentry
+        # (alerting), admin email (operator nudge to review).
+        name = self.get_full_name()
+        triggered_label = getattr(triggered_by, "value", str(triggered_by))
+
+        try:
+            self.user.log_event(
+                f"state_locked refused {action} (triggered_by={triggered_label}); "
+                f"state kept as {self.state}",
+                "admin",
+            )
+        except Exception as e:
+            capture_exception(e)
+
+        logger.warning(
+            f"state_locked refusal: profile={self.pk} action={action} "
+            f"triggered_by={triggered_label} state={self.state}"
+        )
+
+        try:
+            capture_exception(
+                Exception(
+                    f"state_locked refusal: {action} blocked "
+                    f"(triggered_by={triggered_label}, state={self.state})"
+                )
+            )
+        except Exception as e:
+            capture_exception(e)
+
+        subject = f"Locked member {name}: {action} preserved state"
+        message = (
+            f"{action.capitalize()} for locked member {name} was triggered "
+            f"by {triggered_label}. State kept as {self.state}. Review "
+            "whether their grandfathered access still applies."
+        )
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": message},
+                user=self.user,
+                reply_to=self.user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    def complete_signup(self, triggered_by, request=None):
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            previous_state = locked.state
+
+            if locked.state == "active":
+                return CompleteSignupResult(CompleteSignupOutcome.ALREADY_ACTIVE)
+
+            if (
+                locked.state_locked
+                and triggered_by != SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE
+            ):
+                locked._log_state_lock_refusal(triggered_by, "activation")
+                return CompleteSignupResult(CompleteSignupOutcome.STATE_LOCKED)
+
+            if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
+                # An active member is never locked (the state_locked invariant).
+                if locked.state_locked:
+                    locked.state_locked = False
+                    locked.save(update_fields=["state_locked"])
+                locked.add_default_access()
+            else:
+                if (
+                    config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS
+                    and locked.subscription_status not in ("active", "pending")
+                ):
+                    return CompleteSignupResult(CompleteSignupOutcome.NO_SUBSCRIPTION)
+
+                signup_check = locked.can_signup()
+                if not signup_check["success"]:
+                    return CompleteSignupResult(
+                        CompleteSignupOutcome.REQUIREMENTS_UNMET,
+                        required_steps=signup_check["requiredSteps"],
+                    )
+
+                if locked.subscription_status == "pending":
+                    if not locked.pending_signup_email_sent:
+                        pending_subject = (
+                            "Your signup has been received — awaiting payment"
+                        )
+                        pending_message = (
+                            f"Hi {locked.first_name}, thanks for signing "
+                            f"up to {config.SITE_OWNER}! We've received your "
+                            "signup and you'll receive an invoice from Stripe "
+                            "shortly. Once it's paid, your access will be "
+                            "enabled automatically and we'll send you a "
+                            "welcome email."
+                        )
+
+                        def _on_commit_pending_signup(
+                            user=locked.user,
+                            subject=pending_subject,
+                            message=pending_message,
+                        ):
+                            try:
+                                user.email_notification(subject, message)
+                                user.log_event(
+                                    "Awaiting-payment email sent for pending invoice signup.",
+                                    "email",
+                                )
+                            except Exception as e:
+                                capture_exception(e)
+
+                        transaction.on_commit(_on_commit_pending_signup)
+
+                        # Set pessimistically: if Postmark drops the email we
+                        # accept losing it rather than risk a duplicate when
+                        # the user re-enters this flow.
+                        locked.pending_signup_email_sent = True
+                        locked.save(update_fields=["pending_signup_email_sent"])
+
+                    return CompleteSignupResult(CompleteSignupOutcome.AWAITING_PAYMENT)
+
+                locked.add_default_access()
+
+        self.activate(request)
+        trigger_label = getattr(triggered_by, "value", str(triggered_by))
+        self.user.log_event(
+            f"Activated via {trigger_label} (from {previous_state}).",
+            "profile",
+        )
+        return CompleteSignupResult(CompleteSignupOutcome.ACTIVATED)
+
+    def deactivate(self, request=None, on_transition=None, reason="admin"):
+        # Lock + re-read state to keep concurrent callers (e.g. Stripe webhook
+        # retries racing an admin action) from double-running side effects.
+        # External I/O (email/SMS, sync_access) runs after the lock is
+        # released so a slow Postmark/Twilio call cannot serialize concurrent
+        # webhook deliveries or push the handler past Stripe's 30s timeout.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            if locked.state == "inactive":
+                return False
+            previous_state = locked.state
+
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} deactivated member ({self.get_full_name()}).",
+                    "admin",
+                )
+                self.user.log_event(
+                    f"{request.user.profile.get_full_name()} deactivated member.",
+                    "admin",
+                )
+            else:
+                self.user.log_event(
+                    f"system deactivated member ({self.get_full_name()}).",
+                    "profile",
+                )
+
+            # update_fields so a stale `self` can't revert concurrent
+            # writes to other columns (e.g. webhook clearing stripe_*).
+            self.state = "inactive"
+            self.save(update_fields=["state"])
+
+        if on_transition is not None:
+            try:
+                on_transition(previous_state, "inactive")
+            except Exception as e:
+                capture_exception(e)
+
+        # Each notification is wrapped independently so a single
+        # Postmark/Twilio failure does not skip later notifications or
+        # sync_access — leaving an "inactive" member with devices still
+        # holding their tag is worse than a missed email.
+        try:
+            if reason == "subscription_ended":
+                self.user.email_subscription_ended()
+            else:
+                self.user.email_disable_member_access()
+        except Exception as e:
+            capture_exception(e)
+        try:
+            sms.SMS().send_deactivated_access(self.phone)
+        except Exception as e:
+            capture_exception(e)
         self.sync_access()
         return True
 
-    def activate(self, request=None):
-        if request:
-            request.user.log_event(
-                f"{request.user.profile.get_full_name()} activated member ({self.get_full_name()}).",
-                "admin",
-            )
-            self.user.log_event(
-                f"{request.user.profile.get_full_name()} activated member.",
-                "admin",
-            )
+    def complete_cancel(self, triggered_by, request=None):
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            previous_state = locked.state
+
+            if previous_state in ("inactive", "accountonly"):
+                # accountonly bypasses deactivate(), so drop any pre-staged
+                # default-access rows here. inactive has already been
+                # through deactivate() and keeps its M2M intentionally
+                # (get_tags filters by state).
+                if previous_state == "accountonly":
+                    locked.remove_default_access()
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.ALREADY_DEACTIVATED,
+                    previous_state=previous_state,
+                )
+
+            if (
+                previous_state == "active"
+                and locked.state_locked
+                and triggered_by != CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL
+            ):
+                self._log_state_lock_refusal(triggered_by, "cancellation")
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.STATE_LOCKED,
+                    previous_state=previous_state,
+                )
+
+            if previous_state == "noob":
+                # noob never goes through deactivate(), so drop any
+                # pre-staged default-access rows here.
+                locked.remove_default_access()
+                if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED:
+                    lapsed_subject = "Your membership signup has lapsed"
+                    lapsed_message = (
+                        "We weren't able to collect your membership payment "
+                        "in time, so your pending signup has been cancelled. "
+                        "You can sign up again at any time from the member "
+                        "portal."
+                    )
+
+                    def _on_commit_lapsed(
+                        user=locked.user,
+                        subject=lapsed_subject,
+                        message=lapsed_message,
+                    ):
+                        try:
+                            user.email_notification(subject, message)
+                            user.log_event(
+                                "Signup-lapsed email sent (subscription deleted before activation).",
+                                "email",
+                            )
+                        except Exception as e:
+                            capture_exception(e)
+
+                    transaction.on_commit(_on_commit_lapsed)
+                return CompleteCancelResult(
+                    outcome=CompleteCancelOutcome.SIGNUP_LAPSED,
+                    previous_state=previous_state,
+                )
+
+        reason = (
+            "subscription_ended"
+            if triggered_by == CancelTriggeredBy.SUBSCRIPTION_DELETED
+            else "admin"
+        )
+        self.deactivate(request, reason=reason)
+        trigger_label = getattr(triggered_by, "value", str(triggered_by))
+        self.user.log_event(
+            f"Cancelled via {trigger_label}.",
+            "profile",
+        )
+        return CompleteCancelResult(
+            outcome=CompleteCancelOutcome.DEACTIVATED,
+            previous_state=previous_state,
+        )
+
+    def set_admin_disabled_access(self, disabled, request=None):
+        # Admin-only toggle for the access pause (orthogonal to state /
+        # subscription).
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            was_disabled = locked.admin_disabled_access
+
+            if locked.admin_disabled_access != disabled:
+                locked.admin_disabled_access = disabled
+                locked.save(update_fields=["admin_disabled_access"])
+
+            if request and was_disabled != disabled:
+                action = "paused" if disabled else "resumed"
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} {action} access "
+                    f"for {self.get_full_name()}.",
+                    "admin",
+                )
+                self.user.log_event(f"Access {action} by admin.", "admin")
+
+        if was_disabled == disabled:
+            return
+
+        # Push the updated tag list to devices and notify the member — but
+        # only when their effective access actually changed (state="active").
+        # For non-active members, the flag is inert and notifying about an
+        # access change they never had would be misleading.
+        self.sync_access()
+
+        if self.state != "active":
+            return
+
+        if disabled:
+            try:
+                self.user.email_disable_member_access()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                sms.SMS().send_deactivated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
         else:
-            self.user.log_event(
-                f"system activated member ({self.get_full_name()})",
-                "profile",
-            )
+            try:
+                self.user.email_enable_member_access()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                sms.SMS().send_activated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
 
-        if self.state != "noob":
-            sms_message = sms.SMS()
-            sms_message.send_activated_access(self.phone)
-            self.user.email_enable_member()
+    def set_state_locked(self, locked, request=None):
+        # Returns False if locking was refused; unlocking always succeeds.
+        with transaction.atomic():
+            profile = Profile.objects.select_for_update().get(pk=self.pk)
 
-        self.state = "active"
-        self.save()
+            if locked and (
+                profile.state == "active" or profile.subscription_status != "inactive"
+            ):
+                return False
+
+            if profile.state_locked == locked:
+                self.state_locked = locked
+                return True
+
+            profile.state_locked = locked
+            profile.save(update_fields=["state_locked"])
+
+            action = "locked" if locked else "unlocked"
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} {action} the "
+                    f"account state for {self.get_full_name()}.",
+                    "admin",
+                )
+            self.user.log_event(f"Account state {action} by admin.", "admin")
+
+        self.state_locked = locked
+        return True
+
+    def activate(self, request=None, on_transition=None):
+        # Lock + re-read state to keep concurrent callers (e.g. CompleteSignup
+        # racing the invoice.paid webhook) from double-running side effects.
+        # External I/O (email/SMS, sync_access) runs after the lock is
+        # released — see deactivate() for the rationale.
+        with transaction.atomic():
+            locked = Profile.objects.select_for_update().get(pk=self.pk)
+            if locked.state == "active":
+                return False
+            previous_state = locked.state
+
+            if request:
+                request.user.log_event(
+                    f"{request.user.profile.get_full_name()} activated member ({self.get_full_name()}).",
+                    "admin",
+                )
+                self.user.log_event(
+                    f"{request.user.profile.get_full_name()} activated member.",
+                    "admin",
+                )
+            else:
+                self.user.log_event(
+                    f"system activated member ({self.get_full_name()})",
+                    "profile",
+                )
+
+            # See deactivate() for why update_fields is required here.
+            self.state = "active"
+            self.save(update_fields=["state"])
+
+        # Fires only for the caller whose lock won the state flip — gives
+        # callers a single-shot hook for trigger-specific side effects
+        # (e.g. complete_signup(INVOICE_PAID)'s "payment received" email).
+        if on_transition is not None:
+            try:
+                on_transition(previous_state, "active")
+            except Exception as e:
+                capture_exception(e)
+
+        # Each notification wrapped independently so a single Postmark/Twilio
+        # failure doesn't skip later steps — leaving an "active" member
+        # whose devices were never told their tag is worse than a missed
+        # email.
+        if previous_state == "noob":
+            try:
+                self.user.email_membership_application()
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_welcome()
+            except Exception as e:
+                capture_exception(e)
+        else:
+            try:
+                sms.SMS().send_activated_access(self.phone)
+            except Exception as e:
+                capture_exception(e)
+            try:
+                self.user.email_enable_member_access()
+            except Exception as e:
+                capture_exception(e)
+
         self.sync_access()
         return True
 
@@ -498,17 +970,46 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         return self.first_name
 
     def update_last_seen(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_seen = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_seen"])
 
     def update_last_induction(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
         self.last_induction = timezone.now()
-        return self.save()
+        return self.save(update_fields=["last_induction"])
+
+    def update_terms_accepted_at(self):
+        # update_fields so a stale `self` can't revert concurrent writes.
+        self.terms_accepted_at = timezone.now()
+        return self.save(update_fields=["terms_accepted_at"])
 
     def is_signed_into_site(self):
         sessions = SiteSession.objects.filter(user=self.user, signout_date=None)
 
         return True if len(sessions) else False
+
+    @property
+    def signup_stage(self):
+        # Single source of truth for which signup view the frontend renders.
+        if self.state_locked and self.state != "active":
+            return "locked"
+        if self.state == "accountonly":
+            return "account_only"
+        if self.state == "active":
+            return "managed"
+        if self.state == "inactive":
+            return "lapsed"
+        # state == "noob" below
+        if not self.membership_plan:
+            return "needs_plan"
+        # Required steps before payment status: an invoice signup goes
+        # "pending" at billing time, i.e. before terms/induction/access card.
+        if not self.can_signup()["success"]:
+            return "needs_requirements"
+        if self.subscription_status == "pending":
+            return "awaiting_payment"
+        return "needs_requirements"
 
     def get_basic_profile(self):
         """
@@ -551,11 +1052,18 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 if self.last_induction
                 else None
             ),
+            "termsAcceptedAt": (
+                self.terms_accepted_at.strftime("%m/%d/%Y, %H:%M:%S")
+                if self.terms_accepted_at
+                else None
+            ),
             "stripe": {
                 "cardExpiry": self.stripe_card_expiry,
                 "last4": self.stripe_card_last_digits,
             },
             "subscriptionStatus": self.subscription_status,
+            "stateLocked": self.state_locked,
+            "adminDisabledAccess": self.admin_disabled_access,
         }
 
     def get_access_permissions(self, ignore_user_state=False):
@@ -631,23 +1139,40 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         """Checks if a member can signup. Returns {"success": True/False, "reasons": [String<list of reasons>]}"""
         required_steps = []
 
-        # check if they were inducted recently enough
-        last_inducted = self.last_induction
-        furthest_previous_date = timezone.now() - timedelta(
-            days=config.MAX_INDUCTION_DAYS
-        )
+        try:
+            terms_cards = json.loads(config.TERMS_ACCEPTANCE_CARDS)
+        except (ValueError, TypeError):
+            terms_cards = []
 
-        if config.MAX_INDUCTION_DAYS > 0 and (
-            last_inducted is None or last_inducted < furthest_previous_date
+        if terms_cards and self.terms_accepted_at is None:
+            required_steps.append("termsAcceptance")
+
+        if (
+            config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS
+            and self.subscription_status not in ("active", "pending")
         ):
-            if (
-                config.CANVAS_INDUCTION_ENABLED is True
-                or config.MOODLE_INDUCTION_ENABLED is True
-            ):
+            required_steps.append("subscription")
+
+        # First-time induction is always required when an induction
+        # provider is enabled. MAX_INDUCTION_DAYS only controls *re*-
+        # induction: 0 disables the recurring requirement but does not
+        # let first-timers skip.
+        induction_enabled = (
+            config.CANVAS_INDUCTION_ENABLED or config.MOODLE_INDUCTION_ENABLED
+        )
+        last_inducted = self.last_induction
+
+        if induction_enabled and last_inducted is None:
+            required_steps.append("induction")
+        elif induction_enabled and config.MAX_INDUCTION_DAYS > 0:
+            furthest_previous_date = timezone.now() - timedelta(
+                days=config.MAX_INDUCTION_DAYS
+            )
+            if last_inducted < furthest_previous_date:
                 required_steps.append("induction")
 
-        # check if they have an RFID card assigned
-        if not self.rfid:
+        # check if they have an RFID card assigned (only if required by config)
+        if config.REQUIRE_ACCESS_CARD and not self.rfid:
             required_steps.append("accessCard")
 
         if len(required_steps):
@@ -661,4 +1186,14 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         if not self.id:
             self.created = timezone.now()
         self.modified = timezone.now()
+        # Mirror Django's auto_now behavior: when the caller restricts
+        # the UPDATE to specific columns via update_fields, ensure
+        # `modified` rides along — otherwise targeted writes (e.g.
+        # save(update_fields=["state"])) would leave the timestamp
+        # stale.
+        # An explicitly-empty update_fields means "save nothing" — don't
+        # turn it into a modified-only UPDATE.
+        update_fields = kwargs.get("update_fields")
+        if update_fields and "modified" not in update_fields:
+            kwargs["update_fields"] = list(update_fields) + ["modified"]
         return super(Profile, self).save(*args, **kwargs)

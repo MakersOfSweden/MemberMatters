@@ -58,6 +58,23 @@
         :icon="icons.dollar"
         :done="step > 2"
       >
+        <div class="q-pa-md">
+          <q-card class="bg-white text-black" style="max-width: 500px">
+            <q-card-section>
+              <div class="row items-center no-wrap">
+                <q-icon :name="icons.plans" size="sm" class="q-mr-md" />
+                <div>
+                  <div class="text-caption">{{ $tc('tiers.selected') }}</div>
+                  <div class="text-h6">{{ selectedTier.name }}</div>
+                  <div v-if="selectedTier.description" class="text-subtitle2">
+                    {{ selectedTier.description }}
+                  </div>
+                </div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+
         <template v-if="selectedTier.plans && selectedTier.plans.length === 0">
           <div class="text-center text-h6">
             {{ $tc('paymentPlans.noPlans') }}
@@ -80,6 +97,7 @@
 
           <div class="row justify-start">
             <q-btn
+              v-if="tiers.length > 1"
               class="q-mt-md"
               @click="backToTiers"
               flat
@@ -100,7 +118,83 @@
           {{ $tc('memberbucks.selectToContinue') }}
         </div>
 
+        <div
+          v-if="
+            features.enableInvoiceBilling && features.enableMembershipPayments
+          "
+          class="q-mb-md"
+          style="max-width: 500px"
+        >
+          <div class="text-subtitle1 q-mb-sm">
+            {{ $t('billing.selectMethod') }}
+          </div>
+          <q-list bordered separator class="rounded-borders">
+            <q-item
+              clickable
+              v-ripple
+              :class="{
+                'billing-method-active': selectedBillingMethod === 'invoice',
+              }"
+              @click="selectedBillingMethod = 'invoice'"
+            >
+              <q-item-section avatar>
+                <q-icon name="mdi-email-outline" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ $t('billing.payByInvoice') }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <q-radio
+                  v-model="selectedBillingMethod"
+                  val="invoice"
+                  color="primary"
+                />
+              </q-item-section>
+            </q-item>
+
+            <q-item
+              clickable
+              v-ripple
+              :class="{
+                'billing-method-active': selectedBillingMethod === 'card',
+              }"
+              @click="selectedBillingMethod = 'card'"
+            >
+              <q-item-section avatar>
+                <q-icon name="mdi-credit-card-outline" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ $t('billing.payByCard') }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <q-radio
+                  v-model="selectedBillingMethod"
+                  val="card"
+                  color="primary"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
+
+          <div class="text-caption q-mt-sm q-px-sm">
+            {{
+              selectedBillingMethod === 'card'
+                ? $t('billing.cardDescription')
+                : $t('billing.invoiceDescription')
+            }}
+          </div>
+          <div
+            v-if="
+              selectedBillingMethod === 'invoice' && features.invoiceBillingNote
+            "
+            class="text-caption q-mt-xs q-px-sm"
+          >
+            {{ features.invoiceBillingNote }}
+          </div>
+        </div>
+
         <member-bucks-manage-billing
+          v-if="selectedBillingMethod === 'card'"
           style="max-width: 500px"
           flat
           @card-exists="cardExistsHandler"
@@ -110,7 +204,7 @@
           <q-btn @click="backToPlans" flat :label="$tc('button.back')" />
           <q-space />
           <q-btn
-            :disabled="!cardExists"
+            :disabled="!canContinueBilling"
             @click="selectedBillingMethodEvent"
             color="primary"
             :label="$tc('button.continue')"
@@ -136,15 +230,28 @@
         </div>
 
         <div class="text-h6">
-          {{
-            $t('paymentPlans.dueToday', {
-              amount: $n(
-                selectedPlan.cost / 100,
-                'currency',
-                siteLocaleCurrency
-              ),
-            })
-          }}
+          <template v-if="selectedBillingMethod === 'invoice'">
+            {{
+              $t('billing.invoiceAmount', {
+                amount: $n(
+                  selectedPlan.cost / 100,
+                  'currency',
+                  siteLocaleCurrency
+                ),
+              })
+            }}
+          </template>
+          <template v-else>
+            {{
+              $t('paymentPlans.dueToday', {
+                amount: $n(
+                  selectedPlan.cost / 100,
+                  'currency',
+                  siteLocaleCurrency
+                ),
+              })
+            }}
+          </template>
         </div>
 
         <p v-if="step > 2" class="q-py-md" style="max-width: 850px">
@@ -173,7 +280,13 @@
         <div v-if="finishSuccess" class="row">
           <q-banner class="bg-success text-white">
             <div class="text-h5">{{ $tc('paymentPlans.signupSuccess') }}</div>
-            <p>{{ $tc('paymentPlans.signupSuccessDescription') }}</p>
+            <p>
+              {{
+                selectedBillingMethod === 'invoice'
+                  ? $tc('paymentPlans.signupSuccessInvoiceDescription')
+                  : $tc('paymentPlans.signupSuccessDescription')
+              }}
+            </p>
           </q-banner>
         </div>
 
@@ -190,12 +303,16 @@
             :disable="disableFinish"
             @click="finishSignup"
             color="primary"
-            :label="$tc('tiers.finish')"
+            :label="
+              selectedBillingMethod === 'invoice'
+                ? $tc('tiers.finishInvoice')
+                : $tc('tiers.finish')
+            "
           />
         </div>
       </q-step>
     </q-stepper>
-    <div class="text-center">
+    <div v-if="profile.memberStatus === 'noob'" class="text-center">
       <p
         @click="skipSignup"
         style="text-decoration: underline; cursor: pointer"
@@ -226,13 +343,18 @@ export default defineComponent({
       loading: false,
       finishSuccess: false,
       cardExists: false,
+      selectedBillingMethod: 'card',
     };
   },
   computed: {
     ...mapGetters('profile', ['loggedIn', 'profile']),
-    ...mapGetters('config', ['siteLocaleCurrency']),
+    ...mapGetters('config', ['siteLocaleCurrency', 'features']),
     icons() {
       return icons;
+    },
+    canContinueBilling() {
+      if (this.selectedBillingMethod === 'invoice') return true;
+      return !!this.cardExists;
     },
   },
   components: {
@@ -242,12 +364,24 @@ export default defineComponent({
   },
   mounted() {
     this.getTiers();
+    // Manual renewal (invoice) is the first/default option, but only when
+    // it's actually offered — mirror the picker's own visibility gate.
+    if (
+      this.features.enableInvoiceBilling &&
+      this.features.enableMembershipPayments
+    ) {
+      this.selectedBillingMethod = 'invoice';
+    }
   },
   methods: {
     ...mapActions('profile', ['getProfile']),
     getTiers() {
       this.$axios.get('/api/billing/tiers/').then((response) => {
         this.tiers = response.data;
+        // Only one membership plan to choose — skip to the payment plan step.
+        if (this.tiers.length === 1) {
+          this.selectedTierEvent(this.tiers[0]);
+        }
       });
     },
     skipSignup() {
@@ -275,7 +409,9 @@ export default defineComponent({
       this.disableFinish = true;
       this.loading = true;
       this.$axios
-        .post(`/api/billing/plans/${this.selectedPlan.id}/signup/`)
+        .post(`/api/billing/plans/${this.selectedPlan.id}/signup/`, {
+          billingMethod: this.selectedBillingMethod,
+        })
         .then((response) => {
           if (response.data.success) {
             this.finishSuccess = true;
@@ -345,5 +481,9 @@ export default defineComponent({
 .q-stepper__step-inner {
   width: 90vw;
   max-width: 1000px;
+}
+
+.billing-method-active {
+  background-color: color-mix(in srgb, var(--q-primary) 8%, transparent);
 }
 </style>

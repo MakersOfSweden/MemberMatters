@@ -1,131 +1,123 @@
 <template>
   <div class="profile-form">
-    <q-form ref="formRef">
+    <q-form ref="formRef" @submit="onSubmit">
+      <p class="text-caption q-mb-md">{{ $t('form.allFieldsRequired') }}</p>
+
+      <q-banner
+        v-if="!canEditBasicDetails"
+        rounded
+        class="bg-blue text-white q-mb-md"
+      >
+        {{ $t('form.basicDetailsLocked') }}
+      </q-banner>
+
       <q-input
         v-model="form.email"
         outlined
-        :debounce="debounceLength"
-        :label="$t('form.email')"
+        type="email"
+        :label="requiredLabel($t('form.email'))"
+        :readonly="!canEditBasicDetails || !canEditEmail"
+        lazy-rules
         :rules="[(val) => validateEmail(val) || $t('validation.invalidEmail')]"
-        @update:model-value="saveChange('email')"
       >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.email"
-            show-text
-            :error="saved.error"
-          />
-        </template>
+        <q-tooltip v-if="!canEditEmail && canEditBasicDetails">
+          {{ $t('form.emailChangeContactAdmin') }}
+        </q-tooltip>
       </q-input>
 
       <q-input
         v-model="form.firstName"
         outlined
-        :debounce="debounceLength"
-        :label="$t('form.firstName')"
+        :label="requiredLabel($t('form.firstName'))"
+        :readonly="!canEditBasicDetails"
+        lazy-rules
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
         ]"
-        @update:model-value="saveChange('firstName')"
-      >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.firstName"
-            show-text
-            :error="saved.error"
-          />
-        </template>
-      </q-input>
+      />
 
       <q-input
         v-model="form.lastName"
         outlined
-        :debounce="debounceLength"
-        :label="$t('form.lastName')"
+        :label="requiredLabel($t('form.lastName'))"
+        :readonly="!canEditBasicDetails"
+        lazy-rules
         :rules="[
           (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
         ]"
-        @update:model-value="saveChange('lastName')"
-      >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.lastName"
-            show-text
-            :error="saved.error"
-          />
-        </template>
-      </q-input>
+      />
 
       <q-input
         v-model="form.phone"
         outlined
-        :debounce="debounceLength"
-        :label="$t('form.mobile')"
+        type="tel"
+        :label="requiredLabel($t('form.mobile'))"
+        :readonly="!canEditBasicDetails"
+        lazy-rules
         :rules="[
-          (val) => validateNotEmpty(val) || $t('validation.invalidPhone'),
+          (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
+          (val) =>
+            validatePhone(val, phoneRegion) || $t('validation.invalidPhone'),
         ]"
-        @update:model-value="saveChange('phone')"
-      >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.phone"
-            show-text
-            :error="saved.error"
-          />
-        </template>
-      </q-input>
+      />
 
       <q-input
         v-model="form.screenName"
         outlined
-        :debounce="debounceLength"
-        :label="$t('form.screenName')"
-        :rules="[
-          (val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-        ]"
-        @update:model-value="saveChange('screenName')"
-      >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.screenName"
-            show-text
-            :error="saved.error"
-          />
-        </template>
-      </q-input>
+        :label="
+          requiredLabel(
+            $t('form.screenName'),
+            features?.signup?.requireScreenName !== false
+          )
+        "
+        lazy-rules
+        :rules="
+          features?.signup?.requireScreenName !== false
+            ? [(val) => validateNotEmpty(val) || $t('validation.cannotBeEmpty')]
+            : []
+        "
+      />
 
       <q-input
         v-if="features?.signup?.collectVehicleRegistrationPlate"
         v-model="form.vehicleRegistrationPlate"
         outlined
-        :debounce="debounceLength"
         :label="$t('form.vehicleRegistrationPlate')"
+        lazy-rules
         :rules="[(val) => validateMax30(val) || $t('validation.max30')]"
-        @update:model-value="saveChange('vehicleRegistrationPlate')"
-      >
-        <template v-slot:append>
-          <saved-notification
-            :success="saved.vehicleRegistrationPlate"
-            show-text
-            :error="saved.error"
-          />
-        </template>
-      </q-input>
+      />
+
+      <q-banner v-if="success" class="bg-positive text-white q-mt-md">
+        {{ $t('form.saved') }}
+      </q-banner>
+
+      <q-banner v-if="errorMessageKey" class="bg-negative text-white q-mt-md">
+        {{ $t(errorMessageKey) }}
+      </q-banner>
+
+      <q-banner v-else-if="genericError" class="bg-negative text-white q-mt-md">
+        {{ $t('error.requestFailed') }}
+      </q-banner>
+
+      <q-btn
+        :label="$t('button.submit')"
+        type="submit"
+        color="primary"
+        class="full-width q-mt-md"
+        :loading="saving"
+        :disable="saving || !isDirty"
+      />
     </q-form>
   </div>
 </template>
 
 <script>
 import { mapGetters, mapActions } from 'vuex';
-import icons from '../icons';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import formMixin from '../mixins/formMixin';
-import SavedNotification from '@components/SavedNotification.vue';
 
 export default {
   name: 'ProfileForm',
-  components: {
-    SavedNotification,
-  },
   mixins: [formMixin],
   data() {
     return {
@@ -137,71 +129,91 @@ export default {
         screenName: '',
         vehicleRegistrationPlate: '',
       },
-      saved: {
-        // if there was an error saving the form
-        error: false,
-
-        email: false,
-        firstName: false,
-        lastName: false,
-        phone: false,
-        screenName: false,
-        vehicleRegistrationPlate: false,
-      },
+      initialFormSnapshot: '',
+      saving: false,
+      success: false,
+      genericError: false,
+      errorMessageKey: null,
     };
+  },
+  computed: {
+    ...mapGetters('profile', ['profile']),
+    ...mapGetters('config', ['features']),
+    isDirty() {
+      return JSON.stringify(this.form) !== this.initialFormSnapshot;
+    },
+    canEditBasicDetails() {
+      return this.features?.profile?.canEditBasicDetails !== false;
+    },
+    canEditEmail() {
+      return this.features?.profile?.canEditEmail !== false;
+    },
+    // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
+    phoneRegion() {
+      return this.features?.signup?.defaultPhoneRegion || 'AU';
+    },
   },
   methods: {
     ...mapActions('profile', ['getProfile']),
     loadInitialForm() {
-      this.form.email = this.profile.email;
-      this.form.firstName = this.profile.firstName;
-      this.form.lastName = this.profile.lastName;
-      this.form.phone = this.profile.phone;
-      this.form.screenName = this.profile.screenName;
+      this.form.email = this.profile.email ?? '';
+      this.form.firstName = this.profile.firstName ?? '';
+      this.form.lastName = this.profile.lastName ?? '';
+      this.form.phone = this.profile.phone ?? '';
+      this.form.screenName = this.profile.screenName ?? '';
       this.form.vehicleRegistrationPlate =
-        this.profile.vehicleRegistrationPlate;
+        this.profile.vehicleRegistrationPlate ?? '';
+      this.initialFormSnapshot = JSON.stringify(this.form);
     },
-    saveChange(field) {
-      this.$refs.formRef.validate(false).then(() => {
-        this.$refs.formRef.validate(false).then((result) => {
-          if (result) {
-            this.$axios
-              .put('/api/profile/', this.form)
-              .then(() => {
-                this.saved.error = false;
-                this.saved[field] = true;
-                setTimeout(() => {
-                  this.saved[field] = false;
-                }, 1500);
-                this.getProfile();
-              })
-              .catch(() => {
-                this.saved.error = true;
-                this.saved[field] = true;
-                setTimeout(() => {
-                  this.saved[field] = false;
-                  this.saved.error = false;
-                }, 1500);
-              });
+    onSubmit() {
+      this.success = false;
+      this.genericError = false;
+      this.errorMessageKey = null;
+      this.saving = true;
+
+      // Normalise to E.164 before posting; the backend re-validates.
+      const phone = this.form.phone
+        ? parsePhoneNumberFromString(this.form.phone, this.phoneRegion)?.format(
+            'E.164'
+          ) ?? this.form.phone
+        : this.form.phone;
+
+      this.$axios
+        .put('/api/profile/', { ...this.form, phone })
+        .then(() => {
+          this.success = true;
+          this.getProfile();
+        })
+        .catch((err) => {
+          const message = err?.response?.data?.message;
+          const status = err?.response?.status;
+          if ((status === 409 || status === 400) && message) {
+            this.errorMessageKey = message;
+          } else {
+            this.genericError = true;
           }
+        })
+        .finally(() => {
+          this.saving = false;
         });
-      });
     },
   },
   watch: {
     profile() {
       this.loadInitialForm();
     },
+    form: {
+      deep: true,
+      handler() {
+        if (!this.isDirty) return;
+        this.success = false;
+        this.genericError = false;
+        this.errorMessageKey = null;
+      },
+    },
   },
   beforeMount() {
     this.loadInitialForm();
-  },
-  computed: {
-    ...mapGetters('profile', ['profile']),
-    ...mapGetters('config', ['features']),
-    icons() {
-      return icons;
-    },
   },
 };
 </script>

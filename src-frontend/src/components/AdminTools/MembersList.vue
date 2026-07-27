@@ -57,6 +57,7 @@
                 class="q-mb-sm"
                 outlined
                 emit-value
+                map-options
                 :options="filterOptions"
                 :label="$t('adminTools.filterOptions')"
                 dense
@@ -90,6 +91,7 @@
           style="min-width: 100px"
           outlined
           emit-value
+          map-options
           :options="filterOptions"
           :label="$t('adminTools.filterOptions')"
           dense
@@ -106,6 +108,30 @@
             <q-icon :name="icons.search" />
           </template>
         </q-input>
+      </template>
+
+      <template v-slot:body-cell-status="props">
+        <q-td :props="props">
+          {{ props.value }}
+          <q-icon
+            v-if="props.row.stateLocked"
+            :name="icons.lock"
+            color="warning"
+            size="sm"
+            class="q-ml-xs"
+          >
+            <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
+          </q-icon>
+          <q-icon
+            v-if="props.row.adminDisabledAccess"
+            :name="icons.accessDisabled"
+            color="negative"
+            size="sm"
+            class="q-ml-xs"
+          >
+            <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
+          </q-icon>
+        </q-td>
       </template>
     </q-table>
   </div>
@@ -127,18 +153,35 @@ export default defineComponent({
   data() {
     return {
       members: [],
-      filter: '',
-      memberState: 'active',
       loading: false,
-      pagination: {
-        sortBy: 'date',
-        descending: true,
-        rowsPerPage: this.$q.screen.xs ? 3 : 10,
-      },
     };
   },
   computed: {
     ...mapGetters('config', ['features']),
+    filter: {
+      get(): string {
+        return this.$store.getters['adminTools/membersFilter'];
+      },
+      set(value: string) {
+        this.$store.commit('adminTools/setMembersFilter', value);
+      },
+    },
+    memberState: {
+      get(): string {
+        return this.$store.getters['adminTools/membersState'];
+      },
+      set(value: string) {
+        this.$store.commit('adminTools/setMembersState', value);
+      },
+    },
+    pagination: {
+      get() {
+        return this.$store.getters['adminTools/membersPagination'];
+      },
+      set(value: object) {
+        this.$store.commit('adminTools/setMembersPagination', value);
+      },
+    },
     displayMemberList() {
       if (this.memberState === 'all') return this.members;
       return this.members.filter(
@@ -171,7 +214,7 @@ export default defineComponent({
           field: (row: MemberProfile) => row.name.full,
           sortable: true,
           format: (val: string, row: MemberProfile) =>
-            `${val} (${row.screenName})`,
+            row.screenName ? `${val} (${row.screenName})` : val,
         },
         {
           name: 'rfid',
@@ -210,6 +253,14 @@ export default defineComponent({
         },
       ];
     },
+  },
+  created() {
+    if (this.pagination.rowsPerPage === null) {
+      this.pagination = {
+        ...this.pagination,
+        rowsPerPage: this.$q.screen.xs ? 3 : 10,
+      };
+    }
   },
   mounted() {
     this.getMembers();
