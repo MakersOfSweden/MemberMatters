@@ -1,5 +1,7 @@
 ***This is [Makers of Swedens](http://makersofsweden.se) fork of [MemberMatters](https://github.com/membermatters/MemberMatters), created to handle community updates and maintenance***
 
+**We maintain a list of the major changes made here compared to the main repo in [changes-summary-in-fork.md](changes-summary-in-fork.md)**
+
 Docker images are published to  [makersofsweden-membermatters-fork](https://hub.docker.com/r/kriffe/makersofsweden-membermatters-fork)
 
 # MemberMatters
