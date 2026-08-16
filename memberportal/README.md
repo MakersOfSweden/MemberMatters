@@ -133,6 +133,48 @@ You can also trigger common events like `invoice.paid` using the CLI like this:
 stripe trigger invoice.paid
 ```
 
+## Tests
+
+The backend suite runs on pytest. Install the test dependencies (they pull in
+`requirements.txt`, so this replaces the install step above) and run it from
+this folder:
+
+```bash
+pip3 install -r requirements-dev.txt
+pytest
+```
+
+No environment variables are needed. Tests use `membermatters.settings_test`,
+which layers over the real settings and overrides only what makes a run
+non-hermetic — file logging, the network-backed password validator, DRF
+throttling, and the database. An in-memory SQLite database is created and
+destroyed per run, so your dev `db.sqlite3` is untouched.
+
+To run the suite against Postgres instead:
+
+```bash
+MM_TEST_DB=postgres pytest
+```
+
+This matters more than it looks. `select_for_update()` is a no-op on SQLite —
+Django's query compiler drops the clause rather than raising — and the
+membership state transitions in `profile/models.py` are built on it. CI runs
+both, and so should you before changing anything in that area.
+
+### Writing tests
+
+- Model factories live in `tests/factories.py`; shared fixtures in
+  `conftest.py`. Prefer them over `fixtures/initial.json`, which is production
+  seed data.
+- Runtime (django-constance) settings are driven with
+  `@pytest.mark.override_config(...)`.
+- Outbound network access raises immediately, naming the host. If a test needs
+  an external service, stub it at its module boundary and add the seam to
+  `conftest.py` so the next test can reuse it.
+- Callbacks registered with `transaction.on_commit` don't run inside the test
+  transaction — use the `django_capture_on_commit_callbacks` fixture, or the
+  assertion will pass without the code ever running.
+
 ## Linter
 
 As explained below, this projects uses a linter (called "Black") to fix common errors, and to enforce consistent code style/standards.
