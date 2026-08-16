@@ -75,6 +75,37 @@ def _clear_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def outbox(monkeypatch):
+    """Capture outbound email instead of sending it.
+
+    Autouse because email is a side channel almost everywhere it appears —
+    activate(), deactivate(), register, password reset — and a test about
+    membership state shouldn't have to know that.
+
+    Note that this is NOT redundant with the network guard: POSTMARK_API_KEY
+    defaults to the placeholder "PLEASE_CHANGE_ME", which is truthy, so
+    send_single_email() takes the Postmark branch on a default install rather
+    than the "not configured" branch.
+
+    Returns the list of send() kwargs, in send order — Subject, To, HtmlBody,
+    From, ReplyTo.
+    """
+    sent = []
+
+    class _RecordingEmails:
+        def send(self, **kwargs):
+            sent.append(kwargs)
+            return {"ErrorCode": 0, "Message": "OK"}
+
+    class _RecordingPostmarkClient:
+        def __init__(self, *args, **kwargs):
+            self.emails = _RecordingEmails()
+
+    monkeypatch.setattr("services.emails.PostmarkClient", _RecordingPostmarkClient)
+    return sent
+
+
 @pytest.fixture
 def api_client():
     return APIClient()
