@@ -471,6 +471,7 @@ export default {
     exportCsv: 'Export CSV',
     exportOptions: 'Export Options',
     filterOptions: 'Filter',
+    searchMembers: 'Search',
     all: 'All',
     active: 'Active',
     inactive: 'Inactive',
