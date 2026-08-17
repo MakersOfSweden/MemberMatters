@@ -141,4 +141,5 @@ Feel free to add your organisation to this list (via a pull request) if you're a
 * [Make Monmouth](https://www.makemonmouth.co.uk/) (November 2023) - A community makerspace based in Monmouth, Wales, UK.
 * [SparkCC](https://www.sparkcc.org) (September 2021) - A community of makers on the NSW Central Coast based in Palmdale, NSW, Australia.
 * [Pawprint Prototyping](https://pawprintprototyping.org/) (October 2021) - non-profit hackerspace in Santa Clara, California, USA.  A lot of us are also animals on the internet 🐾.
-* [MakersLink](https://makerslink.se) - (August 2025) A community makerspace based in Linköping, Sweden.
+* [MakersLink](https://makerslink.se) - (2026) A community makerspace based in Linköping, Sweden.
+* [Makerspace & Uppfinnarna Kalmarsund](https://www.kalmarmakerspace.se) - (2026) A community makespaced in Kalmar, Sweden.
