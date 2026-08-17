@@ -723,7 +723,7 @@ export default {
     add: 'Lägg till medlemskapsnivå',
     becomeMember: 'Bli medlem',
     confirm:
-      'Bekräfta ditt val av medlemskapsnivå och betalalternativ. Genom att fortsätta så godkänner du att betala för din medlemskapsnivå med hjälp av ditt betalkort. Din första betalning komemr dras nu, och framtida betalningar på {intervalDescription}.',
+      'Bekräfta ditt val av medlemskapsnivå och betalalternativ. Genom att fortsätta så godkänner du att betala för din medlemskapsnivå med hjälp av din valda betalmetod. Din första betalning kommer dras nu, och framtida betalningar på {intervalDescription}.',
     confirmDelay:
       'Din ansökan om medlemskap kommer skickas efter att du färdigställt nästa steg.',
     finish: 'Betala & Fortsätt',
