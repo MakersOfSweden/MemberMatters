@@ -744,6 +744,10 @@ export default {
     finishInvoice: 'Confirm & Get Invoice',
     plansFrom: 'From {plan}',
     skipSignup: 'Skip Signup (if you just want an account)',
+    skipSignupWarningTitle: 'You will not be a member',
+    skipSignupWarningMessage:
+      "By choosing skip signup you only have an account, but you will <strong>not be a member</strong>. To become a member you must choose a membership plan and payment plan, and complete the signup process. You can do this at any time from the menu ('Membership' > 'Membership Plan').",
+    skipSignupWarningConfirm: 'Continue without membership',
   },
   tierForm: {
     fail: 'Failed to add a new membership plan.',

@@ -314,7 +314,7 @@
     </q-stepper>
     <div v-if="profile.memberStatus === 'noob'" class="text-center">
       <p
-        @click="skipSignup"
+        @click="confirmSkipSignup"
         style="text-decoration: underline; cursor: pointer"
       >
         {{ $tc('tiers.skipSignup') }}
@@ -383,6 +383,27 @@ export default defineComponent({
           this.selectedTierEvent(this.tiers[0]);
         }
       });
+    },
+    confirmSkipSignup() {
+      this.$q
+        .dialog({
+          title: this.$t('tiers.skipSignupWarningTitle'),
+          message: this.$t('tiers.skipSignupWarningMessage'),
+          html: true,
+          ok: {
+            label: this.$t('tiers.skipSignupWarningConfirm'),
+            color: 'negative',
+            flat: true,
+          },
+          cancel: {
+            label: this.$t('button.cancel'),
+            color: 'primary',
+          },
+          persistent: true,
+        })
+        .onOk(() => {
+          this.skipSignup();
+        });
     },
     skipSignup() {
       this.$axios

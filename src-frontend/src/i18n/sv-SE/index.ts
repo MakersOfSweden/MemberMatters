@@ -730,6 +730,10 @@ export default {
     finishInvoice: 'Bekräfta & Få Faktura',
     plansFrom: 'Från {plan}',
     skipSignup: 'Skippa registrering (om du bara vill ha ett konto)',
+    skipSignupWarningTitle: 'Du blir inte medlem',
+    skipSignupWarningMessage:
+      "Genom att skippa registreringen får du bara ett konto, men du blir <strong>inte medlem</strong>. För att bli medlem måste du välja en medlemskapsnivå och ett betalalternativ, och slutföra registreringen. Du kan göra detta när som helst från menyn ('Medlemskap' > 'Medlemskapsnivåer').",
+    skipSignupWarningConfirm: 'Fortsätt utan medlemskap',
   },
   tierForm: {
     fail: 'Misslyckades att lägga till medlemskapsnivå.',
