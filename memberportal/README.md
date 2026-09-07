@@ -161,6 +161,38 @@ Django's query compiler drops the clause rather than raising — and the
 membership state transitions in `profile/models.py` are built on it. CI runs
 both, and so should you before changing anything in that area.
 
+### Migrations and speed
+
+Replaying the 89 migrations is by far the most expensive part of a run, so
+`pytest.ini` defaults to `--no-migrations`, which builds the schema straight
+from the models:
+
+| | with migrations | `--no-migrations` (default) |
+|---|---|---|
+| SQLite | 4.72s | **1.82s** |
+| Postgres | 9.24s | **5.87s** |
+
+(Measured at 159 tests. The saving is the migration replay itself — a flat
+~3s per run — so it stays roughly constant as the suite grows.)
+
+Two things to know about that default:
+
+- Migrations themselves are not exercised. The CI Postgres leg runs
+  `pytest --migrations`, so they are still replayed end-to-end on one leg —
+  pass `--migrations` locally too if you have touched a migration.
+- Schema built from models is not always the same schema. `profile/0022`
+  creates a functional `UNIQUE` index on `LOWER(screen_name)` in raw SQL, and
+  raw SQL is invisible to the model-derived path. On SQLite this changes
+  nothing (see `membermatters/tests/test_migrations.py` — a later `AlterField`
+  rebuilds the table and drops that index anyway), but on Postgres the index is
+  real, so run the Postgres leg with `--migrations` when screen-name uniqueness
+  is what you are testing.
+
+For repeated local Postgres runs, `--reuse-db` keeps the test database between
+runs and skips even the model-derived schema build — but it will not pick up
+schema changes until you pass `--create-db` once, and it leaves a
+`test_membermatters` database behind on the server.
+
 ### Writing tests
 
 - Model factories live in `tests/factories.py`; shared fixtures in

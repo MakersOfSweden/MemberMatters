@@ -15,7 +15,8 @@ jobs:
         # has_select_for_update is False on SQLite and the query compiler
         # silently drops the clause, so the row locking that every Profile
         # state transition is built on is only exercised here. Postgres is
-        # also what the dev stack and most deployments actually run.
+        # also what the dev stack and most deployments actually run, and it is
+        # the leg that replays migrations (see the --migrations flag below).
         database: [sqlite, postgres]
 
     # Declared at job level because GitHub Actions services cannot be
@@ -66,7 +67,14 @@ jobs:
           POSTGRES_PASSWORD: membermatters
         # Coverage is reported, not gated. A percentage threshold this early
         # mostly buys padding tests.
-        run: pytest --cov=. --cov-report=xml --cov-report=term-missing
+        #
+        # pytest.ini defaults to --no-migrations, which builds the schema from
+        # the models and cuts the run roughly in half. The Postgres leg opts
+        # back in so migrations are still replayed end-to-end on exactly one
+        # leg — that is also the only place profile/0022's raw-SQL
+        # LOWER(screen_name) index survives, since SQLite's table rebuild
+        # drops it regardless.
+        run: pytest ${{ matrix.database == 'postgres' && '--migrations' || '' }} --cov=. --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
         if: always()
