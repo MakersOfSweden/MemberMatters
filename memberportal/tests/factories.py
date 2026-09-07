@@ -12,6 +12,7 @@ import factory
 from django.contrib.auth import get_user_model
 
 from access.models import Doors, Interlock
+from api_admin_tools.models import MemberTier, PaymentPlan
 from profile.models import Profile
 
 User = get_user_model()
@@ -112,3 +113,29 @@ class InterlockFactory(factory.django.DjangoModelFactory):
     description = "Test interlock"
     serial_number = factory.Sequence(lambda n: f"interlock-serial-{n}")
     authorised = True
+
+
+class MemberTierFactory(factory.django.DjangoModelFactory):
+    """A membership tier — the Stripe product a PaymentPlan bills against."""
+
+    class Meta:
+        model = MemberTier
+
+    # name, description and stripe_id are all unique on this model.
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    description = factory.Sequence(lambda n: f"Test tier {n}")
+    stripe_id = factory.Sequence(lambda n: f"prod_test{n}")
+
+
+class PaymentPlanFactory(factory.django.DjangoModelFactory):
+    """A billing plan. `signup_stage` branches on whether a member has one."""
+
+    class Meta:
+        model = PaymentPlan
+
+    name = factory.Sequence(lambda n: f"Plan {n}")
+    stripe_id = factory.Sequence(lambda n: f"price_test{n}")
+    member_tier = factory.SubFactory(MemberTierFactory)
+    cost = 2000  # cents
+    interval_count = 1
+    interval = "month"

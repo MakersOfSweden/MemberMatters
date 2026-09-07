@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 from tests.factories import (  # noqa: F401  (re-exported for convenience)
     DoorFactory,
     InterlockFactory,
+    PaymentPlanFactory,
     ProfileFactory,
     UserFactory,
 )
@@ -104,6 +105,56 @@ def outbox(monkeypatch):
 
     monkeypatch.setattr("services.emails.PostmarkClient", _RecordingPostmarkClient)
     return sent
+
+
+@pytest.fixture(autouse=True)
+def sms_outbox(monkeypatch):
+    """Capture outbound SMS instead of sending it.
+
+    Patched at ``SMS._send`` — the transport — so message selection in
+    ``send_activated_access`` / ``send_deactivated_access`` stays real, the same
+    way `outbox` stubs the Postmark client rather than the email builders.
+
+    Autouse for the same reason as `outbox`: SMS rides alongside email on the
+    activate/deactivate paths, and a test about membership state shouldn't have
+    to know that.
+
+    Without this the calls are silently inert rather than absent — SMS_ENABLE
+    defaults to False, so ``_send`` returns early and every SMS assertion would
+    pass vacuously whether or not the code called it.
+
+    Returns a list of (to_number, body) tuples, in send order.
+    """
+    from services import sms
+
+    sent = []
+
+    def recording_send(
+        self, to_number="", body="", portal_user_sender=None, portal_user_recipient=None
+    ):
+        sent.append((to_number, body))
+        return True
+
+    monkeypatch.setattr(sms.SMS, "_send", recording_send)
+    return sent
+
+
+@pytest.fixture
+def admin_request(admin_member):
+    """A request object for the `request=` argument on admin state changes.
+
+    set_state_locked / set_admin_disabled_access / activate / deactivate all
+    take an optional request and use it for the operator half of the audit
+    trail — ``request.user.log_event`` and
+    ``request.user.profile.get_full_name()``. Only those two attributes are
+    touched, so a bare APIRequestFactory request with `.user` attached is
+    enough, and it keeps the real User/Profile on the other end.
+    """
+    from rest_framework.test import APIRequestFactory
+
+    request = APIRequestFactory().post("/")
+    request.user = admin_member.user
+    return request
 
 
 @pytest.fixture
