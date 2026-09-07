@@ -495,10 +495,6 @@ export default {
     unlockAccountTitle: 'Lås upp det här kontot?',
     unlockAccountDescription:
       'Medlemmen kommer återigen att kunna registrera sig för en medlemsplan.',
-    lockUnavailableTooltip:
-      'Låsning är endast tillgänglig för icke-aktiva medlemmar utan en pågående prenumeration.',
-    lockNotAllowed:
-      'Kan inte låsa en medlem som är aktiv eller har en pågående prenumeration.',
     stateLockedTooltip:
       'Konto låst — automatiserade flöden (webhooks, självbetjäningsregistrering) kommer inte att ändra medlemmens status.',
     sendWelcomeEmail: 'Skicka välkomst-mail',

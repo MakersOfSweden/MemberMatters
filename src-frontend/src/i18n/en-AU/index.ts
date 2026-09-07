@@ -506,10 +506,6 @@ export default {
     unlockAccountTitle: 'Unlock this account?',
     unlockAccountDescription:
       'The member will once again be able to sign up to a membership plan.',
-    lockUnavailableTooltip:
-      'Lock is available only for non-active members without a live subscription.',
-    lockNotAllowed:
-      "Can't lock a member who is active or has a live subscription.",
     stateLockedTooltip:
       "Account locked — automated flows (webhooks, self-serve signup) won't modify this member's state.",
     sendWelcomeEmail: 'Send welcome email',

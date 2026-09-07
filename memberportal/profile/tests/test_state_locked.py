@@ -6,8 +6,9 @@ complete_cancel. Those refusals are covered in the state-machine files; this
 one covers the setter that is supposed to produce the flag, which the rest of
 the suite has so far set as a factory field instead.
 
-The setter is not symmetric with the flag's use, and that asymmetry is the
-subject of most of what follows — see TestLockingIsRefused.
+Locking is allowed from any state. It used to be refused for an active member
+or one with a live subscription, which made the flag's primary use case
+unreachable — see TestGrandfathering, which is that use case end to end.
 """
 
 import pytest
@@ -61,39 +62,36 @@ class TestLocking:
         assert not lock_events(profile).exists()
 
 
-class TestLockingIsRefused:
-    """The refusal rule, which is wider than the flag's own use.
+class TestLockingFromAnyState:
+    """Locking has no preconditions.
 
-    Locking is refused for an active member or one with any subscription that
-    is not "inactive". Both halves are asserted here as current behaviour;
-    whether the first half is intended is the open question in M43, because
-    complete_cancel's lock branch — and its tests — are built on exactly the
-    active+locked state this refuses to create.
+    The refusal these replace (active, or any subscription_status other than
+    "inactive") ruled out precisely the state the flag exists to protect. The
+    lock decouples the access decision from the billing decision, so neither
+    is grounds for refusing it — M43.
     """
 
-    def test_an_active_member_cannot_be_locked(self):
+    def test_an_active_member_can_be_locked(self):
         profile = ProfileFactory(active=True)
 
-        assert profile.set_state_locked(True) is False
+        assert profile.set_state_locked(True) is True
 
         profile.refresh_from_db()
-        assert profile.state_locked is False
+        assert profile.state_locked is True
 
     @pytest.mark.parametrize("status", ["active", "pending", "cancelling"])
-    def test_a_member_with_a_live_subscription_cannot_be_locked(self, status):
-        # "cancelling" is the interesting one: a member whose subscription is
-        # on its way out is precisely who an operator would want to
-        # grandfather, and it is refused.
-        profile = ProfileFactory(subscription_status=status)
+    def test_a_member_with_a_live_subscription_can_be_locked(self, status):
+        # "cancelling" is the one that mattered most: a member whose
+        # subscription is on its way out is exactly who an operator reaches
+        # for the lock to protect, and it was refused.
+        profile = ProfileFactory(active=True, subscription_status=status)
 
-        assert profile.set_state_locked(True) is False
+        assert profile.set_state_locked(True) is True
 
         profile.refresh_from_db()
-        assert profile.state_locked is False
+        assert profile.state_locked is True
 
-    def test_the_refusal_does_not_apply_to_unlocking(self):
-        # The guard is `if locked and (...)`, so unlocking is always allowed.
-        # Reaching this state at all takes a factory — see the class docstring.
+    def test_unlocking_an_active_member_still_works(self):
         profile = ProfileFactory(active=True, state_locked=True)
 
         assert profile.set_state_locked(False) is True
@@ -101,24 +99,39 @@ class TestLockingIsRefused:
         profile.refresh_from_db()
         assert profile.state_locked is False
 
-    def test_no_sequence_of_calls_produces_an_active_locked_member(self):
-        """Pins M43: the state complete_cancel's lock branch exists to serve
-        cannot be built through this API.
 
-        Locking first and activating afterwards does not work either — the
-        admin-override path in complete_signup clears the flag on the way
-        through, which is asserted in the signup state-machine file.
-        """
-        profile = ProfileFactory()
+class TestGrandfathering:
+    """The use case the lock was built for, end to end.
+
+    A member paying out-of-band is active and carries a Stripe subscription
+    that is about to disappear. An operator locks them; the deletion webhook
+    must then leave their access alone.
+    """
+
+    def test_a_locked_active_member_survives_subscription_deletion(self):
+        from profile.models import CancelTriggeredBy, CompleteCancelOutcome
+
+        profile = ProfileFactory(active=True, subscription_active=True)
         assert profile.set_state_locked(True) is True
 
-        # Subscribing now blocks any further lock change from taking effect,
-        # and activating clears the lock. Either way the member never arrives
-        # at active+locked.
-        profile.state = "active"
-        profile.save(update_fields=["state"])
+        result = profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
 
-        assert profile.set_state_locked(True) is False
+        assert result.outcome == CompleteCancelOutcome.STATE_LOCKED
+        profile.refresh_from_db()
+        assert profile.state == "active"
+
+    def test_an_unlocked_member_in_the_same_position_is_deactivated(self):
+        # The control: without the lock the same webhook removes access, which
+        # is what makes the test above meaningful rather than vacuous.
+        from profile.models import CancelTriggeredBy, CompleteCancelOutcome
+
+        profile = ProfileFactory(active=True, subscription_active=True)
+
+        result = profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
+
+        assert result.outcome == CompleteCancelOutcome.DEACTIVATED
+        profile.refresh_from_db()
+        assert profile.state == "inactive"
 
 
 class TestAuditTrail:

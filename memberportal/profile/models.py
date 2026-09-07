@@ -847,14 +847,15 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                 capture_exception(e)
 
     def set_state_locked(self, locked, request=None):
-        # Returns False if locking was refused; unlocking always succeeds.
+        # Always succeeds. Locking was previously refused for an active member
+        # or one with a live subscription, which made the flag's primary use
+        # case unreachable: a grandfathered member paying out-of-band is active
+        # by definition, and is exactly who must not be deactivated when
+        # customer.subscription.deleted arrives. The lock decouples the access
+        # decision (state) from the billing decision (subscription_status), so
+        # neither is grounds for refusing it.
         with transaction.atomic():
             profile = Profile.objects.select_for_update().get(pk=self.pk)
-
-            if locked and (
-                profile.state == "active" or profile.subscription_status != "inactive"
-            ):
-                return False
 
             if profile.state_locked == locked:
                 self.state_locked = locked

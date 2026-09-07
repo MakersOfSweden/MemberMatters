@@ -435,9 +435,9 @@ class MemberStateLock(APIView):
     """
     post: Lock or unlock a member's state against automated changes.
 
-    Body: {"locked": true|false}. Locking is refused (409) for an active
-    member or one with a live subscription — see Profile.set_state_locked
-    and the state_locked invariant.
+    Body: {"locked": true|false}. Allowed from any state: locking an *active*
+    member is how a member paying out-of-band is grandfathered, so that
+    customer.subscription.deleted cannot take their access away.
     """
 
     permission_classes = (permissions.IsAdminUser,)
@@ -448,12 +448,7 @@ class MemberStateLock(APIView):
         if not isinstance(locked, bool):
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        if not member.profile.set_state_locked(locked, request=request):
-            return Response(
-                {"success": False, "message": "adminTools.lockNotAllowed"},
-                status=status.HTTP_409_CONFLICT,
-            )
-
+        member.profile.set_state_locked(locked, request=request)
         return Response({"success": True})
 
 

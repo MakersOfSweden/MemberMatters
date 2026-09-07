@@ -33,26 +33,15 @@
       />
       <q-btn
         class="q-mr-sm q-mb-sm"
-        :color="
-          selectedMember.stateLocked
-            ? 'positive'
-            : isSettledNonMember
-            ? 'warning'
-            : 'grey-7'
-        "
+        :color="selectedMember.stateLocked ? 'positive' : 'warning'"
         :label="
           selectedMember.stateLocked
             ? $t('adminTools.unlockAccount')
             : $t('adminTools.lockAccount')
         "
-        :disable="!selectedMember.stateLocked && !isSettledNonMember"
         :loading="adminDialogs.lock.loading"
         @click="openLockDialog"
-      >
-        <q-tooltip v-if="!selectedMember.stateLocked && !isSettledNonMember">
-          {{ $t('adminTools.lockUnavailableTooltip') }}
-        </q-tooltip>
-      </q-btn>
+      />
 
       <q-btn-dropdown
         class="q-mr-sm q-mb-sm"
