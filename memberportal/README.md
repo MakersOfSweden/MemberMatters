@@ -1,8 +1,8 @@
 # Getting started (Django backend)
 
-First step is to grab a copy of this repository. You will need to make sure you have python installed,
-3.7 or newer, as that's the only version it has been tested on. Make sure you also install pip so that you can install
-all the dependencies.
+First step is to grab a copy of this repository. You will need to make sure you have python 3.12
+installed, as that's the version the project is developed, tested and shipped against. Make sure you
+also install pip so that you can install all the dependencies.
 
 To install python 3/pip and the requirements, run the commands below _from within this folder_.
 
@@ -58,7 +58,7 @@ CFLAGS='-I/usr/local/opt/zlib/include -L/usr/local/opt/zlib/lib' pip3 install -r
 
 Please follow the instructions below to setup dev environment in Windows (tested in Windows 7 & 10).
 
-- Download & install Python 3.7+ from [here](https://www.python.org/downloads/)
+- Download & install Python 3.12 from [here](https://www.python.org/downloads/)
 - CD into the cloned repository.
 - Assuming `pip` and `virtualenv` is already installed as part of the package, execute: `py -3 -m venv venv`
 - Activate the venv by running: `venv\Scripts\activate`
