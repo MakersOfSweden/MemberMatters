@@ -242,8 +242,13 @@ class Login(APIView):
         if body.get("email") is None or body.get("password") is None:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        # Gate the email/password branch only, not the SSO handshake.
-        if body.get("sso") is None and not verify_captcha(request, action="login"):
+        # Every request that reaches a password check is gated, including the
+        # SSO one: an already-authenticated handshake returned above, so what
+        # remains is a credential guess. A Discourse-initiated login puts a
+        # valid sso/sig pair in the browser URL, and the nonce isn't checked
+        # for reuse, so a pair harvested once would otherwise carry unlimited
+        # guesses past the CAPTCHA. The web form sends a token on this branch.
+        if not verify_captcha(request, action="login"):
             return Response(
                 {"message": "error.captchaFailed"},
                 status=status.HTTP_400_BAD_REQUEST,

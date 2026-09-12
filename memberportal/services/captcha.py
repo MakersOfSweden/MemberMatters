@@ -3,6 +3,7 @@ import logging
 
 import requests
 from constance import config
+from rest_framework.settings import api_settings
 from rest_framework.throttling import BaseThrottle
 
 logger = logging.getLogger("captcha")
@@ -10,9 +11,12 @@ logger = logging.getLogger("captcha")
 # Provider-specific details (Cloudflare Turnstile) live only in this file.
 SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
-# NOT settings.REQUEST_TIMEOUT (0.05s) — a siteverify round-trip can't finish in
-# 50ms, so reusing it would fail closed on every verification.
-VERIFY_TIMEOUT = 5  # seconds
+# (connect, read) seconds. NOT settings.REQUEST_TIMEOUT (0.05s) — a siteverify
+# round-trip can't finish in 50ms, so reusing it would fail closed every time.
+# Kept tight because this call blocks a request thread, and under ASGI Django
+# 3.2 runs every sync view on one shared thread-sensitive executor: a slow
+# verify delays unrelated requests, not just this one.
+VERIFY_TIMEOUT = (2, 3)
 
 
 def captcha_enabled() -> bool:
@@ -22,16 +26,21 @@ def captcha_enabled() -> bool:
 
 
 def _client_ip(request):
-    # remoteip must be a single IP, but DRF's get_ident returns the whole XFF
-    # chain ("1.2.3.4, 5.6.7.8") under the default NUM_PROXIES. Isolate the last
-    # hop; omit remoteip (it's optional) if it doesn't parse as an IP.
+    # remoteip is optional, and must be the client's own address. Only
+    # MM_NUM_PROXIES tells us how many X-Forwarded-For hops are ours to trust:
+    # unset, DRF hands back the whole chain ("1.2.3.4, 5.6.7.8"), whose hops
+    # are either a proxy of ours or attacker-supplied. Send nothing rather
+    # than a wrong address.
+    if api_settings.NUM_PROXIES is None:
+        return None
     ident = (BaseThrottle().get_ident(request) or "").strip()
-    candidate = ident.rsplit(",", 1)[-1].strip()
     try:
-        ipaddress.ip_address(candidate)
+        parsed = ipaddress.ip_address(ident)
     except ValueError:
         return None
-    return candidate
+    # A private or loopback address means the hop count is off — we're looking
+    # at our own proxy, which tells the provider nothing.
+    return ident if parsed.is_global else None
 
 
 def _allowed_hostnames() -> set:
