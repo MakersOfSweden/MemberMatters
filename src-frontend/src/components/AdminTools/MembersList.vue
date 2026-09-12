@@ -289,7 +289,7 @@ export default defineComponent({
         return;
       }
       // Caps Lock reports 'F' even with shift up.
-      if (event.key?.toLowerCase() !== 'f') return;
+      if (event.key.toLowerCase() !== 'f') return;
 
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
