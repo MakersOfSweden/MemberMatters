@@ -8,7 +8,11 @@ VOLUME /usr/src/logs/
 
 RUN mkdir -p /usr/src/app/frontend && mkdir /usr/src/logs && mkdir /usr/src/data
 
-RUN apt-get update -y && apt-get install -y nginx curl daphne
+# Debian 11 left LTS on 2026-08-31 and its final bullseye-security Release file
+# expired a week later, so apt rejects the repo and exits 100. Skip the freshness
+# check until the base image moves to bookworm.
+RUN apt-get -o Acquire::Check-Valid-Until=false update -y \
+  && apt-get install -y nginx curl daphne
 
 # Install Node
 ENV NODE_VERSION=22.2.0
