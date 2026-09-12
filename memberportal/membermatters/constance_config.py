@@ -113,7 +113,10 @@ CONSTANCE_CONFIG = {
         False,
         "Require a CAPTCHA (Cloudflare Turnstile) on signup, login, and password-reset requests. When off — or when keys are unset — CAPTCHA is skipped, keeping fresh installs and CI working.",
     ),
-    "CAPTCHA_SITE_KEY": ("", "CAPTCHA PUBLIC site key (sent to the browser)."),
+    "CAPTCHA_SITE_KEY": (
+        "",
+        "CAPTCHA PUBLIC site key (sent to the browser). Add every hostname your portal answers on to this key's domain list at the provider, or the challenge won't load for your members.",
+    ),
     "CAPTCHA_SECRET_KEY": (
         "",
         "CAPTCHA PRIVATE secret key (server-side verification only).",
