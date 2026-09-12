@@ -13,16 +13,41 @@ SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 # (connect, read) seconds. NOT settings.REQUEST_TIMEOUT (0.05s) — a siteverify
 # round-trip can't finish in 50ms, so reusing it would fail closed every time.
-# Kept tight because this call blocks a request thread, and under ASGI Django
-# 3.2 runs every sync view on one shared thread-sensitive executor: a slow
-# verify delays unrelated requests, not just this one.
-VERIFY_TIMEOUT = (2, 3)
+# Kept as tight as the round-trip allows, because this blocks the one thread the
+# whole process shares: under ASGI, Django 3.2 runs every sync view and Channels
+# runs every sync consumer handler on asgiref's single thread-sensitive executor,
+# so a stalled verify also delays unrelated requests and door swipes.
+VERIFY_TIMEOUT = (1, 2)
+
+
+_warned_missing_keys = None
 
 
 def captcha_enabled() -> bool:
-    return bool(
-        config.ENABLE_CAPTCHA and config.CAPTCHA_SITE_KEY and config.CAPTCHA_SECRET_KEY
-    )
+    global _warned_missing_keys
+
+    if not config.ENABLE_CAPTCHA:
+        _warned_missing_keys = None
+        return False
+
+    missing = [
+        name
+        for name in ("CAPTCHA_SITE_KEY", "CAPTCHA_SECRET_KEY")
+        if not getattr(config, name)
+    ]
+    if not missing:
+        _warned_missing_keys = None
+        return True
+
+    # Latched on which keys are missing, so this stays out of the per-request
+    # log but still re-fires if the config shifts to a different broken state.
+    if _warned_missing_keys != set(missing):
+        logger.warning(
+            f"ENABLE_CAPTCHA is on but {' and '.join(missing)} not set — CAPTCHA "
+            f"is inactive and signup, login and password reset are ungated."
+        )
+        _warned_missing_keys = set(missing)
+    return False
 
 
 def _client_ip(request):
@@ -54,8 +79,10 @@ def verify_captcha(request, action=None) -> bool:
     if not captcha_enabled():
         return True
 
-    token = request.data.get("captchaToken")
-    if not token:
+    # A JSON array or bare-string body parses to a list/str, which has no .get.
+    data = request.data
+    token = data.get("captchaToken") if isinstance(data, dict) else None
+    if not token or not isinstance(token, str):
         return False
 
     payload = {"secret": config.CAPTCHA_SECRET_KEY, "response": token}
