@@ -22,7 +22,11 @@ from sentry_sdk import capture_exception
 from profile.models import CancelTriggeredBy, SignupTriggeredBy
 from services.emails import send_email_to_admin
 
-from .stripe_utils import invoice_subscription_id, is_subscription_invoice
+from .stripe_utils import (
+    invoice_billing_reason,
+    invoice_subscription_id,
+    is_subscription_invoice,
+)
 
 logger = logging.getLogger("billing")
 
@@ -80,22 +84,46 @@ def classify_event_scope(event_type, data, profile):
 
 
 def handle_invoice_paid(ctx):
+    """Record a membership payment, and activate the member if they need it.
+
+    Bookkeeping runs for every paid invoice — first payment, renewal, or an
+    admin marking one paid out of band. Activation runs only for a member who
+    isn't already active.
+    """
     profile = ctx.profile
     data = ctx.data
-    invoice_status = data["status"]
+
+    if data.get("status") != "paid":
+        profile.user.log_event(
+            f"Ignored invoice.paid with unexpected status {data.get('status')!r}.",
+            "stripe",
+        )
+        return
 
     profile.user.log_event("Membership payment received.", "stripe")
 
-    if invoice_status == "paid" and not profile.subscription_first_created:
-        profile.subscription_first_created = timezone.now()
-        profile.save(update_fields=["subscription_first_created"])
+    # A state_locked member is by invariant subscription_status=inactive. An
+    # invoice can still be paid against them (late delivery, or an admin
+    # marking an old one paid in Stripe); the lock outranks it.
+    holding = profile.state_locked and profile.state != "active"
 
-    # A state_locked member is by invariant subscription_status=inactive.
-    # If an invoice.paid arrives anyway (late/out-of-order delivery, or
-    # an admin manually marked an old invoice paid in Stripe), preserve
-    # the lock — do NOT flip subscription_status to "active" and do
-    # NOT auto-activate. Notify the admin so they can investigate.
-    if profile.state_locked and profile.state != "active" and invoice_status == "paid":
+    updates = []
+    if profile.subscription_first_created is None:
+        profile.subscription_first_created = timezone.now()
+        updates.append("subscription_first_created")
+
+    # Re-asserted on every payment so a status that has drifted out of step
+    # with Stripe is repaired by the next one. "cancelling" is excluded: a
+    # member who cancelled at period end can still have their final invoice
+    # settle afterwards, and that must not read as renewing.
+    if not holding and profile.subscription_status not in ("active", "cancelling"):
+        profile.subscription_status = "active"
+        updates.append("subscription_status")
+
+    if updates:
+        profile.save(update_fields=updates)
+
+    if holding:
         profile.user.log_event(
             "Invoice paid for a state_locked member — held; "
             "admin must unlock + reconcile.",
@@ -135,28 +163,29 @@ def handle_invoice_paid(ctx):
                 capture_exception(e)
 
         transaction.on_commit(_on_commit_locked_paid_admin)
+        return
 
-    # If they aren't an active member, are allowed to signup, and have paid the invoice
-    # then lets activate their account (this could be a new OR returning member)
-    elif (
-        profile.state != "active"
-        and profile.can_signup()["success"]
-        and invoice_status == "paid"
-    ):
-        profile.subscription_status = "active"
-        profile.save(update_fields=["subscription_status"])
+    if profile.state == "active":
+        # A renewal: recorded above, nothing to activate. No member email
+        # either — Stripe sends its own receipt, and the copy below is
+        # signup-specific.
+        profile.user.log_event(
+            "Renewal payment recorded (billing_reason="
+            f"{invoice_billing_reason(data)}); membership already active.",
+            "stripe",
+        )
+        return
 
+    # A new or returning member who has met every requirement.
+    if profile.can_signup()["success"]:
         profile.user.log_event(
             "Activated membership because member met all requirements.",
             "stripe",
         )
 
-        # Both callbacks deferred to on_commit so the I/O can't
-        # extend the row lock past Stripe's 30s webhook timeout.
-        # The paid-confirmation email is registered first so it
-        # arrives before activate()'s welcome email — the body
-        # references "another email message confirming this was
-        # successful" which is the welcome that follows.
+        # Registered before the activation callback so it arrives ahead of
+        # activate()'s welcome email, which is the "another email message"
+        # the body below refers to.
         paid_subject = "Your payment was successful."
         paid_message = (
             "Thanks for making a membership payment using our "
@@ -190,13 +219,9 @@ def handle_invoice_paid(ctx):
 
         transaction.on_commit(_on_commit_paid_activate)
 
-    # If they aren't an active member, are NOT allowed to signup, and have paid the invoice
-    # then we need to let them know and mark the subscription as active
-    # (this could be a new OR returning member that's been too long since induction etc.)
-    elif profile.state != "active" and invoice_status == "paid":
-        profile.subscription_status = "active"
-        profile.save(update_fields=["subscription_status"])
-
+    # Still owes an induction, terms acceptance or access card. The payment
+    # stands; access does not start yet.
+    else:
         profile.user.log_event(
             "Did not activate membership because member did not meet all requirements.",
             "stripe",
@@ -244,8 +269,6 @@ def handle_invoice_paid(ctx):
                     capture_exception(e)
 
         transaction.on_commit(_on_commit_paid_no_activate)
-
-    # in all other instances, we don't care about a paid invoice and can ignore it
 
 
 def handle_invoice_payment_failed(ctx):

@@ -17,10 +17,14 @@ Two conventions worth knowing before adding cases:
   bump can't quietly break one shape.
 """
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from api_billing.models import ProcessedStripeEvent
 from api_billing.webhook_handlers import HANDLERS, UnrecognisedInvoiceSchema
+from profile.models import UserEventLog
 from tests.factories import ProfileFactory
 
 from .conftest import (
@@ -51,6 +55,14 @@ def only(**overrides):
 
 def subjects(outbox):
     return [message["Subject"] for message in outbox]
+
+
+def logged(profile):
+    """Descriptions from the member's audit trail, which is the sink an
+    operator actually reads when reconciling a payment."""
+    return [
+        entry.description for entry in UserEventLog.objects.filter(user=profile.user)
+    ]
 
 
 class TestGates:
@@ -235,10 +247,11 @@ class TestIdempotency:
     ):
         # Characterising the gap, not endorsing it: with no dedup row to skip
         # on, every redelivery re-runs the handler. invoice.paid self-limits
-        # (a second delivery finds state="active" and falls through to the
-        # no-op branch), but invoice.payment_failed guards on nothing, so the
-        # member is emailed once per delivery across Stripe's ~3 days of
-        # retries. Change this to assert 1 if the guard is ever tightened.
+        # (a second delivery finds state="active" and returns down the renewal
+        # path, whose bookkeeping is idempotent and which emails nobody), but
+        # invoice.payment_failed guards on nothing, so the member is emailed
+        # once per delivery across Stripe's ~3 days of retries. Change this to
+        # assert 1 if the guard is ever tightened.
         stripe_event(
             event=build_event(
                 "invoice.payment_failed", build_invoice(status="open"), event_id=""
@@ -622,6 +635,192 @@ class TestSubscriptionDeleted:
             if name == "Invoice.void_invoice"
         ]
         assert f"The membership for {full_name} was just cancelled" in subjects(outbox)
+
+
+class TestRenewal:
+    """Payments from members who are already active.
+
+    Distinct from signup: there is nothing to activate, so what matters is
+    that the payment is recorded and the member is left undisturbed.
+    """
+
+    @pytest.fixture
+    def renewing_member(self, db):
+        """An established member, mid-subscription, on manual renewal."""
+        return ProfileFactory(
+            active=True,
+            subscription_active=True,
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+            subscription_first_created=timezone.now() - timedelta(days=365),
+        )
+
+    @only()
+    def test_a_renewal_payment_is_recorded_and_the_member_left_alone(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        signups = []
+        monkeypatch.setattr(
+            "profile.models.Profile.complete_signup",
+            lambda self, *a, **kw: signups.append(self),
+            raising=True,
+        )
+        first_created = renewing_member.subscription_first_created
+        stripe_event(
+            event=build_event(
+                "invoice.paid", build_invoice(billing_reason="subscription_cycle")
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            assert post_webhook().status_code == 200
+
+        renewing_member.refresh_from_db()
+        assert renewing_member.state == "active"
+        assert renewing_member.subscription_status == "active"
+        # Not re-stamped — this is an audit record of the FIRST ever payment.
+        assert renewing_member.subscription_first_created == first_created
+        # Renewals are silent: no welcome, no access-enabled, and not the
+        # signup-only "check for another email" copy.
+        assert outbox == []
+        assert signups == []
+        assert any(
+            "Renewal payment recorded" in entry for entry in logged(renewing_member)
+        )
+
+    @only()
+    def test_a_renewal_repairs_a_status_that_has_drifted(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        django_capture_on_commit_callbacks,
+    ):
+        # A payment is unambiguous evidence the subscription is live, whatever
+        # left the status saying otherwise.
+        renewing_member.subscription_status = "pending"
+        renewing_member.save(update_fields=["subscription_status"])
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        renewing_member.refresh_from_db()
+        assert renewing_member.subscription_status == "active"
+
+    @only()
+    def test_a_late_final_invoice_does_not_un_cancel_a_leaving_member(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        django_capture_on_commit_callbacks,
+    ):
+        # A member who cancelled at period end can still have their final
+        # invoice settle afterwards. Re-asserting "active" here would drop the
+        # "your membership ends on ..." notice and tell them they are staying.
+        renewing_member.subscription_status = "cancelling"
+        renewing_member.save(update_fields=["subscription_status"])
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        renewing_member.refresh_from_db()
+        assert renewing_member.subscription_status == "cancelling"
+
+    @only()
+    def test_an_out_of_band_renewal_is_indistinguishable_from_a_stripe_one(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # How an admin records a bank transfer: stripe.Invoice.pay(
+        # paid_out_of_band=True). It changes the invoice's status, not its
+        # billing_reason, so the renewal path must treat it identically.
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(
+                    billing_reason="subscription_cycle", paid_out_of_band=True
+                ),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        renewing_member.refresh_from_db()
+        assert renewing_member.subscription_status == "active"
+        assert renewing_member.state == "active"
+        assert outbox == []
+
+    @only()
+    def test_a_renewal_backfills_a_missing_first_payment_stamp(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        django_capture_on_commit_callbacks,
+    ):
+        # Members who predate the stamp have it null; the next payment is the
+        # earliest date we can honestly record.
+        renewing_member.subscription_first_created = None
+        renewing_member.save(update_fields=["subscription_first_created"])
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        renewing_member.refresh_from_db()
+        assert renewing_member.subscription_first_created is not None
+
+    @only()
+    def test_a_renewal_for_a_locked_member_is_still_held(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        # The lock outranks the renewal path: recording the payment must not
+        # quietly restore a status an admin deliberately took away.
+        signups = []
+        monkeypatch.setattr(
+            "profile.models.Profile.complete_signup",
+            lambda self, *a, **kw: signups.append(self),
+            raising=True,
+        )
+        profile = ProfileFactory(
+            inactive=True,
+            state_locked=True,
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert profile.state == "inactive"
+        assert profile.subscription_status == "inactive"
+        assert signups == []
+        assert any("had an invoice paid" in subject for subject in subjects(outbox))
 
 
 class TestCallbackIsolation:
