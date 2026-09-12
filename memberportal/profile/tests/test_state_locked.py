@@ -6,9 +6,10 @@ complete_cancel. Those refusals are covered in the state-machine files; this
 one covers the setter that is supposed to produce the flag, which the rest of
 the suite has so far set as a factory field instead.
 
-Locking is allowed from any state. It used to be refused for an active member
-or one with a live subscription, which made the flag's primary use case
-unreachable — see TestGrandfathering, which is that use case end to end.
+Locking is refused for an active member and allowed everywhere else. The lock
+guards against *automated* activation, so it only means anything while a
+member is still noob or inactive — see TestLockingASignupInProgress, which is
+that use case end to end.
 """
 
 import pytest
@@ -62,36 +63,42 @@ class TestLocking:
         assert not lock_events(profile).exists()
 
 
-class TestLockingFromAnyState:
-    """Locking has no preconditions.
+class TestLockingAnActiveMember:
+    """Refused: there is no coherent "active and locked" state.
 
-    The refusal these replace (active, or any subscription_status other than
-    "inactive") ruled out precisely the state the flag exists to protect. The
-    lock decouples the access decision from the billing decision, so neither
-    is grounds for refusing it — M43.
+    An active member has already been activated, so the lock has nothing left
+    to guard. Allowing it produced a flag that read as protection but was
+    cleared by the next admin activation — M43.
     """
 
-    def test_an_active_member_can_be_locked(self):
+    def test_an_active_member_cannot_be_locked(self):
         profile = ProfileFactory(active=True)
 
-        assert profile.set_state_locked(True) is True
+        assert profile.set_state_locked(True) is False
 
         profile.refresh_from_db()
-        assert profile.state_locked is True
+        assert profile.state_locked is False
 
-    @pytest.mark.parametrize("status", ["active", "pending", "cancelling"])
-    def test_a_member_with_a_live_subscription_can_be_locked(self, status):
-        # "cancelling" is the one that mattered most: a member whose
-        # subscription is on its way out is exactly who an operator reaches
-        # for the lock to protect, and it was refused.
-        profile = ProfileFactory(active=True, subscription_status=status)
+    def test_the_refusal_is_not_audited(self):
+        # Nothing happened, so nothing is written — the refusal returns before
+        # the log_event calls.
+        profile = ProfileFactory(active=True)
 
-        assert profile.set_state_locked(True) is True
+        profile.set_state_locked(True)
 
-        profile.refresh_from_db()
-        assert profile.state_locked is True
+        assert not lock_events(profile).exists()
+
+    def test_the_in_memory_instance_is_left_alone(self):
+        profile = ProfileFactory(active=True)
+
+        profile.set_state_locked(True)
+
+        assert profile.state_locked is False  # no refresh_from_db
 
     def test_unlocking_an_active_member_still_works(self):
+        # Defence in depth: the API can no longer produce active+locked, but
+        # an operator must still be able to clear one that exists — a direct
+        # DB edit, or a row predating the invariant.
         profile = ProfileFactory(active=True, state_locked=True)
 
         assert profile.set_state_locked(False) is True
@@ -100,38 +107,65 @@ class TestLockingFromAnyState:
         assert profile.state_locked is False
 
 
-class TestGrandfathering:
-    """The use case the lock was built for, end to end.
+class TestLockingASignupInProgress:
+    """A live subscription is not grounds for refusal.
 
-    A member paying out-of-band is active and carries a Stripe subscription
-    that is about to disappear. An operator locks them; the deletion webhook
-    must then leave their access alone.
+    The old rule also refused any member whose subscription_status was not
+    "inactive", which ruled out the member the lock is actually for: a noob
+    mid-signup whose invoice is about to clear. Refusal is on `state` alone.
     """
 
-    def test_a_locked_active_member_survives_subscription_deletion(self):
-        from profile.models import CancelTriggeredBy, CompleteCancelOutcome
+    @pytest.mark.parametrize("status", ["active", "pending", "cancelling"])
+    def test_a_noob_with_a_live_subscription_can_be_locked(self, status):
+        profile = ProfileFactory(subscription_status=status)
 
-        profile = ProfileFactory(active=True, subscription_active=True)
         assert profile.set_state_locked(True) is True
 
-        result = profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
+        profile.refresh_from_db()
+        assert profile.state_locked is True
 
-        assert result.outcome == CompleteCancelOutcome.STATE_LOCKED
+    def test_an_inactive_member_can_be_locked(self):
+        profile = ProfileFactory(inactive=True, subscription_active=True)
+
+        assert profile.set_state_locked(True) is True
+
+        profile.refresh_from_db()
+        assert profile.state_locked is True
+
+    def test_a_locked_signup_is_not_activated_when_the_invoice_clears(self):
+        # The use case end to end: an operator locks a member mid-signup, and
+        # the invoice.paid webhook must then leave them alone.
+        from profile.models import CompleteSignupOutcome, SignupTriggeredBy
+
+        profile = ProfileFactory(subscription_pending=True)
+        assert profile.set_state_locked(True) is True
+
+        profile.subscription_status = "active"
+        profile.save(update_fields=["subscription_status"])
+        result = profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
+
+        assert result.outcome == CompleteSignupOutcome.STATE_LOCKED
+        profile.refresh_from_db()
+        assert profile.state == "noob"
+
+    @pytest.mark.override_config(
+        TERMS_ACCEPTANCE_CARDS="[]",
+        MOODLE_INDUCTION_ENABLED=False,
+        CANVAS_INDUCTION_ENABLED=False,
+        REQUIRE_ACCESS_CARD=False,
+    )
+    def test_an_unlocked_member_in_the_same_position_is_activated(self):
+        # The control: without the lock the same webhook activates them, which
+        # is what makes the test above meaningful rather than vacuous.
+        from profile.models import CompleteSignupOutcome, SignupTriggeredBy
+
+        profile = ProfileFactory(subscription_active=True)
+
+        result = profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
+
+        assert result.outcome == CompleteSignupOutcome.ACTIVATED
         profile.refresh_from_db()
         assert profile.state == "active"
-
-    def test_an_unlocked_member_in_the_same_position_is_deactivated(self):
-        # The control: without the lock the same webhook removes access, which
-        # is what makes the test above meaningful rather than vacuous.
-        from profile.models import CancelTriggeredBy, CompleteCancelOutcome
-
-        profile = ProfileFactory(active=True, subscription_active=True)
-
-        result = profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
-
-        assert result.outcome == CompleteCancelOutcome.DEACTIVATED
-        profile.refresh_from_db()
-        assert profile.state == "inactive"
 
 
 class TestAuditTrail:

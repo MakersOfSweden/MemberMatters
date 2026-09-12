@@ -108,16 +108,24 @@ class TestDeactivation:
 
 
 class TestStateLock:
+    """Defence in depth — the API cannot produce an active locked member.
+
+    set_state_locked refuses to lock an active member, and a locked member
+    cannot be activated, so every test below builds the state by writing the
+    column directly. The branch is kept because a direct DB edit or a row
+    predating the invariant can still reach it, and silently deactivating
+    such a member is the worse failure.
+    """
+
     @pytest.mark.parametrize(
         "triggered_by",
         [
             CancelTriggeredBy.MEMBER_SELF_CANCEL,
             CancelTriggeredBy.SUBSCRIPTION_DELETED,
+            CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL,
         ],
     )
     def test_a_locked_active_member_is_not_deactivated(self, triggered_by):
-        # Grandfathered members: Stripe deleting the subscription must not
-        # take their access away.
         profile = ProfileFactory(active=True, state_locked=True)
 
         result = profile.complete_cancel(triggered_by)
@@ -139,9 +147,10 @@ class TestStateLock:
         assert refusals.count() == 1
         assert "triggered_by=subscription_deleted" in refusals.first().description
 
-    def test_an_admin_override_cancels_a_locked_member(self):
+    def test_unlocking_first_is_what_lets_a_cancel_through(self):
         profile = ProfileFactory(active=True, state_locked=True)
 
+        assert profile.set_state_locked(False) is True
         result = profile.complete_cancel(CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL)
 
         assert result.outcome == CompleteCancelOutcome.DEACTIVATED

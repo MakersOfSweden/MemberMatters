@@ -71,6 +71,7 @@ class TestStateLock:
             SignupTriggeredBy.MEMBER_SELF_SERVE,
             SignupTriggeredBy.SUBSCRIPTION_CREATED,
             SignupTriggeredBy.INVOICE_PAID,
+            SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE,
         ],
     )
     def test_a_locked_member_is_not_activated(self, triggered_by):
@@ -98,16 +99,31 @@ class TestStateLock:
         assert "triggered_by=invoice_paid" in refusals.first().description
 
     @only()
-    def test_an_admin_override_activates_and_clears_the_lock(self):
-        # An active member is never locked — the state_locked invariant.
+    def test_an_admin_override_does_not_clear_the_lock(self):
+        # The override skips the gates the system inferred — billing, signup
+        # requirements — not a decision an operator recorded. Only an
+        # explicit unlock does that.
         profile = ProfileFactory(state_locked=True)
 
+        result = profile.complete_signup(SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE)
+
+        assert result.outcome == CompleteSignupOutcome.STATE_LOCKED
+        profile.refresh_from_db()
+        assert profile.state == "noob"
+        assert profile.state_locked is True
+
+    @only()
+    def test_unlocking_first_is_what_lets_the_override_through(self):
+        # The two-step an operator actually performs, and the control that
+        # keeps the refusal above from passing for the wrong reason.
+        profile = ProfileFactory(state_locked=True)
+
+        assert profile.set_state_locked(False) is True
         result = profile.complete_signup(SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE)
 
         assert result.outcome == CompleteSignupOutcome.ACTIVATED
         profile.refresh_from_db()
         assert profile.state == "active"
-        assert profile.state_locked is False
 
 
 class TestSubscriptionGate:
@@ -257,7 +273,7 @@ class TestActivation:
     @only()
     def test_an_admin_override_also_grants_default_access(self):
         default_door = DoorFactory(all_members=True)
-        profile = ProfileFactory(state_locked=True)
+        profile = ProfileFactory()
 
         profile.complete_signup(SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE)
 

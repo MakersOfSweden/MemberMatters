@@ -18,11 +18,16 @@
       <q-btn
         v-if="isSettledNonMember"
         class="q-mr-sm q-mb-sm"
-        color="primary"
+        :color="selectedMember.stateLocked ? 'grey-7' : 'primary'"
         :label="$t('adminTools.makeMember')"
+        :disable="selectedMember.stateLocked"
         :loading="adminDialogs.makeMember.loading"
         @click="openMakeMemberDialog"
-      />
+      >
+        <q-tooltip v-if="selectedMember.stateLocked">
+          {{ $t('adminTools.activateLockedTooltip') }}
+        </q-tooltip>
+      </q-btn>
       <q-btn
         v-else
         class="q-mr-sm q-mb-sm"
@@ -33,15 +38,26 @@
       />
       <q-btn
         class="q-mr-sm q-mb-sm"
-        :color="selectedMember.stateLocked ? 'positive' : 'warning'"
+        :color="
+          selectedMember.stateLocked
+            ? 'positive'
+            : canLockState
+            ? 'warning'
+            : 'grey-7'
+        "
         :label="
           selectedMember.stateLocked
             ? $t('adminTools.unlockAccount')
             : $t('adminTools.lockAccount')
         "
+        :disable="!selectedMember.stateLocked && !canLockState"
         :loading="adminDialogs.lock.loading"
         @click="openLockDialog"
-      />
+      >
+        <q-tooltip v-if="!selectedMember.stateLocked && !canLockState">
+          {{ $t('adminTools.lockUnavailableTooltip') }}
+        </q-tooltip>
+      </q-btn>
 
       <q-btn-dropdown
         class="q-mr-sm q-mb-sm"
@@ -799,11 +815,15 @@ export default defineComponent({
           this.adminDialogs.makeMember.isOpen = false;
           this.$emit('memberUpdated');
         })
-        .catch(() => {
+        .catch((error) => {
+          // The button is disabled for a locked member, so a 409 here means
+          // they were locked elsewhere since this view loaded.
+          const key = error?.response?.data?.message;
           this.$q.dialog({
             title: this.$t('error.error'),
-            message: this.$t('error.requestFailed'),
+            message: key ? this.$t(key) : this.$t('error.requestFailed'),
           });
+          this.$emit('memberUpdated');
         })
         .finally(() => {
           this.adminDialogs.makeMember.loading = false;
@@ -846,11 +866,16 @@ export default defineComponent({
           this.adminDialogs.lock.isOpen = false;
           this.$emit('memberUpdated');
         })
-        .catch(() => {
+        .catch((error) => {
+          // The button is disabled for active members, so a 409 here means
+          // they were activated elsewhere since this view loaded. Show the
+          // server's reason rather than a generic failure.
+          const key = error?.response?.data?.message;
           this.$q.dialog({
             title: this.$t('error.error'),
-            message: this.$t('error.requestFailed'),
+            message: key ? this.$t(key) : this.$t('error.requestFailed'),
           });
+          this.$emit('memberUpdated');
         })
         .finally(() => {
           this.adminDialogs.lock.loading = false;
@@ -925,8 +950,14 @@ export default defineComponent({
     selectedMember(): MemberProfile {
       return this.member as MemberProfile;
     },
+    // The state lock only guards against automated activation, so it is
+    // offered exactly while a member is not active. A live subscription is
+    // no bar — see Profile.set_state_locked.
+    canLockState(): boolean {
+      return this.selectedMember.state !== 'active';
+    },
     // A settled non-member: not active and without a live subscription.
-    // Button 2 reads "Make Member" for these; the Lock button is enabled.
+    // Button 2 reads "Make Member" for these.
     isSettledNonMember(): boolean {
       return (
         this.selectedMember.state !== 'active' &&

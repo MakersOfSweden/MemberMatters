@@ -43,9 +43,9 @@ class TestTerminalStates:
     @only()
     def test_an_active_member_is_managed_even_when_locked(self):
         # The guard is `state_locked and state != "active"`, so the lock is
-        # invisible here for an active member. Pinned because it is the one
-        # place active+locked is handled rather than prevented — see M43 for
-        # why that combination cannot be produced through the API.
+        # invisible here for an active member. Pinned as defence in depth:
+        # set_state_locked refuses to produce this combination, but a row that
+        # predates the invariant must still render as a managed member.
         profile = ProfileFactory(active=True, state_locked=True)
 
         assert profile.signup_stage == "managed"
