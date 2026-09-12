@@ -70,8 +70,8 @@
               {{ $t('error.requestFailed') }}
             </q-banner>
 
-            <q-banner v-if="captchaError" class="bg-negative text-white">
-              {{ $t(captchaError) }}
+            <q-banner v-if="errorKey" class="bg-negative text-white">
+              {{ $t(errorKey) }}
             </q-banner>
 
             <captcha-widget
@@ -219,10 +219,10 @@
           </q-banner>
 
           <q-banner
-            v-if="reset.captchaError"
+            v-if="reset.errorKey"
             class="bg-negative text-white q-mx-md"
           >
-            {{ $t(reset.captchaError) }}
+            {{ $t(reset.errorKey) }}
           </q-banner>
 
           <q-banner v-if="reset.failed" class="bg-negative text-white q-mx-md">
@@ -290,7 +290,7 @@ export default defineComponent({
       unverifiedEmail: false,
       buttonLoading: false,
       captchaToken: '',
-      captchaError: false as string | false,
+      errorKey: false as string | false,
       discourseSsoData: null as LocationQuery | null,
       reset: {
         email: '' as string | null,
@@ -305,7 +305,7 @@ export default defineComponent({
         invalidToken: false,
         disableResetSubmitButton: false,
         captchaToken: '',
-        captchaError: false as string | false,
+        errorKey: false as string | false,
       },
     };
   },
@@ -408,7 +408,7 @@ export default defineComponent({
     login() {
       this.loginFailed = false;
       this.loginError = false;
-      this.captchaError = false;
+      this.errorKey = false;
       this.buttonLoading = true;
 
       if (this.discourseSsoData) {
@@ -431,7 +431,9 @@ export default defineComponent({
             // so 401/403 consume it too — reset for a fresh retry.
             this.resetCaptcha('loginCaptcha');
             if (error.response?.data?.message === 'error.captchaFailed') {
-              this.captchaError = 'error.captchaFailed';
+              this.errorKey = 'error.captchaFailed';
+            } else if (error.response?.status === 429) {
+              this.errorKey = 'error.tooManyRequests';
             } else if (error.response.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
@@ -464,7 +466,9 @@ export default defineComponent({
             // so 401/403 consume it too — reset for a fresh retry.
             this.resetCaptcha('loginCaptcha');
             if (error.response?.data?.message === 'error.captchaFailed') {
-              this.captchaError = 'error.captchaFailed';
+              this.errorKey = 'error.captchaFailed';
+            } else if (error.response?.status === 429) {
+              this.errorKey = 'error.tooManyRequests';
             } else if (error.response.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
@@ -494,7 +498,9 @@ export default defineComponent({
           .catch((error) => {
             this.resetCaptcha('loginCaptcha');
             if (error.response?.data?.message === 'error.captchaFailed') {
-              this.captchaError = 'error.captchaFailed';
+              this.errorKey = 'error.captchaFailed';
+            } else if (error.response?.status === 429) {
+              this.errorKey = 'error.tooManyRequests';
             } else if (error.response?.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
@@ -519,7 +525,7 @@ export default defineComponent({
     resetPassword() {
       this.loginFailed = false;
       this.reset.success = false;
-      this.reset.captchaError = false;
+      this.reset.errorKey = false;
       this.reset.loading = true;
 
       this.$axios
@@ -540,7 +546,9 @@ export default defineComponent({
         .catch((error) => {
           this.resetCaptcha('resetCaptcha');
           if (error.response?.data?.message === 'error.captchaFailed') {
-            this.reset.captchaError = 'error.captchaFailed';
+            this.reset.errorKey = 'error.captchaFailed';
+          } else if (error.response?.status === 429) {
+            this.reset.errorKey = 'error.tooManyRequests';
           } else {
             throw error;
           }

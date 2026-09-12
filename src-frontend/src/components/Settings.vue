@@ -101,25 +101,6 @@ export default {
         }, 5000);
       };
     },
-    login() {
-      this.loginFailed = false;
-      this.buttonLoading = true;
-      this.$axios
-        .post('/api/login/', {
-          email: this.email,
-          password: this.password,
-        })
-        .then(() => {
-          this.redirectLoggedIn();
-        })
-        .catch((error) => {
-          this.loginError = true;
-          throw error;
-        })
-        .finally(() => {
-          this.buttonLoading = false;
-        });
-    },
   },
   watch: {
     readerUrlInput(value) {
