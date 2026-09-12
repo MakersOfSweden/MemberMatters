@@ -108,6 +108,7 @@
                 type="submit"
                 color="primary-btn"
                 :loading="buttonLoading"
+                :disable="features?.enableCaptcha && !captchaToken"
               />
             </div>
           </q-form>
@@ -178,7 +179,10 @@
                 :label="$t('button.submit')"
                 type="submit"
                 color="primary-btn"
-                :disable="reset.formDisabled"
+                :disable="
+                  reset.formDisabled ||
+                  (features?.enableCaptcha && !reset.captchaToken)
+                "
                 :loading="reset.loading"
               />
             </div>

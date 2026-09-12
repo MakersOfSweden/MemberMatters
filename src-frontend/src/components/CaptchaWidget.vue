@@ -45,7 +45,12 @@ function loadTurnstile(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Turnstile script failed to load'));
+    script.onerror = () => {
+      // Drop the cached rejection so a later mount can retry the load instead
+      // of being stuck "unavailable" for the rest of the SPA session.
+      turnstileReady = null;
+      reject(new Error('Turnstile script failed to load'));
+    };
     document.head.appendChild(script);
   });
   return turnstileReady;
