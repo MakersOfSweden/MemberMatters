@@ -218,7 +218,6 @@
             ref="captcha"
             v-model="captchaToken"
             action="register"
-            @captcha-unavailable="errorExists = 'error.captchaUnavailable'"
           />
 
           <div class="row">

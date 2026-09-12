@@ -1,5 +1,19 @@
 <template>
-  <div v-if="features?.enableCaptcha" ref="container" class="q-my-sm" />
+  <div v-if="features?.enableCaptcha" class="q-my-sm">
+    <!-- v-show, not v-if: render() needs this element to exist. -->
+    <div v-show="!unavailable" ref="container" />
+
+    <!-- Turnstile fails for reasons a member can clear (flaky network, a
+         blocked script) and reasons they can't (a native build's origin isn't
+         on the site key). The server requires a token either way, so there is
+         no submitting past this — offer the retry and say what happened. -->
+    <q-banner v-if="unavailable" dense class="bg-negative text-white">
+      {{ $t('error.captchaUnavailable') }}
+      <template #action>
+        <q-btn flat dense :label="$t('button.retry')" @click="retry" />
+      </template>
+    </q-banner>
+  </div>
 </template>
 
 <script lang="ts">
@@ -64,10 +78,11 @@ export default defineComponent({
     action: { type: String, default: undefined },
     modelValue: { type: String, default: '' },
   },
-  emits: ['update:modelValue', 'captcha-unavailable'],
+  emits: ['update:modelValue'],
   data() {
     return {
       widgetId: null as string | null,
+      unavailable: false,
     };
   },
   computed: {
@@ -84,18 +99,18 @@ export default defineComponent({
     async renderWidget() {
       const siteKey = this.keys?.captchaSiteKey;
       if (!siteKey) {
-        this.$emit('captcha-unavailable');
+        this.fail();
         return;
       }
       try {
         await loadTurnstile();
       } catch {
-        this.$emit('captcha-unavailable');
+        this.fail();
         return;
       }
       const container = this.$refs.container as HTMLElement | undefined;
       if (!window.turnstile || !container) {
-        this.$emit('captcha-unavailable');
+        this.fail();
         return;
       }
       this.widgetId = window.turnstile.render(container, {
@@ -105,13 +120,20 @@ export default defineComponent({
         // Clear the token so a >300s-old one is never submitted.
         'expired-callback': () => this.$emit('update:modelValue', ''),
         // A blocked/slow script, bad key, or non-allowed origin (native
-        // builds) all surface here — tell the host instead of leaving a
-        // permanently-disabled submit button.
-        'error-callback': () => {
-          this.$emit('update:modelValue', '');
-          this.$emit('captcha-unavailable');
-        },
+        // builds) all surface here.
+        'error-callback': () => this.fail(),
       });
+    },
+    fail() {
+      this.$emit('update:modelValue', '');
+      this.unavailable = true;
+    },
+    retry() {
+      // A failed script load clears the module-level cache, so this re-fetches
+      // it; a widget that rendered but errored has to be torn down first.
+      this.removeWidget();
+      this.unavailable = false;
+      this.renderWidget();
     },
     // Called by the host after a spent-token error so the retry carries a
     // fresh token (Turnstile tokens are single-use).

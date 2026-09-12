@@ -79,7 +79,6 @@
               ref="loginCaptcha"
               v-model="captchaToken"
               action="login"
-              @captcha-unavailable="captchaError = 'error.captchaUnavailable'"
             />
 
             <p class="text-caption">
@@ -212,9 +211,6 @@
               ref="resetCaptcha"
               v-model="reset.captchaToken"
               action="password_reset"
-              @captcha-unavailable="
-                reset.captchaError = 'error.captchaUnavailable'
-              "
             />
           </q-card-section>
 

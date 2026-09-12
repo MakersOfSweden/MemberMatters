@@ -68,7 +68,7 @@ export default {
     loginFailed: 'Your username or password was incorrect.',
     captchaFailed: 'CAPTCHA check failed, please try again.',
     captchaUnavailable:
-      "Couldn't load the CAPTCHA — check your connection and reload.",
+      "Couldn't load the CAPTCHA — check your connection and try again.",
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
     screenNameRequired: 'Please enter a screen name.',
@@ -167,6 +167,7 @@ export default {
     ok: 'Ok',
     confirm: 'Confirm',
     reset: 'Reset',
+    retry: 'Retry',
     cancel: 'Cancel',
     close: 'Close',
     connect: 'Connect',
