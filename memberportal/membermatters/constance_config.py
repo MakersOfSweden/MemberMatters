@@ -108,6 +108,20 @@ CONSTANCE_CONFIG = {
         "[]",
         'A JSON array of cards shown as a required Terms & Conditions step during signup. Each card: {"icon": "mdi-...", "title": "...", "body_html": "<p>...</p>", "checkbox_text": "..."}. The step is skipped when the array is empty.',
     ),
+    # CAPTCHA (bot protection) config
+    "ENABLE_CAPTCHA": (
+        False,
+        "Require a CAPTCHA (Cloudflare Turnstile) on signup, login, and password-reset requests. When off — or when keys are unset — CAPTCHA is skipped, keeping fresh installs and CI working.",
+    ),
+    "CAPTCHA_SITE_KEY": ("", "CAPTCHA PUBLIC site key (sent to the browser)."),
+    "CAPTCHA_SECRET_KEY": (
+        "",
+        "CAPTCHA PRIVATE secret key (server-side verification only).",
+    ),
+    "CAPTCHA_ALLOWED_HOSTNAMES": (
+        "",
+        "[Optional] Comma-separated hostnames the CAPTCHA token may be solved on (e.g. 'portal.example.org'). Leave EMPTY to skip hostname checking — needed so native builds whose WebView origin is 'localhost' keep working. When set, a token whose verified hostname isn't listed is rejected, blocking tokens farmed on a clone site that embeds your public site key.",
+    ),
     # Stripe config
     "ENABLE_STRIPE": (True, "Enable use of Stripe for payments."),
     "STRIPE_PUBLISHABLE_KEY": ("", "Set this to your Stripe PUBLIC API key."),
@@ -540,6 +554,15 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_DOOR_BUMP_API",
                 "ENABLE_LAST_SEEN_PAGE",
                 "ENABLE_RECENT_SWIPES_PAGE",
+            ),
+        ),
+        (
+            "CAPTCHA (BOT PROTECTION)",
+            (
+                "ENABLE_CAPTCHA",
+                "CAPTCHA_SITE_KEY",
+                "CAPTCHA_SECRET_KEY",
+                "CAPTCHA_ALLOWED_HOSTNAMES",
             ),
         ),
         ("Stats Settings", ("ENABLE_STATS_PAGE", "STATS_MAX_DAYS", "METRICS_API_KEY")),

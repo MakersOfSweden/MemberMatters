@@ -362,14 +362,19 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         # Throttling keys off client IP, and legitimate signups share IPs
         # (makerspace WiFi, CGNAT), so a low cap rejects real people. This
-        # just stops a trivial script — CAPTCHA (see Register view TODO)
-        # is the real abuse control. Override with MM_THROTTLE_REGISTER.
+        # just stops a trivial script — CAPTCHA (services/captcha.py) is the
+        # real abuse control. Override with MM_THROTTLE_REGISTER.
         "register": os.environ.get("MM_THROTTLE_REGISTER", "60/hour"),
         # Split so a legitimate user clicking a reset email (validate +
         # submit, possibly with a refresh) doesn't share the same bucket
         # as the abuse path (unauthenticated "send me a reset email").
         "password_reset_request": "10/hour",
         "password_reset_use": "40/hour",
+        # Login and the JWT token endpoint were unthrottled. With CAPTCHA on,
+        # each POST triggers a synchronous ~5s outbound verify, so bound it.
+        # Loose (legit users share IPs; CAPTCHA is the real control).
+        "login": os.environ.get("MM_THROTTLE_LOGIN", "120/hour"),
+        "token_obtain": os.environ.get("MM_THROTTLE_TOKEN_OBTAIN", "120/hour"),
     },
 }
 

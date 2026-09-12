@@ -21,9 +21,11 @@ from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Kiosk, SiteSession, EmailVerificationToken
 from services.discord import post_kiosk_swipe_to_discord
 from services.slack import post_kiosk_swipe_to_slack
+from services.captcha import verify_captcha, captcha_enabled
 import base64
 from urllib.parse import parse_qs, urlencode
 import hmac
@@ -56,6 +58,7 @@ class GetConfig(APIView):
             "enableStripe": config.ENABLE_STRIPE
             and len(config.STRIPE_PUBLISHABLE_KEY) > 0
             and len(config.STRIPE_SECRET_KEY) > 0,
+            "enableCaptcha": captcha_enabled(),
             "enableMembershipPayments": config.ENABLE_STRIPE
             and config.ENABLE_STRIPE_MEMBERSHIP_PAYMENTS,
             "enableNewSubscriptions": config.ENABLE_NEW_SUBSCRIPTIONS,
@@ -103,7 +106,10 @@ class GetConfig(APIView):
             ),
         }
 
-        keys = {"stripePublishableKey": config.STRIPE_PUBLISHABLE_KEY}
+        keys = {
+            "stripePublishableKey": config.STRIPE_PUBLISHABLE_KEY,
+            "captchaSiteKey": config.CAPTCHA_SITE_KEY,
+        }
 
         with open("../package.json") as f:
             package = json.load(f)
@@ -172,6 +178,10 @@ class Login(APIView):
     """
 
     permission_classes = (permissions.AllowAny,)
+    # Previously unthrottled; the scope bounds the new synchronous CAPTCHA
+    # verify below so it can't be used for outbound amplification.
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "login"
 
     def post(self, request):
         body = request.data
@@ -231,6 +241,13 @@ class Login(APIView):
 
         if body.get("email") is None or body.get("password") is None:
             return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        # Gate the email/password branch only, not the SSO handshake.
+        if body.get("sso") is None and not verify_captcha(request, action="login"):
+            return Response(
+                {"message": "error.captchaFailed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user = authenticate(username=body.get("email"), password=body.get("password"))
 
@@ -447,8 +464,15 @@ class ResetPassword(APIView):
                 pass
             return Response({"success": False})
 
-        # No token: this is the "request a reset" path. Always return
-        # success so the response cannot be used to enumerate registered
+        # No token: the "request a reset" path. Gate with CAPTCHA before the
+        # email lookup so a failed check can't be used to enumerate addresses.
+        if not verify_captcha(request, action="password_reset"):
+            return Response(
+                {"message": "error.captchaFailed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Always return success so the response cannot enumerate registered
         # email addresses (M13).
         email = (body.get("email") or "").lower()
         if email:
@@ -1037,6 +1061,25 @@ def _subscribe_to_mailchimp(new_user, profile):
     transaction.on_commit(_subscribe)
 
 
+class CaptchaTokenObtainPairView(TokenObtainPairView):
+    """
+    Gated /api/token/obtain/ (mobile login). Ungated it would let an attacker
+    credential-stuff here and bypass the /api/login/ CAPTCHA; shares the "login"
+    action since it's the same form on mobile.
+    """
+
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "token_obtain"
+
+    def post(self, request, *args, **kwargs):
+        if not verify_captcha(request, action="login"):
+            return Response(
+                {"message": "error.captchaFailed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().post(request, *args, **kwargs)
+
+
 class Register(APIView):
     """
     post: registers a new member.
@@ -1046,11 +1089,6 @@ class Register(APIView):
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "register"
 
-    # TODO: layer CAPTCHA (e.g. Cloudflare Turnstile) on top of throttling.
-    # Throttling covers per-IP abuse but a distributed bot can still drift
-    # under the cap. Gate enforcement on a Constance flag + site keys so
-    # fresh installs and CI work without configuration. See PR follow-ups.
-
     def post(self, request):
         if not config.ENABLE_REGISTRATION:
             return Response(
@@ -1059,6 +1097,12 @@ class Register(APIView):
                     "detail": config.REGISTRATION_DISABLED_MESSAGE,
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not verify_captcha(request, action="register"):
+            return Response(
+                {"message": "error.captchaFailed"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = RegisterSerializer(data=request.data)
