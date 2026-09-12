@@ -23,6 +23,7 @@ from profile.models import CancelTriggeredBy, SignupTriggeredBy
 from services.emails import send_email_to_admin
 
 from .stripe_utils import (
+    format_invoice_amount,
     invoice_billing_reason,
     invoice_subscription_id,
     is_subscription_invoice,
@@ -166,14 +167,36 @@ def handle_invoice_paid(ctx):
         return
 
     if profile.state == "active":
-        # A renewal: recorded above, nothing to activate. No member email
-        # either — Stripe sends its own receipt, and the copy below is
-        # signup-specific.
+        # A renewal: recorded above, nothing to activate. Stripe only emails a
+        # payment receipt when "Successful payments" is enabled in the
+        # Dashboard, which is off by default, so send our own — otherwise a
+        # member who has just been charged hears nothing either way.
         profile.user.log_event(
             "Renewal payment recorded (billing_reason="
             f"{invoice_billing_reason(data)}); membership already active.",
             "stripe",
         )
+
+        renewal_subject = "Your membership has been renewed"
+        renewal_message = (
+            f"Thanks — we've received your membership payment of "
+            f"{format_invoice_amount(data)} and your membership continues as "
+            f"normal. You can review your membership at any time at "
+            f"{config.SITE_URL}."
+        )
+
+        def _on_commit_renewal_email(
+            user=profile.user,
+            subject=renewal_subject,
+            message=renewal_message,
+        ):
+            try:
+                user.email_notification(subject, message)
+                user.log_event("Renewal-receipt email sent.", "email")
+            except Exception as e:
+                capture_exception(e)
+
+        transaction.on_commit(_on_commit_renewal_email)
         return
 
     # A new or returning member who has met every requirement.

@@ -246,12 +246,11 @@ class TestIdempotency:
         django_capture_on_commit_callbacks,
     ):
         # Characterising the gap, not endorsing it: with no dedup row to skip
-        # on, every redelivery re-runs the handler. invoice.paid self-limits
-        # (a second delivery finds state="active" and returns down the renewal
-        # path, whose bookkeeping is idempotent and which emails nobody), but
-        # invoice.payment_failed guards on nothing, so the member is emailed
-        # once per delivery across Stripe's ~3 days of retries. Change this to
-        # assert 1 if the guard is ever tightened.
+        # on, every redelivery re-runs the handler and re-sends whatever it
+        # emails — a renewal receipt on the paid path, this warning here. The
+        # dedup row is what normally prevents that, so the exposure only
+        # exists for the falsy-id case above, which Stripe does not produce.
+        # Change this to assert 1 if the guard is ever tightened.
         stripe_event(
             event=build_event(
                 "invoice.payment_failed", build_invoice(status="open"), event_id=""
@@ -688,9 +687,9 @@ class TestRenewal:
         assert renewing_member.subscription_status == "active"
         # Not re-stamped — this is an audit record of the FIRST ever payment.
         assert renewing_member.subscription_first_created == first_created
-        # Renewals are silent: no welcome, no access-enabled, and not the
-        # signup-only "check for another email" copy.
-        assert outbox == []
+        # A renewal receipt, and nothing else: no welcome, no access-enabled,
+        # and not the signup-only "check for another email" copy.
+        assert subjects(outbox) == ["Your membership has been renewed"]
         assert signups == []
         assert any(
             "Renewal payment recorded" in entry for entry in logged(renewing_member)
@@ -764,7 +763,46 @@ class TestRenewal:
         renewing_member.refresh_from_db()
         assert renewing_member.subscription_status == "active"
         assert renewing_member.state == "active"
-        assert outbox == []
+        assert subjects(outbox) == ["Your membership has been renewed"]
+
+    @only()
+    def test_the_renewal_receipt_states_what_was_charged(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(amount_paid=5500, currency="aud"),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert "55.00 AUD" in outbox[0]["HtmlBody"]
+
+    @only()
+    def test_a_renewal_receipt_survives_an_invoice_with_no_amount(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Sending something beats sending copy that reads "$None".
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert subjects(outbox) == ["Your membership has been renewed"]
+        assert "None" not in outbox[0]["HtmlBody"]
 
     @only()
     def test_a_renewal_backfills_a_missing_first_payment_stamp(

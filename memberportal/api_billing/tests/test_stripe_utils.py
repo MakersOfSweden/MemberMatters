@@ -9,6 +9,7 @@ precisely the ones a well-behaved builder would not construct.
 """
 
 from api_billing.stripe_utils import (
+    format_invoice_amount,
     invoice_billing_reason,
     invoice_subscription_id,
     is_subscription_invoice,
@@ -61,6 +62,39 @@ class TestBillingReason:
 
     def test_a_missing_billing_reason_is_none(self):
         assert invoice_billing_reason({}) is None
+
+
+class TestFormatInvoiceAmount:
+    def test_it_renders_cents_as_a_decimal_with_the_currency(self):
+        assert (
+            format_invoice_amount({"amount_paid": 5500, "currency": "aud"})
+            == "55.00 AUD"
+        )
+
+    def test_it_falls_back_to_amount_due(self):
+        # An invoice marked paid out of band carries amount_due but may not
+        # carry amount_paid.
+        assert format_invoice_amount({"amount_due": 1250, "currency": "eur"}) == (
+            "12.50 EUR"
+        )
+
+    def test_amount_paid_wins_when_both_are_present(self):
+        payload = {"amount_paid": 5500, "amount_due": 9900, "currency": "aud"}
+
+        assert format_invoice_amount(payload) == "55.00 AUD"
+
+    def test_a_zero_amount_is_rendered_not_treated_as_missing(self):
+        # A fully discounted renewal is still a renewal.
+        assert (
+            format_invoice_amount({"amount_paid": 0, "currency": "aud"}) == "0.00 AUD"
+        )
+
+    def test_a_missing_currency_yields_the_bare_number(self):
+        assert format_invoice_amount({"amount_paid": 5500}) == "55.00"
+
+    def test_a_payload_with_no_amount_degrades_to_a_description(self):
+        # Never interpolate None into member-facing copy.
+        assert format_invoice_amount({}) == "your membership fee"
 
 
 class TestIsSubscriptionInvoice:
