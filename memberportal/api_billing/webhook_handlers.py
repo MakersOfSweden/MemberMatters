@@ -41,6 +41,7 @@ class UnrecognisedInvoiceSchema(Exception):
 
 class EventScope(enum.Enum):
     IN_SCOPE = "in_scope"
+    ORPHAN_PAID = "orphan_paid"
     IGNORE = "ignore"
 
 
@@ -83,8 +84,66 @@ def classify_event_scope(event_type, data, profile):
         return EventScope.IGNORE
 
     if subscription_id != profile.stripe_subscription_id:
+        # Money has arrived against a subscription we no longer track — the
+        # member's own late payment on a cancelled subscription, or one they
+        # have since replaced. We cannot act on it (there is nothing left to
+        # reinstate, and activating would leave a member with no live
+        # billing), but dropping it silently loses a real payment.
+        if (
+            event_type == "invoice.paid"
+            and data.get("status") == "paid"
+            and is_subscription_invoice(data)
+        ):
+            return EventScope.ORPHAN_PAID
         return EventScope.IGNORE
     return EventScope.IN_SCOPE
+
+
+def handle_orphan_invoice_paid(ctx):
+    """Escalate a payment against a subscription the portal no longer tracks.
+
+    Deliberately changes no state. Reinstating from here would leave an active
+    member whose subscription does not exist, and the portal has no record of
+    what the old subscription was for. A human decides: refund it, or re-enrol
+    them.
+    """
+    profile = ctx.profile
+    data = ctx.data
+    subscription_id = invoice_subscription_id(data)
+    amount = format_invoice_amount(data)
+    invoice_id = data.get("id")
+
+    profile.user.log_event(
+        f"Payment of {amount} received on subscription {subscription_id}, which "
+        f"the portal no longer tracks (invoice {invoice_id}). No state change.",
+        "stripe",
+    )
+
+    full_name = profile.get_full_name()
+    user_email = profile.user.email
+    invoice_number = data.get("number")
+
+    def _on_commit_orphan_paid_admin(user=profile.user):
+        admin_subject = f"Action Required: untracked payment from {full_name}"
+        admin_message = (
+            f"{full_name} ({user_email}) has paid {amount} against Stripe "
+            f"subscription {subscription_id}, which is not the subscription "
+            "the portal has on file for them. Their membership has NOT been "
+            f"changed. Invoice {invoice_id}"
+            f"{f' ({invoice_number})' if invoice_number else ''}. "
+            "Decide whether to refund it in Stripe, or to re-enrol them."
+        )
+        try:
+            send_email_to_admin(
+                subject=admin_subject,
+                template_vars={"title": admin_subject, "message": admin_message},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_orphan_paid_admin)
 
 
 def handle_invoice_paid(ctx):

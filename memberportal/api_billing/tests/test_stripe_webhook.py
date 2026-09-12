@@ -136,10 +136,18 @@ class TestScoping:
         # The dedup row must be written only after scoping, so that an event
         # rejected in error can be fixed and redelivered. If the row were
         # written first, the redelivery would be silently swallowed.
+        #
+        # A one-off invoice, because a *paid subscription* invoice on another
+        # subscription is escalated rather than ignored — see
+        # TestOrphanedPayment.
         stripe_event(
             event=build_event(
                 "invoice.paid",
-                build_invoice(invoice_schema, subscription="sub_somethingelse"),
+                build_invoice(
+                    invoice_schema,
+                    subscription="sub_somethingelse",
+                    billing_reason="manual",
+                ),
             )
         )
 
@@ -1076,6 +1084,161 @@ class TestPaymentFailedCopy:
 
         assert before_subject == "Your membership invoice is awaiting payment"
         assert after_subject == "Your membership invoice is overdue"
+
+
+class TestOrphanedPayment:
+    """A paid invoice against a subscription the portal does not track.
+
+    Reachable whenever stripe_subscription_id has moved on: the member's late
+    payment on a subscription Stripe already cancelled, or one they replaced
+    by re-signing up. Nothing can be reinstated from here — the point is that
+    the money is not lost silently.
+    """
+
+    @pytest.fixture
+    def former_member(self, db):
+        # customer.subscription.deleted nulls stripe_subscription_id, so a
+        # payment arriving afterwards matches no subscription.
+        return ProfileFactory(
+            inactive=True,
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=None,
+        )
+
+    @only()
+    def test_a_late_payment_alerts_an_admin_and_changes_nothing(
+        self,
+        post_webhook,
+        stripe_event,
+        former_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(
+                    subscription="sub_gone",
+                    amount_paid=5500,
+                    currency="aud",
+                    billing_reason="subscription_cycle",
+                ),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            assert post_webhook().status_code == 200
+
+        former_member.refresh_from_db()
+        assert former_member.state == "inactive"
+        assert former_member.subscription_status == "inactive"
+        assert former_member.stripe_subscription_id is None
+
+        assert len(outbox) == 1
+        assert "untracked payment" in outbox[0]["Subject"]
+        body = outbox[0]["HtmlBody"]
+        assert "55.00 AUD" in body
+        assert "sub_gone" in body
+
+    @only()
+    def test_a_redelivery_produces_one_alert_not_one_per_delivery(
+        self,
+        post_webhook,
+        stripe_event,
+        former_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Unlike an out-of-scope event, this branch takes no state action, so
+        # there is nothing to fix and redeliver — it consumes its event id.
+        stripe_event(
+            event=build_event("invoice.paid", build_invoice(subscription="sub_gone"))
+        )
+
+        for _ in range(3):
+            with django_capture_on_commit_callbacks(execute=True):
+                post_webhook()
+
+        assert len(outbox) == 1
+        assert ProcessedStripeEvent.objects.count() == 1
+
+    @only()
+    def test_a_one_off_charge_does_not_alert(
+        self,
+        post_webhook,
+        stripe_event,
+        former_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Admin one-offs and other non-subscription invoices are ordinary.
+        # Alerting on them would bury the signal this exists to raise.
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(subscription="sub_gone", billing_reason="manual"),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+        assert not ProcessedStripeEvent.objects.exists()
+
+    @only()
+    def test_a_payment_on_a_replaced_subscription_leaves_the_new_one_alone(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # The member re-signed up, so they have a live subscription; the stale
+        # payment must not disturb it.
+        profile = ProfileFactory(
+            active=True,
+            subscription_active=True,
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id="sub_new",
+            membership_plan=PaymentPlanFactory(),
+        )
+        stripe_event(
+            event=build_event("invoice.paid", build_invoice(subscription="sub_old"))
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert profile.stripe_subscription_id == "sub_new"
+        assert profile.subscription_status == "active"
+        assert len(outbox) == 1
+        assert "untracked payment" in outbox[0]["Subject"]
+
+    @only()
+    def test_an_unpaid_invoice_on_an_untracked_subscription_is_ignored(
+        self,
+        post_webhook,
+        stripe_event,
+        former_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Only money actually arriving is worth escalating.
+        stripe_event(
+            event=build_event(
+                "invoice.payment_failed",
+                build_invoice(subscription="sub_gone", status="open"),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+        assert not ProcessedStripeEvent.objects.exists()
 
 
 class TestUnrecognisedInvoiceSchema:

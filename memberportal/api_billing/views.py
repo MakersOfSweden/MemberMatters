@@ -15,6 +15,7 @@ from .webhook_handlers import (
     EventScope,
     WebhookContext,
     classify_event_scope,
+    handle_orphan_invoice_paid,
 )
 
 from rest_framework import status, permissions
@@ -1461,10 +1462,8 @@ class StripeWebhook(StripeAPIView):
             # Run the scope check BEFORE the dedup insert so an out-of-scope
             # event doesn't poison its own retries — fix it, redeliver, and
             # processing picks up cleanly.
-            if (
-                classify_event_scope(event_type, data, locked_profile)
-                is EventScope.IGNORE
-            ):
+            scope = classify_event_scope(event_type, data, locked_profile)
+            if scope is EventScope.IGNORE:
                 return Response()
 
             # Idempotency: Stripe retries deliveries for up to ~3 days on non-2xx
@@ -1478,13 +1477,20 @@ class StripeWebhook(StripeAPIView):
                 if not created:
                     return Response()
 
-            handler(
-                WebhookContext(
-                    event_id=event_id,
-                    event_type=event_type,
-                    data=data,
-                    profile=locked_profile,
-                )
+            context = WebhookContext(
+                event_id=event_id,
+                event_type=event_type,
+                data=data,
+                profile=locked_profile,
             )
+
+            # An orphaned payment takes no state action, so unlike an
+            # out-of-scope event there is nothing to fix and redeliver — it
+            # passes through dedup so retries produce one alert, not one per
+            # delivery.
+            if scope is EventScope.ORPHAN_PAID:
+                handle_orphan_invoice_paid(context)
+            else:
+                handler(context)
 
         return Response()
