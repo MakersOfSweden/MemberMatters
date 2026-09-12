@@ -1,0 +1,23 @@
+name: Frontend Tests (vitest)
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # package.json engines allows ^16 || ^18; the runner default is newer.
+          node-version: 18
+          cache: npm
+          cache-dependency-path: src-frontend/package-lock.json
+      - name: Install modules
+        working-directory: ./src-frontend
+        run: npm ci
+      - name: Run tests
+        working-directory: ./src-frontend
+        run: npm test
