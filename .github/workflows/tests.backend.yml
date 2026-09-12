@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           # Matches the version the project is developed against.
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: memberportal/requirements-dev.txt
 
