@@ -364,7 +364,7 @@ def payment_failed_copy(profile, invoice_data, now=None):
     going to be charged automatically, and there is no retry to wait for.
     They need the amount, the due date and a link to pay.
     """
-    amount = format_invoice_amount(invoice_data)
+    amount = format_invoice_amount(invoice_data, prefer="due")
     hosted_url = invoice_data.get("hosted_invoice_url")
     pay_here = f" You can pay it here: {hosted_url}" if hosted_url else ""
 

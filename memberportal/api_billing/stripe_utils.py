@@ -64,15 +64,25 @@ def format_invoice_due_date(invoice_data):
     return timezone.localtime(utc).strftime("%d %b %Y")
 
 
-def format_invoice_amount(invoice_data):
+def format_invoice_amount(invoice_data, prefer="paid"):
     """Render an invoice total for member-facing copy, e.g. "12.50 AUD".
+
+    Pass prefer="due" for an invoice that has not been paid: Stripe reports
+    amount_paid as 0 rather than null on those, so preferring it would quote
+    "0.00" for what is still owed.
 
     Falls back to a bare description when the payload carries no usable
     amount, so an email is still sent rather than one reading "$None".
     """
-    amount = invoice_data.get("amount_paid")
-    if amount is None:
-        amount = invoice_data.get("amount_due")
+    fields = (
+        ("amount_due", "amount_paid")
+        if prefer == "due"
+        else ("amount_paid", "amount_due")
+    )
+    amount = next(
+        (invoice_data[f] for f in fields if invoice_data.get(f) is not None),
+        None,
+    )
     if amount is None:
         return "your membership fee"
 

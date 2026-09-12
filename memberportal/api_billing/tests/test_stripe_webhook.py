@@ -1051,6 +1051,17 @@ class TestPaymentFailedCopy:
         assert "need more time" in message
         assert "try again" not in message
 
+    def test_the_amount_owed_wins_over_stripes_zero_amount_paid(self):
+        # Stripe stamps amount_paid=0 (not null) on an unpaid invoice, so a
+        # real payload carries both fields and the email must quote the debt.
+        _, message = payment_failed_copy(
+            self.invoice_member(),
+            {"amount_paid": 0, "amount_due": 5500, "currency": "aud"},
+        )
+
+        assert "55.00 AUD" in message
+        assert "0.00" not in message
+
     def test_an_invoice_with_no_hosted_url_still_reads_cleanly(self):
         # hosted_invoice_url is absent until Stripe finalizes the invoice.
         _, message = payment_failed_copy(

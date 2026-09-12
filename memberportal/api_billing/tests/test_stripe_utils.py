@@ -89,6 +89,21 @@ class TestFormatInvoiceAmount:
             format_invoice_amount({"amount_paid": 0, "currency": "aud"}) == "0.00 AUD"
         )
 
+    def test_prefer_due_ignores_a_zero_amount_paid(self):
+        # An unpaid invoice carries amount_paid=0, which must not be read as
+        # "nothing is owed" when rendering what the member still has to pay.
+        payload = {"amount_paid": 0, "amount_due": 5500, "currency": "aud"}
+
+        assert format_invoice_amount(payload, prefer="due") == "55.00 AUD"
+
+    def test_prefer_due_still_falls_back_to_amount_paid(self):
+        assert (
+            format_invoice_amount(
+                {"amount_paid": 5500, "currency": "aud"}, prefer="due"
+            )
+            == "55.00 AUD"
+        )
+
     def test_a_missing_currency_yields_the_bare_number(self):
         assert format_invoice_amount({"amount_paid": 5500}) == "55.00"
 
