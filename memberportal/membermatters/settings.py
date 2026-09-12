@@ -295,6 +295,11 @@ LOGGING = {
             "level": os.environ.get("MM_LOG_LEVEL_CANVAS", "INFO"),
             "propagate": False,
         },
+        "captcha": {
+            "handlers": ["console", "file"],
+            "level": os.environ.get("MM_LOG_LEVEL_CAPTCHA", "INFO"),
+            "propagate": False,
+        },
         "api_general:tasks": {
             "handlers": ["console", "file"],
             "level": os.environ.get("MM_LOG_LEVEL_GENERAL_TASKS", "INFO"),
@@ -344,10 +349,12 @@ LOGGING = {
     },
 }
 
-# Number of reverse proxies in front of Django, so DRF reads the real
-# client IP from X-Forwarded-For when throttling. If unset, all visitors
-# can collapse into one throttle bucket. Bundled nginx = 1; +1 per extra
-# layer (CapRover, Cloudflare).
+# Number of reverse proxies in front of Django that add an X-Forwarded-For
+# entry, so DRF can pick the client out of the chain when throttling. Unset,
+# it keys off the whole chain, part of which the caller supplies — vary the
+# header, get a fresh bucket. Too low and every visitor is keyed to a proxy
+# and shares one bucket. The image's own nginx = 1, +1 per layer in front
+# (CapRover, Cloudflare). See docs/GETTING_STARTED.md.
 _num_proxies = os.environ.get("MM_NUM_PROXIES")
 
 REST_FRAMEWORK = {
@@ -371,8 +378,8 @@ REST_FRAMEWORK = {
         "password_reset_request": "10/hour",
         "password_reset_use": "40/hour",
         # Login and the JWT token endpoint were unthrottled. With CAPTCHA on,
-        # each POST triggers a synchronous ~5s outbound verify, so bound it.
-        # Loose (legit users share IPs; CAPTCHA is the real control).
+        # each POST makes a blocking outbound verify, so bound it. Loose
+        # (legit users share IPs; CAPTCHA is the real control).
         "login": os.environ.get("MM_THROTTLE_LOGIN", "120/hour"),
         "token_obtain": os.environ.get("MM_THROTTLE_TOKEN_OBTAIN", "120/hour"),
     },

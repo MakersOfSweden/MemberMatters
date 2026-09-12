@@ -69,9 +69,9 @@ def verify_captcha(request, action=None) -> bool:
         # .json() can raise ValueError — catch it too and fail closed.
         result = resp.json()
     except (requests.RequestException, ValueError):
-        # Log so a Cloudflare outage / bad key (which blocks all gated flows)
-        # is diagnosable.
-        logger.warning("CAPTCHA siteverify request failed", exc_info=True)
+        # Error, not warning: reaching here means signup, login and password
+        # reset are all failing closed, so it should stand out in the log.
+        logger.error("CAPTCHA siteverify request failed", exc_info=True)
         return False
 
     if not result.get("success"):
