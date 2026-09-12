@@ -6,6 +6,7 @@
       :columns="columns"
       row-key="email"
       :filter="filter"
+      :filter-method="fuzzyFilter"
       v-model:pagination="pagination"
       :loading="loading"
       :grid="$q.screen.lt.md"
@@ -145,6 +146,7 @@ import { exportFile } from 'quasar';
 import { stringify } from 'csv-stringify';
 import { mapGetters } from 'vuex';
 import { MemberProfile } from 'types/member';
+import { memberMatchesQuery } from '../../utils/fuzzySearch';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
@@ -266,6 +268,9 @@ export default defineComponent({
     this.getMembers();
   },
   methods: {
+    fuzzyFilter(rows: MemberProfile[], terms: string) {
+      return rows.filter((row) => memberMatchesQuery(row, terms));
+    },
     getMembers() {
       this.loading = true;
       this.$axios
