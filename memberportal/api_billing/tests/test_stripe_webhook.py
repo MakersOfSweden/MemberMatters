@@ -754,6 +754,28 @@ class TestRenewal:
         assert renewing_member.subscription_status == "cancelling"
 
     @only()
+    def test_a_leaving_members_final_invoice_does_not_promise_a_renewal(
+        self,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Reachable for invoice-billed members especially: the renewal invoice
+        # is issued days before it falls due, so it can settle after they have
+        # cancelled. A receipt is still owed — one that says they are leaving.
+        renewing_member.subscription_status = "cancelling"
+        renewing_member.save(update_fields=["subscription_status"])
+        stripe_event(event=build_event("invoice.paid", build_invoice()))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert subjects(outbox) == ["Your final membership payment"]
+        assert "continues as normal" not in outbox[0]["HtmlBody"]
+
+    @only()
     def test_an_out_of_band_renewal_is_indistinguishable_from_a_stripe_one(
         self,
         post_webhook,

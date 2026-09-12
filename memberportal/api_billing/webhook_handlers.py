@@ -239,13 +239,26 @@ def handle_invoice_paid(ctx):
             "stripe",
         )
 
-        renewal_subject = "Your membership has been renewed"
-        renewal_message = (
-            f"Thanks — we've received your membership payment of "
-            f"{format_invoice_amount(data)} and your membership continues as "
-            f"normal. You can review your membership at any time at "
-            f"{config.SITE_URL}."
-        )
+        if profile.subscription_status == "cancelling":
+            # The same case the status re-assert above excludes: the final
+            # invoice of a member who cancelled at period end. They are owed a
+            # receipt, but not one telling them their membership carries on.
+            renewal_subject = "Your final membership payment"
+            renewal_message = (
+                f"Thanks — we've received your membership payment of "
+                f"{format_invoice_amount(data)}. Your membership is still set "
+                f"to end at the end of your current billing period, as you "
+                f"requested. You can review your membership at any time at "
+                f"{config.SITE_URL}."
+            )
+        else:
+            renewal_subject = "Your membership has been renewed"
+            renewal_message = (
+                f"Thanks — we've received your membership payment of "
+                f"{format_invoice_amount(data)} and your membership continues "
+                f"as normal. You can review your membership at any time at "
+                f"{config.SITE_URL}."
+            )
 
         def _on_commit_renewal_email(
             user=profile.user,
