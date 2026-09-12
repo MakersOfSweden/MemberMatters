@@ -4,6 +4,11 @@ Deliberately free of Django models and DB access so `api_admin_tools` can
 import these without creating a cycle back through `api_billing.views`.
 """
 
+from datetime import datetime
+from datetime import timezone as dt_timezone
+
+from django.utils import timezone
+
 
 def invoice_subscription_id(invoice_data):
     # Stripe API 2025-03-31.basil moved Invoice.subscription to
@@ -21,6 +26,42 @@ def invoice_subscription_id(invoice_data):
 
 def invoice_billing_reason(invoice_data):
     return invoice_data.get("billing_reason")
+
+
+def invoice_will_retry(invoice_data):
+    """True when Stripe intends another automatic collection attempt.
+
+    Only meaningful for charge_automatically invoices; send_invoice ones are
+    never auto-retried, so this is always False for them.
+    """
+    return invoice_data.get("next_payment_attempt") is not None
+
+
+def invoice_is_past_due(invoice_data, now=None):
+    """True when the invoice's due date has passed.
+
+    send_invoice invoices carry a due_date; charge_automatically ones do not,
+    and are never past due in this sense.
+    """
+    due_date = invoice_data.get("due_date")
+    if due_date is None:
+        return False
+    reference = now if now is not None else timezone.now()
+    return due_date < int(reference.timestamp())
+
+
+def format_invoice_due_date(invoice_data):
+    """Render an invoice due date in the site's timezone, or None.
+
+    Stripe sends unix seconds; rendering them naively would show a date a day
+    out for members east of UTC.
+    """
+    due_date = invoice_data.get("due_date")
+    if due_date is None:
+        return None
+
+    utc = datetime.fromtimestamp(due_date, tz=dt_timezone.utc)
+    return timezone.localtime(utc).strftime("%d %b %Y")
 
 
 def format_invoice_amount(invoice_data):

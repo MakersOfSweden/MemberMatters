@@ -17,13 +17,19 @@ Two conventions worth knowing before adding cases:
   bump can't quietly break one shape.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 
 import pytest
 from django.utils import timezone
 
 from api_billing.models import ProcessedStripeEvent
-from api_billing.webhook_handlers import HANDLERS, UnrecognisedInvoiceSchema
+from api_billing.stripe_utils import format_invoice_due_date
+from api_billing.webhook_handlers import (
+    HANDLERS,
+    UnrecognisedInvoiceSchema,
+    payment_failed_copy,
+)
 from profile.models import UserEventLog
 from tests.factories import ProfileFactory
 
@@ -261,7 +267,10 @@ class TestIdempotency:
             with django_capture_on_commit_callbacks(execute=True):
                 post_webhook()
 
-        assert subjects(outbox).count("Your membership payment failed") == 3
+        # Deliberately copy-agnostic: what is being pinned is the repetition,
+        # not the wording, which varies by billing method.
+        assert len(outbox) == 3
+        assert len(set(subjects(outbox))) == 1
         assert not ProcessedStripeEvent.objects.exists()
 
 
@@ -956,6 +965,117 @@ class TestInvoicePaymentFailed:
 
         assert outbox == []
         assert not ProcessedStripeEvent.objects.exists()
+
+
+class TestPaymentFailedCopy:
+    """Wording of the failed-payment email, per billing method.
+
+    A manual-renewal member is never charged automatically, so "update your
+    billing method, we'll try again a few times" describes a process that does
+    not exist for them and omits the one thing they need: how to pay.
+    """
+
+    PAST = 1700000000  # 2023-11-14
+    FUTURE = 4102444800  # 2100-01-01
+
+    def card_member(self):
+        return ProfileFactory.build(billing_method="card")
+
+    def invoice_member(self):
+        return ProfileFactory.build(billing_method="invoice")
+
+    def test_a_card_member_with_retries_left_is_not_alarmed(self):
+        subject, message = payment_failed_copy(
+            self.card_member(),
+            {
+                "amount_due": 5500,
+                "currency": "aud",
+                "next_payment_attempt": self.FUTURE,
+            },
+        )
+
+        assert subject == "Your membership payment failed"
+        assert "try again automatically" in message
+        assert "55.00 AUD" in message
+        assert "cancelled" not in message
+
+    def test_a_card_member_out_of_retries_is_told_it_is_the_last_attempt(self):
+        subject, message = payment_failed_copy(
+            self.card_member(),
+            {"amount_due": 5500, "currency": "aud", "next_payment_attempt": None},
+        )
+
+        assert subject == "Action needed: your membership payment failed"
+        assert "last automatic attempt" in message
+        assert "may be cancelled" in message
+
+    def test_an_invoice_member_before_the_due_date_gets_a_link_not_a_warning(self):
+        subject, message = payment_failed_copy(
+            self.invoice_member(),
+            {
+                "amount_due": 5500,
+                "currency": "aud",
+                "due_date": self.FUTURE,
+                "hosted_invoice_url": "https://invoice.stripe.com/i/test",
+            },
+        )
+
+        assert subject == "Your membership invoice is awaiting payment"
+        assert "https://invoice.stripe.com/i/test" in message
+        # The card-flavoured phrases describe machinery this member has none of.
+        assert "billing method" not in message
+        assert "try again" not in message
+
+    def test_an_invoice_member_past_the_due_date_is_told_plainly(self):
+        subject, message = payment_failed_copy(
+            self.invoice_member(),
+            {
+                "amount_due": 5500,
+                "currency": "aud",
+                "due_date": self.PAST,
+                "hosted_invoice_url": "https://invoice.stripe.com/i/test",
+            },
+        )
+
+        assert subject == "Your membership invoice is overdue"
+        assert "was due on" in message
+        assert "https://invoice.stripe.com/i/test" in message
+        assert "need more time" in message
+        assert "try again" not in message
+
+    def test_an_invoice_with_no_hosted_url_still_reads_cleanly(self):
+        # hosted_invoice_url is absent until Stripe finalizes the invoice.
+        _, message = payment_failed_copy(
+            self.invoice_member(), {"amount_due": 5500, "currency": "aud"}
+        )
+
+        assert "None" not in message
+        assert "pay it here" not in message
+
+    def test_the_due_date_is_rendered_in_the_site_timezone(self):
+        # Unix seconds rendered naively show the wrong day east of UTC.
+        _, message = payment_failed_copy(
+            self.invoice_member(),
+            {"amount_due": 5500, "currency": "aud", "due_date": self.PAST},
+        )
+
+        expected = format_invoice_due_date({"due_date": self.PAST})
+        assert expected in message
+
+    def test_now_is_injectable_so_the_boundary_is_testable(self):
+        invoice = {"amount_due": 5500, "currency": "aud", "due_date": self.PAST}
+        just_before = datetime.fromtimestamp(self.PAST - 60, tz=dt_timezone.utc)
+        just_after = datetime.fromtimestamp(self.PAST + 60, tz=dt_timezone.utc)
+
+        before_subject, _ = payment_failed_copy(
+            self.invoice_member(), invoice, now=just_before
+        )
+        after_subject, _ = payment_failed_copy(
+            self.invoice_member(), invoice, now=just_after
+        )
+
+        assert before_subject == "Your membership invoice is awaiting payment"
+        assert after_subject == "Your membership invoice is overdue"
 
 
 class TestUnrecognisedInvoiceSchema:

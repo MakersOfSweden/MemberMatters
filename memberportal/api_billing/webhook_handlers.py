@@ -24,8 +24,11 @@ from services.emails import send_email_to_admin
 
 from .stripe_utils import (
     format_invoice_amount,
+    format_invoice_due_date,
     invoice_billing_reason,
+    invoice_is_past_due,
     invoice_subscription_id,
+    invoice_will_retry,
     is_subscription_invoice,
 )
 
@@ -294,18 +297,62 @@ def handle_invoice_paid(ctx):
         transaction.on_commit(_on_commit_paid_no_activate)
 
 
+def payment_failed_copy(profile, invoice_data, now=None):
+    """Returns (subject, message) for a failed payment.
+
+    Split four ways because "we'll try again a few times, please update your
+    billing method" is wrong for an invoice-billed member: nothing was ever
+    going to be charged automatically, and there is no retry to wait for.
+    They need the amount, the due date and a link to pay.
+    """
+    amount = format_invoice_amount(invoice_data)
+    hosted_url = invoice_data.get("hosted_invoice_url")
+    pay_here = f" You can pay it here: {hosted_url}" if hosted_url else ""
+
+    if profile.billing_method == "invoice":
+        due_date = format_invoice_due_date(invoice_data)
+
+        if invoice_is_past_due(invoice_data, now=now):
+            due_text = f" It was due on {due_date}." if due_date else ""
+            return (
+                "Your membership invoice is overdue",
+                f"Your membership invoice for {amount} hasn't been paid yet."
+                f"{due_text} Please pay it to keep your membership active, or "
+                f"contact us if you need more time.{pay_here}",
+            )
+
+        due_text = f" It's due on {due_date}." if due_date else ""
+        return (
+            "Your membership invoice is awaiting payment",
+            f"Your membership invoice for {amount} is still outstanding."
+            f"{due_text} Please pay it before the due date to keep your "
+            f"membership active.{pay_here}",
+        )
+
+    if invoice_will_retry(invoice_data):
+        return (
+            "Your membership payment failed",
+            f"We tried to collect your membership payment of {amount} but "
+            "weren't successful. We'll try again automatically, so there may "
+            "be nothing for you to do — but it's worth checking the card we "
+            f"have on file is still current at {config.SITE_URL}.",
+        )
+
+    return (
+        "Action needed: your membership payment failed",
+        f"We tried to collect your membership payment of {amount} and weren't "
+        "successful. That was our last automatic attempt, so your membership "
+        "may be cancelled unless the payment goes through. Please update your "
+        f"card at {config.SITE_URL}, or contact us if you need more time.",
+    )
+
+
 def handle_invoice_payment_failed(ctx):
     profile = ctx.profile
 
     profile.user.log_event("Membership payment failed", "stripe")
 
-    failed_subject = "Your membership payment failed"
-    failed_message = (
-        "Hi there, we tried to collect your membership payment but "
-        "weren't successful. Please update your billing method or contact "
-        "us if you need more time. We'll try again a few times, but if we're unable to "
-        "collect your payment soon, your membership may be cancelled."
-    )
+    failed_subject, failed_message = payment_failed_copy(profile, ctx.data)
 
     def _on_commit_payment_failed(
         profile=profile,
