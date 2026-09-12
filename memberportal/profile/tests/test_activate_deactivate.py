@@ -14,22 +14,10 @@ outcome than a missed email, so sync_access() has to be reached regardless.
 import pytest
 
 from profile.models import UserEventLog
-from tests.factories import DoorFactory, ProfileFactory
+from tests.factories import ProfileFactory
+from tests.helpers import member_with_a_door, subjects_to
 
 pytestmark = pytest.mark.django_db
-
-
-def subjects_to(outbox, profile):
-    return [
-        message["Subject"] for message in outbox if message["To"] == profile.user.email
-    ]
-
-
-def member_with_a_door(**kwargs):
-    door = DoorFactory(all_members=True)
-    profile = ProfileFactory(with_rfid=True, **kwargs)
-    profile.add_default_access()
-    return profile, door
 
 
 class TestActivate:

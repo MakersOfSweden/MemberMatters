@@ -13,21 +13,9 @@ It is a property, not a method — reading it runs a can_signup() query.
 import pytest
 
 from tests.factories import PaymentPlanFactory, ProfileFactory
+from tests.helpers import only
 
 pytestmark = pytest.mark.django_db
-
-
-NO_REQUIREMENTS = {
-    "TERMS_ACCEPTANCE_CARDS": "[]",
-    "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS": False,
-    "MOODLE_INDUCTION_ENABLED": False,
-    "CANVAS_INDUCTION_ENABLED": False,
-    "REQUIRE_ACCESS_CARD": False,
-}
-
-
-def only(**overrides):
-    return pytest.mark.override_config(**{**NO_REQUIREMENTS, **overrides})
 
 
 class TestTerminalStates:

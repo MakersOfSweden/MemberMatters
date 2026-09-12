@@ -12,27 +12,11 @@ import pytest
 from django.utils import timezone
 
 from tests.factories import ProfileFactory
+from tests.helpers import only
 
 pytestmark = pytest.mark.django_db
 
-
-# Constance defaults that make can_signup pass, so each test below can switch
-# on exactly the one axis it is about. Note that the shipped defaults are NOT
-# all-off: MOODLE_INDUCTION_ENABLED and REQUIRE_ACCESS_CARD both default True.
-NO_REQUIREMENTS = {
-    "TERMS_ACCEPTANCE_CARDS": "[]",
-    "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS": False,
-    "MOODLE_INDUCTION_ENABLED": False,
-    "CANVAS_INDUCTION_ENABLED": False,
-    "REQUIRE_ACCESS_CARD": False,
-}
-
 TERMS_CARDS = '[{"icon": "mdi-check", "title": "Rules", "body_html": "<p>Hi</p>"}]'
-
-
-def only(**overrides):
-    """override_config with every requirement off except the ones named."""
-    return pytest.mark.override_config(**{**NO_REQUIREMENTS, **overrides})
 
 
 @only()

@@ -172,7 +172,7 @@ from the models:
 | SQLite | 4.72s | **1.82s** |
 | Postgres | 9.24s | **5.87s** |
 
-(Measured at 159 tests. The saving is the migration replay itself — a flat
+(Measured at 176 tests. The saving is the migration replay itself — a flat
 ~3s per run — so it stays roughly constant as the suite grows.)
 
 Two things to know about that default:
@@ -195,9 +195,11 @@ schema changes until you pass `--create-db` once, and it leaves a
 
 ### Writing tests
 
-- Model factories live in `tests/factories.py`; shared fixtures in
-  `conftest.py`. Prefer them over `fixtures/initial.json`, which is production
-  seed data.
+- Model factories live in `tests/factories.py`, shared helpers in
+  `tests/helpers.py`, and fixtures in `conftest.py`. Prefer them over
+  `fixtures/initial.json`, which is production seed data.
+- Collection walks the whole project, so a test file is picked up wherever you
+  put it — no path list to keep in step.
 - Runtime (django-constance) settings are driven with
   `@pytest.mark.override_config(...)`.
 - Outbound network access raises immediately, naming the host. If a test needs

@@ -18,14 +18,9 @@ import pytest
 
 from profile.models import CancelTriggeredBy, CompleteCancelOutcome, UserEventLog
 from tests.factories import DoorFactory, InterlockFactory, ProfileFactory
+from tests.helpers import subjects_to
 
 pytestmark = pytest.mark.django_db
-
-
-def subjects_to(outbox, profile):
-    return [
-        message["Subject"] for message in outbox if message["To"] == profile.user.email
-    ]
 
 
 class TestDeactivation:

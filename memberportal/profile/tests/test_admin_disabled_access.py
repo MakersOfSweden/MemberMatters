@@ -17,28 +17,15 @@ reason, since the raw tag string is never an element of it.
 import pytest
 
 from profile.models import UserEventLog
-from tests.factories import DoorFactory, ProfileFactory
+from tests.factories import ProfileFactory
+from tests.helpers import member_with_a_door, subjects_to
 
 pytestmark = pytest.mark.django_db
-
-
-def subjects_to(outbox, profile):
-    return [
-        message["Subject"] for message in outbox if message["To"] == profile.user.email
-    ]
 
 
 def tags_on(door):
     """The tag list from get_tags()'s (tags, hash) return."""
     return door.get_tags()[0]
-
-
-def member_with_a_door(**kwargs):
-    """An active member holding default access to one all_members door."""
-    door = DoorFactory(all_members=True)
-    profile = ProfileFactory(with_rfid=True, **kwargs)
-    profile.add_default_access()
-    return profile, door
 
 
 class TestTheFlag:

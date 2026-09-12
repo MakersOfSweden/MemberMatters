@@ -18,31 +18,9 @@ from profile.models import (
     UserEventLog,
 )
 from tests.factories import DoorFactory, InterlockFactory, ProfileFactory
+from tests.helpers import only, subjects_to
 
 pytestmark = pytest.mark.django_db
-
-
-# Every signup requirement switched off, so tests that are about the state
-# machine don't have to satisfy can_signup as well. Tests about the
-# requirements gate turn the relevant ones back on.
-NO_REQUIREMENTS = {
-    "TERMS_ACCEPTANCE_CARDS": "[]",
-    "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS": False,
-    "MOODLE_INDUCTION_ENABLED": False,
-    "CANVAS_INDUCTION_ENABLED": False,
-    "REQUIRE_ACCESS_CARD": False,
-}
-
-
-def only(**overrides):
-    """override_config with every signup requirement off except those named."""
-    return pytest.mark.override_config(**{**NO_REQUIREMENTS, **overrides})
-
-
-def subjects_to(outbox, profile):
-    return [
-        message["Subject"] for message in outbox if message["To"] == profile.user.email
-    ]
 
 
 class TestShortCircuits:
