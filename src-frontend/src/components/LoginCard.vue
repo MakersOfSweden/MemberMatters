@@ -70,6 +70,18 @@
               {{ $t('error.requestFailed') }}
             </q-banner>
 
+            <q-banner v-if="captchaError" class="bg-negative text-white">
+              {{ $t(captchaError) }}
+            </q-banner>
+
+            <captcha-widget
+              v-if="features?.enableCaptcha"
+              ref="loginCaptcha"
+              v-model="captchaToken"
+              action="login"
+              @captcha-unavailable="captchaError = 'error.captchaUnavailable'"
+            />
+
             <p class="text-caption">
               {{ $t('loginCard.notAMember') }}
               <router-link
@@ -192,10 +204,26 @@
               autofocus
               @keyup.enter="resetPassword()"
             />
+            <captcha-widget
+              v-if="features?.enableCaptcha"
+              ref="resetCaptcha"
+              v-model="reset.captchaToken"
+              action="password_reset"
+              @captcha-unavailable="
+                reset.captchaError = 'error.captchaUnavailable'
+              "
+            />
           </q-card-section>
 
           <q-banner v-if="reset.success" class="bg-positive text-white q-mx-md">
             {{ $t('loginCard.resetSuccess') }}
+          </q-banner>
+
+          <q-banner
+            v-if="reset.captchaError"
+            class="bg-negative text-white q-mx-md"
+          >
+            {{ $t(reset.captchaError) }}
           </q-banner>
 
           <q-banner v-if="reset.failed" class="bg-negative text-white q-mx-md">
@@ -233,9 +261,11 @@ import formMixin from '../mixins/formMixin';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { LocationQuery } from 'vue-router';
 import { defineComponent } from 'vue';
+import CaptchaWidget from './CaptchaWidget.vue';
 
 export default defineComponent({
   name: 'LoginCard',
+  components: { CaptchaWidget },
   mixins: [formMixin],
   props: {
     resetToken: {
@@ -257,6 +287,8 @@ export default defineComponent({
       loginComplete: false,
       unverifiedEmail: false,
       buttonLoading: false,
+      captchaToken: '',
+      captchaError: false as string | false,
       discourseSsoData: null as LocationQuery | null,
       reset: {
         email: '' as string | null,
@@ -270,6 +302,8 @@ export default defineComponent({
         confirmed: false,
         invalidToken: false,
         disableResetSubmitButton: false,
+        captchaToken: '',
+        captchaError: false as string | false,
       },
     };
   },
@@ -361,12 +395,18 @@ export default defineComponent({
     onSubmit() {
       this.login();
     },
+    // Reset a captcha widget after a spent-token error so the retry carries a
+    // fresh token (Turnstile tokens are single-use).
+    resetCaptcha(ref: 'loginCaptcha' | 'resetCaptcha') {
+      (this.$refs[ref] as { reset: () => void } | undefined)?.reset();
+    },
     /**
      * This sends the login API request to log the user in.
      */
     login() {
       this.loginFailed = false;
       this.loginError = false;
+      this.captchaError = false;
       this.buttonLoading = true;
 
       if (this.discourseSsoData) {
@@ -375,6 +415,7 @@ export default defineComponent({
             email: this.email,
             password: this.password,
             sso: this.discourseSsoData,
+            captchaToken: this.captchaToken,
           })
           .then((response) => {
             this.loginFailed = false;
@@ -384,7 +425,12 @@ export default defineComponent({
             window.location = response.data.redirect;
           })
           .catch((error) => {
-            if (error.response.status === 401) {
+            // Backend verifies (and spends) the token before authenticate(),
+            // so 401/403 consume it too — reset for a fresh retry.
+            this.resetCaptcha('loginCaptcha');
+            if (error.response?.data?.message === 'error.captchaFailed') {
+              this.captchaError = 'error.captchaFailed';
+            } else if (error.response.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
             } else if (error.response.status === 403) {
@@ -405,13 +451,19 @@ export default defineComponent({
           .post('/api/token/obtain/', {
             email: this.email,
             password: this.password,
+            captchaToken: this.captchaToken,
           })
           .then((response) => {
             this.setAuth(response.data);
             this.redirectLoggedIn();
           })
           .catch((error) => {
-            if (error.response.status === 401) {
+            // Backend verifies (and spends) the token before authenticate(),
+            // so 401/403 consume it too — reset for a fresh retry.
+            this.resetCaptcha('loginCaptcha');
+            if (error.response?.data?.message === 'error.captchaFailed') {
+              this.captchaError = 'error.captchaFailed';
+            } else if (error.response.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
             } else if (error.response.status === 403) {
@@ -432,12 +484,16 @@ export default defineComponent({
           .post('/api/login/', {
             email: this.email,
             password: this.password,
+            captchaToken: this.captchaToken,
           })
           .then(() => {
             this.redirectLoggedIn();
           })
           .catch((error) => {
-            if (error.response?.status === 401) {
+            this.resetCaptcha('loginCaptcha');
+            if (error.response?.data?.message === 'error.captchaFailed') {
+              this.captchaError = 'error.captchaFailed';
+            } else if (error.response?.status === 401) {
               this.loginFailed = true;
               this.unverifiedEmail = false;
             } else if (error.response?.status === 403) {
@@ -461,11 +517,13 @@ export default defineComponent({
     resetPassword() {
       this.loginFailed = false;
       this.reset.success = false;
+      this.reset.captchaError = false;
       this.reset.loading = true;
 
       this.$axios
         .post('/api/password/reset/', {
           email: this.reset.email,
+          captchaToken: this.reset.captchaToken,
         })
         .then((response) => {
           if (response.data.success === true) {
@@ -478,7 +536,12 @@ export default defineComponent({
           }
         })
         .catch((error) => {
-          throw error;
+          this.resetCaptcha('resetCaptcha');
+          if (error.response?.data?.message === 'error.captchaFailed') {
+            this.reset.captchaError = 'error.captchaFailed';
+          } else {
+            throw error;
+          }
         })
         .finally(() => {
           this.reset.loading = false;

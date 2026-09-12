@@ -213,6 +213,14 @@
             </router-link>
           </p>
 
+          <captcha-widget
+            v-if="features?.enableCaptcha"
+            ref="captcha"
+            v-model="captchaToken"
+            action="register"
+            @captcha-unavailable="errorExists = 'error.captchaUnavailable'"
+          />
+
           <div class="row">
             <q-space />
             <q-btn
@@ -220,7 +228,9 @@
               type="submit"
               color="primary-btn"
               :loading="buttonLoading"
-              :disable="buttonLoading"
+              :disable="
+                buttonLoading || (features?.enableCaptcha && !captchaToken)
+              "
             />
           </div>
         </q-form>
@@ -239,9 +249,11 @@ import {
   parsePhoneNumberFromString,
   type CountryCode,
 } from 'libphonenumber-js';
+import CaptchaWidget from '../CaptchaWidget.vue';
 
 export default defineComponent({
   name: 'RegistrationCard',
+  components: { CaptchaWidget },
   mixins: [formMixin],
   data() {
     return {
@@ -251,6 +263,7 @@ export default defineComponent({
       validationErrors: [] as string[],
       complete: false,
       buttonLoading: false,
+      captchaToken: '',
       isPwd: true,
       showPrivacyPolicy: false,
       form: {
@@ -313,6 +326,7 @@ export default defineComponent({
           mobile,
           password: this.form.password,
           vehicleRegistrationPlate: this.form.vehicleRegistrationPlate,
+          captchaToken: this.captchaToken,
         })
         .then(() => {
           this.failed = false;
@@ -322,7 +336,10 @@ export default defineComponent({
           this.$router.push({ name: 'registerSuccess' });
         })
         .catch((error) => {
-          if (error.response?.status === 409) {
+          if (error.response?.data?.message === 'error.captchaFailed') {
+            this.errorExists = 'error.captchaFailed';
+            this.error = false;
+          } else if (error.response?.status === 409) {
             this.errorExists = error.response.data.message;
             this.error = false;
           } else if (error.response?.status === 429) {
@@ -350,6 +367,9 @@ export default defineComponent({
             this.error = true;
             this.errorExists = false;
           }
+          // The backend verifies (and Turnstile spends) the token before the
+          // serializer, so any error consumes it — reset for a fresh retry.
+          (this.$refs.captcha as { reset: () => void } | undefined)?.reset();
         })
         .finally(() => {
           this.buttonLoading = false;
