@@ -175,14 +175,13 @@
                 class="q-ml-sm"
                 @click="$router.push({ name: 'login' })"
               />
+              <!-- The emailed token is this form's proof of identity; CAPTCHA
+                   guards only the request-a-reset dialog below. -->
               <q-btn
                 :label="$t('button.submit')"
                 type="submit"
                 color="primary-btn"
-                :disable="
-                  reset.formDisabled ||
-                  (features?.enableCaptcha && !reset.captchaToken)
-                "
+                :disable="reset.formDisabled"
                 :loading="reset.loading"
               />
             </div>
@@ -248,7 +247,10 @@
               flat
               :label="$t('button.submit')"
               :loading="reset.loading"
-              :disable="reset.disableResetSubmitButton"
+              :disable="
+                reset.disableResetSubmitButton ||
+                (features?.enableCaptcha && !reset.captchaToken)
+              "
               @click="resetPassword()"
             />
           </q-card-actions>
