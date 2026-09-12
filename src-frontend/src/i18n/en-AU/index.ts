@@ -66,6 +66,9 @@ export default {
     error: 'Error',
     contactUs: 'Please contact us for help if you continue to see this error.',
     loginFailed: 'Your username or password was incorrect.',
+    captchaFailed: 'CAPTCHA check failed, please try again.',
+    captchaUnavailable:
+      "Couldn't load the CAPTCHA — check your connection and reload.",
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
     screenNameRequired: 'Please enter a screen name.',
