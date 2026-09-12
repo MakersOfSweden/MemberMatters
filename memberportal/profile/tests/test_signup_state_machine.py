@@ -11,7 +11,12 @@ audit trail, since that is the sink an operator actually sees.
 
 import pytest
 
-from profile.models import CompleteSignupOutcome, SignupTriggeredBy, UserEventLog
+from profile.models import (
+    CompleteSignupOutcome,
+    Profile,
+    SignupTriggeredBy,
+    UserEventLog,
+)
 from tests.factories import DoorFactory, InterlockFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -124,6 +129,38 @@ class TestStateLock:
         assert result.outcome == CompleteSignupOutcome.ACTIVATED
         profile.refresh_from_db()
         assert profile.state == "active"
+
+
+class TestTheLockedRow:
+    """Every decision is made on the row re-read under select_for_update.
+
+    The lock-and-re-read exists so a caller holding a stale instance — a
+    webhook retry, a queued task — cannot drive the state machine from values
+    that have since changed. Reading `self` instead of the re-read copy is
+    invisible to every other test here, because they all act on an instance
+    that already agrees with the database.
+    """
+
+    @only()
+    def test_a_stale_instance_does_not_win_over_the_locked_row(self):
+        profile = ProfileFactory()
+        Profile.objects.filter(pk=profile.pk).update(state_locked=True)
+        assert profile.state_locked is False  # stale in memory
+
+        result = profile.complete_signup(SignupTriggeredBy.MEMBER_SELF_SERVE)
+
+        assert result.outcome == CompleteSignupOutcome.STATE_LOCKED
+        profile.refresh_from_db()
+        assert profile.state == "noob"
+
+    @only()
+    def test_a_stale_instance_does_not_reactivate_an_active_member(self):
+        profile = ProfileFactory()
+        Profile.objects.filter(pk=profile.pk).update(state="active")
+
+        result = profile.complete_signup(SignupTriggeredBy.MEMBER_SELF_SERVE)
+
+        assert result.outcome == CompleteSignupOutcome.ALREADY_ACTIVE
 
 
 class TestSubscriptionGate:

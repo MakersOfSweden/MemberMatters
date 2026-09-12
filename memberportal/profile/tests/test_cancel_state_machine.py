@@ -147,6 +147,17 @@ class TestStateLock:
         assert refusals.count() == 1
         assert "triggered_by=subscription_deleted" in refusals.first().description
 
+    def test_an_operator_is_nudged_by_email(self, outbox):
+        # The refusal has four sinks; the audit log above is the one an
+        # operator browses, this is the one that reaches them unprompted.
+        profile = ProfileFactory(active=True, state_locked=True)
+
+        profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
+
+        assert any(
+            "cancellation preserved state" in message["Subject"] for message in outbox
+        )
+
     def test_unlocking_first_is_what_lets_a_cancel_through(self):
         profile = ProfileFactory(active=True, state_locked=True)
 

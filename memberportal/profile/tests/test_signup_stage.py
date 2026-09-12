@@ -95,6 +95,19 @@ class TestTheNoobFunnel:
 
         assert profile.signup_stage == "awaiting_payment"
 
+    @only(ENABLE_STRIPE_MEMBERSHIP_PAYMENTS=True, REQUIRE_ACCESS_CARD=True)
+    def test_unmet_requirements_outrank_a_pending_payment(self):
+        # The ordering the source comment defends: an invoice signup goes
+        # "pending" at billing time, before terms/induction/access card, so a
+        # member can be both awaiting payment and short of requirements. The
+        # requirements screen wins — swapping the two branches is otherwise
+        # invisible, since no other test has a member in both positions.
+        profile = ProfileFactory(
+            membership_plan=PaymentPlanFactory(), subscription_pending=True, rfid=None
+        )
+
+        assert profile.signup_stage == "needs_requirements"
+
     @only()
     def test_everything_satisfied_still_falls_through_to_needs_requirements(self):
         # Current behaviour, pinned rather than endorsed: with a plan chosen,

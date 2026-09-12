@@ -258,6 +258,20 @@ class TestDeactivate:
 
         assert (door.serial_number, {"type": "sync_users"}) in device_commands
 
+    def test_an_admin_deactivation_is_recorded_against_both_parties(
+        self, admin_request
+    ):
+        profile = ProfileFactory(active=True)
+
+        profile.deactivate(request=admin_request)
+
+        assert UserEventLog.objects.filter(
+            user=profile.user, description__contains="deactivated member"
+        ).exists()
+        assert UserEventLog.objects.filter(
+            user=admin_request.user, description__contains=profile.get_full_name()
+        ).exists()
+
     def test_a_systemic_deactivation_is_recorded_as_system(self):
         profile = ProfileFactory(active=True)
 
