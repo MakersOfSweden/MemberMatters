@@ -496,9 +496,12 @@ export default {
     unlockAccountDescription:
       'Medlemmen kommer återigen att kunna registrera sig för en medlemsplan.',
     lockUnavailableTooltip:
-      'Låsning är endast tillgänglig för icke-aktiva medlemmar utan en pågående prenumeration.',
-    lockNotAllowed:
-      'Kan inte låsa en medlem som är aktiv eller har en pågående prenumeration.',
+      'Låsning är endast tillgänglig för medlemmar som inte är aktiva.',
+    lockNotAllowed: 'Kan inte låsa en medlem som är aktiv.',
+    activateLockedTooltip:
+      'Den här medlemmen är låst. Lås upp kontot innan du aktiverar dem.',
+    activateLockedNotAllowed:
+      'Kan inte aktivera en låst medlem — lås upp kontot först.',
     stateLockedTooltip:
       'Konto låst — automatiserade flöden (webhooks, självbetjäningsregistrering) kommer inte att ändra medlemmens status.',
     sendWelcomeEmail: 'Skicka välkomst-mail',

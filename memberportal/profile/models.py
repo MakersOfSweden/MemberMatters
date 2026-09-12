@@ -566,8 +566,8 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
         subject = f"Locked member {name}: {action} preserved state"
         message = (
             f"{action.capitalize()} for locked member {name} was triggered "
-            f"by {triggered_label}. State kept as {self.state}. Review "
-            "whether their grandfathered access still applies."
+            f"by {triggered_label}. State kept as {self.state}. Unlock the "
+            "account if the change should go ahead."
         )
         try:
             send_email_to_admin(
@@ -587,18 +587,15 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             if locked.state == "active":
                 return CompleteSignupResult(CompleteSignupOutcome.ALREADY_ACTIVE)
 
-            if (
-                locked.state_locked
-                and triggered_by != SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE
-            ):
+            # No exemption for an admin override. The override exists to skip
+            # the checks the system inferred (billing, signup requirements);
+            # a lock is a decision an operator recorded, and only an explicit
+            # unlock clears it.
+            if locked.state_locked:
                 locked._log_state_lock_refusal(triggered_by, "activation")
                 return CompleteSignupResult(CompleteSignupOutcome.STATE_LOCKED)
 
             if triggered_by == SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE:
-                # An active member is never locked (the state_locked invariant).
-                if locked.state_locked:
-                    locked.state_locked = False
-                    locked.save(update_fields=["state_locked"])
                 locked.add_default_access()
             else:
                 if (
@@ -735,11 +732,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
                     previous_state=previous_state,
                 )
 
-            if (
-                previous_state == "active"
-                and locked.state_locked
-                and triggered_by != CancelTriggeredBy.ADMIN_OVERRIDE_CANCEL
-            ):
+            if previous_state == "active" and locked.state_locked:
                 self._log_state_lock_refusal(triggered_by, "cancellation")
                 return CompleteCancelResult(
                     outcome=CompleteCancelOutcome.STATE_LOCKED,
@@ -848,12 +841,16 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
     def set_state_locked(self, locked, request=None):
         # Returns False if locking was refused; unlocking always succeeds.
+        #
+        # The lock freezes `state`: no trigger moves it until an explicit
+        # unlock. That only means something while a member is noob or
+        # inactive, so locking an active one is refused. Refusal is on `state`
+        # alone — a member whose invoice is still pending is exactly who an
+        # operator locks, to stop invoice.paid activating them.
         with transaction.atomic():
             profile = Profile.objects.select_for_update().get(pk=self.pk)
 
-            if locked and (
-                profile.state == "active" or profile.subscription_status != "inactive"
-            ):
+            if locked and profile.state == "active":
                 return False
 
             if profile.state_locked == locked:

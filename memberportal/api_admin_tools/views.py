@@ -32,6 +32,7 @@ from memberbucks.models import (
     MemberbucksProductPurchaseLog,
 )
 from profile.models import (
+    CompleteSignupOutcome,
     Profile,
     SignupTriggeredBy,
     CancelTriggeredBy,
@@ -110,6 +111,10 @@ class MakeMember(APIView):
     """
     post: Activate a member ("Make Member") — admin override.
 
+    Refused (409) for a locked member: the lock is cleared by an explicit
+    unlock, never as a side effect of activating. The override skips the
+    billing and requirements gates, not an operator's decision.
+
     Deactivation is not handled here — it flows through
     MemberCancelMembership.
     """
@@ -122,6 +127,12 @@ class MakeMember(APIView):
             SignupTriggeredBy.ADMIN_OVERRIDE_ACTIVATE,
             request=request,
         )
+        if result.outcome == CompleteSignupOutcome.STATE_LOCKED:
+            return Response(
+                {"success": False, "message": "adminTools.activateLockedNotAllowed"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         return Response({"success": True, "outcome": result.outcome.value})
 
 
@@ -436,8 +447,9 @@ class MemberStateLock(APIView):
     post: Lock or unlock a member's state against automated changes.
 
     Body: {"locked": true|false}. Locking is refused (409) for an active
-    member or one with a live subscription — see Profile.set_state_locked
-    and the state_locked invariant.
+    member: the lock guards against automated activation, so it is only
+    meaningful while a member is noob or inactive. A live subscription is
+    not grounds for refusal — see Profile.set_state_locked.
     """
 
     permission_classes = (permissions.IsAdminUser,)
