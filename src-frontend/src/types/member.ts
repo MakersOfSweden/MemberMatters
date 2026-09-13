@@ -44,6 +44,9 @@ export const MemberProfileSchema = z.object({
   subscriptionStatus: SubscriptionStateSchema,
   stateLocked: z.boolean(),
   adminDisabledAccess: z.boolean(),
+  // Presence flag only; the note body is fetched per-member from
+  // /api/admin/members/<id>/notes/ and never travels on the list payload.
+  hasAdminNotes: z.boolean(),
 });
 
 export type MemberProfile = z.infer<typeof MemberProfileSchema>;

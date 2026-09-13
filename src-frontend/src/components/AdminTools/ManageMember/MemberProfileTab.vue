@@ -260,6 +260,51 @@
         :class="{ 'q-px-sm': $q.screen.xs, 'q-px-lg': !$q.screen.xs }"
       >
         <h5 class="q-my-sm">
+          {{ $t('adminTools.adminNotes') }}
+        </h5>
+
+        <q-input
+          v-model="notesForm.adminNotes"
+          outlined
+          type="textarea"
+          autogrow
+          input-style="min-height: 140px"
+          :disable="notesLoading"
+          :hint="$t('adminTools.adminNotesHint')"
+          :error="notesTooLong || Boolean(notesErrorMessageKey)"
+          :error-message="
+            notesTooLong
+              ? $t('error.adminNotesTooLong', { max: adminNotesMaxLength })
+              : notesErrorMessageKey
+              ? $t(notesErrorMessageKey)
+              : ''
+          "
+        />
+
+        <div class="row justify-between items-center q-mt-sm">
+          <div
+            class="text-caption"
+            :class="notesTooLong ? 'text-negative' : 'text-grey-7'"
+          >
+            {{ notesForm.adminNotes.length }} / {{ adminNotesMaxLength }}
+          </div>
+
+          <q-btn
+            :label="$t('button.submit')"
+            color="primary"
+            :loading="notesSaving"
+            :disable="
+              notesSaving || notesLoading || !notesDirty || notesTooLong
+            "
+            @click="saveAdminNotes"
+          />
+        </div>
+
+        <q-banner v-if="notesSuccess" class="bg-positive text-white q-mt-sm">
+          {{ $t('form.saved') }}
+        </q-banner>
+
+        <h5 class="q-mt-md q-mb-sm">
           {{ $t('adminTools.otherAttributes') }}
         </h5>
 
@@ -681,10 +726,24 @@ export default defineComponent({
       smsSendLoading: false,
       smsModalIsOpen: false,
       smsBody: '',
+      notesForm: {
+        adminNotes: '',
+      },
+      initialNotesSnapshot: '',
+      notesLoading: false,
+      notesSaving: false,
+      notesSuccess: false,
+      notesErrorMessageKey: null as string | null,
+      // Mirrors ADMIN_NOTES_MAX_LENGTH in profile/models.py. Kept as a plain
+      // constant rather than a maxlength attribute: the browser truncates a
+      // paste that exceeds maxlength, and losing the tail of a pasted incident
+      // record silently is the one thing the backend refuses to do.
+      adminNotesMaxLength: 10000,
     };
   },
   beforeMount() {
     this.loadInitialForm();
+    this.loadAdminNotes();
   },
   methods: {
     // Normalise a phone number to E.164 using the region computed
@@ -709,6 +768,48 @@ export default defineComponent({
       this.profileForm.vehicleRegistrationPlate =
         this.selectedMember.vehicleRegistrationPlate ?? '';
       this.initialFormSnapshot = JSON.stringify(this.profileForm);
+    },
+    loadAdminNotes() {
+      this.notesLoading = true;
+      this.notesErrorMessageKey = null;
+
+      this.$axios
+        .get(`/api/admin/members/${this.member.id}/notes/`)
+        .then((response) => {
+          this.notesForm.adminNotes = response.data.adminNotes ?? '';
+          this.initialNotesSnapshot = this.notesForm.adminNotes;
+        })
+        .catch(() => {
+          this.notesErrorMessageKey = 'error.requestFailed';
+        })
+        .finally(() => {
+          this.notesLoading = false;
+        });
+    },
+    saveAdminNotes() {
+      this.notesSuccess = false;
+      this.notesErrorMessageKey = null;
+      this.notesSaving = true;
+
+      this.$axios
+        .put(`/api/admin/members/${this.member.id}/notes/`, {
+          adminNotes: this.notesForm.adminNotes,
+        })
+        .then((response) => {
+          this.notesForm.adminNotes = response.data.adminNotes ?? '';
+          this.initialNotesSnapshot = this.notesForm.adminNotes;
+          this.notesSuccess = true;
+          // Refreshes the list so hasAdminNotes — and the indicator it drives
+          // — reflects a note that was just added or cleared.
+          this.$emit('memberUpdated');
+        })
+        .catch((err) => {
+          this.notesErrorMessageKey =
+            err?.response?.data?.message ?? 'error.requestFailed';
+        })
+        .finally(() => {
+          this.notesSaving = false;
+        });
     },
     onSubmit() {
       this.success = false;
@@ -978,10 +1079,22 @@ export default defineComponent({
     isDirty(): boolean {
       return JSON.stringify(this.profileForm) !== this.initialFormSnapshot;
     },
+    notesDirty(): boolean {
+      return this.notesForm.adminNotes !== this.initialNotesSnapshot;
+    },
+    notesTooLong(): boolean {
+      return this.notesForm.adminNotes.length > this.adminNotesMaxLength;
+    },
   },
   watch: {
     member() {
       this.loadInitialForm();
+      this.loadAdminNotes();
+    },
+    'notesForm.adminNotes'() {
+      if (!this.notesDirty) return;
+      this.notesSuccess = false;
+      this.notesErrorMessageKey = null;
     },
     profileForm: {
       deep: true,

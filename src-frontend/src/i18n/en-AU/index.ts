@@ -71,6 +71,8 @@ export default {
     screenNameRequired: 'Please enter a screen name.',
     registrationClosed: 'Registrations are currently closed.',
     downloadFailed: 'Failed to download the file.',
+    adminNotesTooLong:
+      'That note is too long. The limit is {max} characters — nothing has been saved.',
     requestFailed:
       "Sorry, we're having trouble performing that action. Please try again later.",
     tooManyRequests:
@@ -548,6 +550,9 @@ export default {
     userInterlockLogs: 'Interlock Session Logs',
     stats: 'Stats',
     mainProfile: 'Main Profile',
+    adminNotes: 'Admin Notes',
+    adminNotesHint:
+      'Only visible to admins. The member cannot see this, and it is not included in exports.',
     otherAttributes: 'Account Info',
     memberDates: 'Important Dates',
     lastInduction: 'Last Induction',

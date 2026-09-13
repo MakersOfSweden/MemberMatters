@@ -69,6 +69,8 @@ export default {
     screenNameRequired: 'Ange ett användarnamn.',
     registrationClosed: 'Registrering är just nu stängd.',
     downloadFailed: 'Misslyckades att ladda hem filen.',
+    adminNotesTooLong:
+      'Anteckningen är för lång. Gränsen är {max} tecken — ingenting har sparats.',
     requestFailed: 'Det har uppstått ett fel. Försök igen senare.',
     tooManyRequests:
       'För många försök från ditt nätverk. Vänta en stund och försök sedan igen.',
@@ -536,6 +538,9 @@ export default {
     userInterlockLogs: 'Lås Session Logs',
     stats: 'Stats',
     mainProfile: 'Huvudprofil',
+    adminNotes: 'Administratörsanteckningar',
+    adminNotesHint:
+      'Syns endast för administratörer. Medlemmen kan inte se detta, och det ingår inte i exporter.',
     otherAttributes: 'Kontoinformation',
     memberDates: 'Viktiga datum',
     lastInduction: 'Senaste introduktion',
