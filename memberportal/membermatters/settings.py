@@ -352,8 +352,9 @@ LOGGING = {
 # Number of reverse proxies in front of Django that add an X-Forwarded-For
 # entry, so DRF can pick the client out of the chain when throttling. Unset,
 # it keys off the whole chain, part of which the caller supplies — vary the
-# header, get a fresh bucket. Too low and every visitor is keyed to a proxy
-# and shares one bucket. The image's own nginx = 1, +1 per layer in front
+# header, get a fresh bucket. Too high is just as bad: it picks an entry the
+# caller wrote. Too low and every visitor is keyed to a proxy and shares one
+# bucket. The image's own nginx = 1, +1 per layer in front
 # (CapRover, Cloudflare). See docs/GETTING_STARTED.md.
 _num_proxies = os.environ.get("MM_NUM_PROXIES")
 
