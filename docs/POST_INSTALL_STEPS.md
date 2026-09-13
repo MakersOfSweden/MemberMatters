@@ -52,6 +52,7 @@ server {
 8. Configure your firewall to allow Nginx.  For servers running UFW - Uncomplicated Firewall, the following command will work after Nginx is installed: `sudo ufw allow "Nginx Full"`
 9. Note that this process does not include a configuration for HTTPS. We recommend that you use the Let's Encrypt Certbot tool as it will automatically modify your configuration to enable HTTPS and manage certificates for you. [Click here](https://certbot.eff.org/instructions) Select "Nginx" and your OS and then follow the instructions to install certbot on your system. Once installed, run certbot as per that link and follow the prompts to enable HTTPS for your system.
 10. Check that you can access your instance of MemberMatters via HTTPS at the URL that you configured.
+11. Set `MM_NUM_PROXIES=2` in your `env.list` and restart the container. The proxy you just configured sits in front of the container's own nginx, so there are now two hops adding an `X-Forwarded-For` entry, and MemberMatters needs the count to identify the real client when rate limiting signup, login and password reset. Add one more for each additional layer, such as Cloudflare. See [Getting Started](GETTING_STARTED.md) for what goes wrong if this is unset or wrong.
 
 ## Customisation
 The primary way to customise MemberMatters is via the database settings. Once your instance is up and running,
@@ -115,6 +116,39 @@ However, as noted below, currencies will use a hardcoded value set by a configur
     this takes precedence over `SIGNUP_PRIVACY_POLICY_URL` — the consent checkbox label shows a link that opens a
     dialog displaying this text (line breaks are preserved). Use this if you'd rather keep the policy in
     MemberMatters than link out to a separate document.
+
+### CAPTCHA (Bot Protection)
+Adds a [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) challenge to signup, login and
+"forgot password" requests. Rate limiting alone only stops a crude script, because it counts per address and a
+distributed bot stays under the cap. Turnstile is free; create a widget in the Cloudflare dashboard under "Turnstile"
+to get your keys.
+
+  * "ENABLE_CAPTCHA" - turn the challenge on. Nothing happens until this is `True` **and** both keys below are set, so
+    an install with no keys behaves exactly as before. Defaults to `False`.
+  * "CAPTCHA_SITE_KEY" - the public site key, sent to the browser.
+  * "CAPTCHA_SECRET_KEY" - the private secret key, used only for server-side verification. Treat it like a password.
+  * "CAPTCHA_ALLOWED_HOSTNAMES" - optional comma-separated list of hostnames a challenge may be solved on, e.g.
+    `portal.example.org`. Your site key is public, so without this someone can embed it on their own page and farm
+    valid tokens. Leave it **empty** if members use the mobile app, whose challenges are solved on a `localhost`
+    origin that won't match your domain.
+
+Add every hostname your portal answers on to the widget's domain list in the Cloudflare dashboard, or the challenge
+won't load for your members.
+
+Some things to know before you turn this on:
+
+  * **Test it from a phone before rolling it out**, if your members use the mobile app. The app is not served from
+    your domain, and a Cloudflare widget will only run on origins it recognises. If the challenge can't load, the
+    login form shows an error with a retry button rather than letting anyone in — the server requires a solved
+    challenge no matter which app is asking.
+  * **Kiosks should be signed in with an RFID card.** Kiosk card readers are unaffected, but the password form on a
+    kiosk built as a desktop app can't run the challenge at all.
+  * **If Cloudflare is unreachable, signup, login and password resets stop working** — a challenge that can't be
+    verified is treated as failed. Members who are already signed in stay signed in, and the Django admin login at
+    `/admin` is never challenged, so you can always get in and switch "ENABLE_CAPTCHA" back off. Failures are recorded
+    in the log as "captcha" entries.
+  * **Anything that isn't a browser breaks**, including monitoring checks and scripts that post to `/api/register/`,
+    `/api/login/`, `/api/token/obtain/` or `/api/password/reset/`.
 
 ### Canvas Integration
   * "CANVAS_API_TOKEN" - the API token for the Canvas LMS integration.

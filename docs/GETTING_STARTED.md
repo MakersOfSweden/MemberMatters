@@ -20,6 +20,7 @@ variables from. You'll need at least the following:
 MM_ENV=Production
 MM_SECRET_KEY=<generate a long random string, keep it private>
 MM_ALLOWED_HOSTS=portal.example.org,www.example.org
+MM_NUM_PROXIES=1
 ```
 
 > **Required in production.** When `MM_ENV=Production`, the container refuses to boot
@@ -42,6 +43,23 @@ MM_ALLOWED_HOSTS=portal.example.org,www.example.org
 > those templates, propagate the variables to the worker and beat services too (a YAML
 > anchor or `env_file:` shared across services keeps it DRY). The `--env-file` quickstart
 > above is single-container and is unaffected.
+
+> **Set the proxy hop count.** `MM_NUM_PROXIES` is the number of proxies that add an
+> `X-Forwarded-For` entry in front of the application, and rate limiting on signup,
+> login and password reset needs it to identify the real client. The container runs its
+> own nginx in front of the app, so that hop always counts, which is the `1` above. Add one
+> for every layer you put in front of the container: the nginx reverse proxy in
+> [Post Installation Steps](POST_INSTALL_STEPS.md) brings it to `2`, and putting
+> Cloudflare in front of that brings it to `3`.
+>
+> - **Left unset**, MemberMatters can't tell which entry in the forwarded chain is the
+>   client, so it uses the whole chain. A caller can put anything in that header, so they
+>   get a fresh allowance on every request and the limits stop applying.
+> - **Set too high**, MemberMatters reads the client from an entry the caller wrote
+>   themselves, so — just as when it's unset — they pick their own allowance. Only raise
+>   it when you actually add a proxy in front.
+> - **Set too low**, every visitor looks like your proxy and they all share one allowance,
+>   so ordinary traffic trips the limit and members get locked out.
 
 Once you've downloaded the docker image and configured your environment variables, you'll need to create a container
 and mount a volume. Replace `/usr/app/` with the location you'd like to store your database and other data.

@@ -64,6 +64,9 @@ export default {
     error: 'Fel',
     contactUs: 'Kontakta osss om du fortsätter få detta fel.',
     loginFailed: 'Ditt användarnamn eller lösenord är felaktigt.',
+    captchaFailed: 'CAPTCHA-kontrollen misslyckades, försök igen.',
+    captchaUnavailable:
+      'Det gick inte att ladda CAPTCHA — kontrollera din anslutning och försök igen.',
     accountAlreadyExists: 'Denna email används redan.',
     screenNameAlreadyExists: 'Detta användarnamn är redan taget.',
     screenNameRequired: 'Ange ett användarnamn.',
@@ -157,6 +160,7 @@ export default {
     ok: 'Ok',
     confirm: 'Bekräfta',
     reset: 'Återställ',
+    retry: 'Försök igen',
     cancel: 'Avbryt',
     close: 'Stäng',
     connect: 'Anlsut',
