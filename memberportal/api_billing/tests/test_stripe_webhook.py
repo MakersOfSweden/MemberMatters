@@ -30,7 +30,7 @@ from api_billing.webhook_handlers import (
     UnrecognisedInvoiceSchema,
     payment_failed_copy,
 )
-from profile.models import UserEventLog
+from profile.models import SignupTriggeredBy, UserEventLog
 from tests.factories import ProfileFactory
 
 from .conftest import (
@@ -324,6 +324,40 @@ class TestInvoicePaidActivates:
         assert member_mail[0] == "Your payment was successful."
         # activate() sends at least one further member-facing email.
         assert len(member_mail) > 1
+
+    @only()
+    def test_a_card_signup_activated_in_the_request_is_not_told_it_renewed(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # PaymentPlanSignup activates a card member who already meets every
+        # requirement before Stripe delivers invoice.paid for the first invoice.
+        profile = ProfileFactory(
+            subscription_active=True,
+            billing_method="card",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        with django_capture_on_commit_callbacks(execute=True):
+            profile.complete_signup(SignupTriggeredBy.SUBSCRIPTION_CREATED)
+        assert profile.state == "active"
+        signup_mail = len(outbox)
+
+        stripe_event(
+            event=build_event(
+                "invoice.paid", build_invoice(billing_reason="subscription_create")
+            )
+        )
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert subjects(outbox[signup_mail:]) == [
+            "Your membership payment was received"
+        ]
 
     @only(MOODLE_INDUCTION_ENABLED=True)
     def test_an_unmet_requirement_records_payment_without_granting_access(
@@ -709,7 +743,8 @@ class TestRenewal:
         assert subjects(outbox) == ["Your membership has been renewed"]
         assert signups == []
         assert any(
-            "Renewal payment recorded" in entry for entry in logged(renewing_member)
+            "Payment recorded (billing_reason=subscription_cycle)" in entry
+            for entry in logged(renewing_member)
         )
 
     @only()
@@ -842,6 +877,36 @@ class TestRenewal:
 
         assert subjects(outbox) == ["Your membership has been renewed"]
         assert "None" not in outbox[0]["HtmlBody"]
+
+    @only()
+    @pytest.mark.parametrize(
+        "billing_reason",
+        ["subscription_create", "subscription_update", "subscription_threshold"],
+    )
+    def test_an_off_cycle_payment_gets_a_receipt_not_a_renewal_notice(
+        self,
+        billing_reason,
+        post_webhook,
+        stripe_event,
+        renewing_member,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(
+                    billing_reason=billing_reason, amount_paid=5500, currency="aud"
+                ),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert subjects(outbox) == ["Your membership payment was received"]
+        assert "55.00 AUD" in outbox[0]["HtmlBody"]
+        assert "continues as normal" not in outbox[0]["HtmlBody"]
 
     @only()
     def test_a_renewal_backfills_a_missing_first_payment_stamp(

@@ -229,13 +229,15 @@ def handle_invoice_paid(ctx):
         return
 
     if profile.state == "active":
-        # A renewal: recorded above, nothing to activate. Stripe only emails a
-        # payment receipt when "Successful payments" is enabled in the
-        # Dashboard, which is off by default, so send our own — otherwise a
-        # member who has just been charged hears nothing either way.
+        # Nothing to activate. Stripe only emails a payment receipt when
+        # "Successful payments" is enabled in the Dashboard, which is off by
+        # default, so send our own — otherwise a member who has just been
+        # charged hears nothing either way.
+        billing_reason = invoice_billing_reason(data)
+        amount = format_invoice_amount(data)
         profile.user.log_event(
-            "Renewal payment recorded (billing_reason="
-            f"{invoice_billing_reason(data)}); membership already active.",
+            f"Payment recorded (billing_reason={billing_reason}); "
+            "membership already active.",
             "stripe",
         )
 
@@ -243,35 +245,43 @@ def handle_invoice_paid(ctx):
             # The same case the status re-assert above excludes: the final
             # invoice of a member who cancelled at period end. They are owed a
             # receipt, but not one telling them their membership carries on.
-            renewal_subject = "Your final membership payment"
-            renewal_message = (
-                f"Thanks — we've received your membership payment of "
-                f"{format_invoice_amount(data)}. Your membership is still set "
-                f"to end at the end of your current billing period, as you "
-                f"requested. You can review your membership at any time at "
-                f"{config.SITE_URL}."
+            receipt_subject = "Your final membership payment"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount}. "
+                "Your membership is still set to end at the end of your current "
+                "billing period, as you requested. You can review your "
+                f"membership at any time at {config.SITE_URL}."
+            )
+        elif billing_reason == "subscription_cycle":
+            receipt_subject = "Your membership has been renewed"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount} "
+                "and your membership continues as normal. You can review your "
+                f"membership at any time at {config.SITE_URL}."
             )
         else:
-            renewal_subject = "Your membership has been renewed"
-            renewal_message = (
-                f"Thanks — we've received your membership payment of "
-                f"{format_invoice_amount(data)} and your membership continues "
-                f"as normal. You can review your membership at any time at "
+            # Not a renewal. Usually the first invoice of a card signup:
+            # PaymentPlanSignup activates the member within the request, so
+            # this webhook tends to land after they are already active.
+            receipt_subject = "Your membership payment was received"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount}. "
+                "You can review your membership at any time at "
                 f"{config.SITE_URL}."
             )
 
-        def _on_commit_renewal_email(
+        def _on_commit_receipt_email(
             user=profile.user,
-            subject=renewal_subject,
-            message=renewal_message,
+            subject=receipt_subject,
+            message=receipt_message,
         ):
             try:
                 user.email_notification(subject, message)
-                user.log_event("Renewal-receipt email sent.", "email")
+                user.log_event("Payment-receipt email sent.", "email")
             except Exception as e:
                 capture_exception(e)
 
-        transaction.on_commit(_on_commit_renewal_email)
+        transaction.on_commit(_on_commit_receipt_email)
         return
 
     # A new or returning member who has met every requirement.
