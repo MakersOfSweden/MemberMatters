@@ -6,7 +6,7 @@ urlpatterns = [
     path("api/config/", views.GetConfig.as_view(), name="get_config"),
     path(
         "api/token/obtain/",
-        jwt_views.TokenObtainPairView.as_view(),
+        views.CaptchaTokenObtainPairView.as_view(),
         name="token_create",
     ),
     path(

@@ -295,6 +295,11 @@ LOGGING = {
             "level": os.environ.get("MM_LOG_LEVEL_CANVAS", "INFO"),
             "propagate": False,
         },
+        "captcha": {
+            "handlers": ["console", "file"],
+            "level": os.environ.get("MM_LOG_LEVEL_CAPTCHA", "INFO"),
+            "propagate": False,
+        },
         "api_general:tasks": {
             "handlers": ["console", "file"],
             "level": os.environ.get("MM_LOG_LEVEL_GENERAL_TASKS", "INFO"),
@@ -344,10 +349,13 @@ LOGGING = {
     },
 }
 
-# Number of reverse proxies in front of Django, so DRF reads the real
-# client IP from X-Forwarded-For when throttling. If unset, all visitors
-# can collapse into one throttle bucket. Bundled nginx = 1; +1 per extra
-# layer (CapRover, Cloudflare).
+# Number of reverse proxies in front of Django that add an X-Forwarded-For
+# entry, so DRF can pick the client out of the chain when throttling. Unset,
+# it keys off the whole chain, part of which the caller supplies — vary the
+# header, get a fresh bucket. Too high is just as bad: it picks an entry the
+# caller wrote. Too low and every visitor is keyed to a proxy and shares one
+# bucket. The image's own nginx = 1, +1 per layer in front
+# (CapRover, Cloudflare). See docs/GETTING_STARTED.md.
 _num_proxies = os.environ.get("MM_NUM_PROXIES")
 
 REST_FRAMEWORK = {
@@ -362,14 +370,19 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         # Throttling keys off client IP, and legitimate signups share IPs
         # (makerspace WiFi, CGNAT), so a low cap rejects real people. This
-        # just stops a trivial script — CAPTCHA (see Register view TODO)
-        # is the real abuse control. Override with MM_THROTTLE_REGISTER.
+        # just stops a trivial script — CAPTCHA (services/captcha.py) is the
+        # real abuse control. Override with MM_THROTTLE_REGISTER.
         "register": os.environ.get("MM_THROTTLE_REGISTER", "60/hour"),
         # Split so a legitimate user clicking a reset email (validate +
         # submit, possibly with a refresh) doesn't share the same bucket
         # as the abuse path (unauthenticated "send me a reset email").
         "password_reset_request": "10/hour",
         "password_reset_use": "40/hour",
+        # Login and the JWT token endpoint were unthrottled. With CAPTCHA on,
+        # each POST makes a blocking outbound verify, so bound it. Loose
+        # (legit users share IPs; CAPTCHA is the real control).
+        "login": os.environ.get("MM_THROTTLE_LOGIN", "120/hour"),
+        "token_obtain": os.environ.get("MM_THROTTLE_TOKEN_OBTAIN", "120/hour"),
     },
 }
 
