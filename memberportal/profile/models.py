@@ -362,6 +362,13 @@ class CompleteCancelResult:
     previous_state: str = ""
 
 
+# Roughly three or four pages of prose. Not a security boundary — only admins
+# can write notes — but without it the effective limit is Django's 2.5 MB
+# DATA_UPLOAD_MAX_MEMORY_SIZE, which rejects the request as an HTML error page
+# the frontend cannot render a message from.
+ADMIN_NOTES_MAX_LENGTH = 10_000
+
+
 class Profile(ExportModelOperationsMixin("profile"), models.Model):
     STATES = (
         ("noob", "Needs Induction"),
@@ -481,6 +488,15 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
     # Locks `state` only; `subscription_status` still follows Stripe.
     state_locked = models.BooleanField(default=False)
+
+    # Admin-only free text. Never serialise this into a member-facing payload
+    # (`api_general.views.ProfileDetail`) or into `get_basic_profile()`, which
+    # `GetMembers`/`SignupProgress` also serve to `HasAPIKey` callers.
+    # max_length is not enforced by save() — it validates the Django admin
+    # form, which is a write path that bypasses MemberAdminNotes entirely.
+    admin_notes = models.TextField(
+        blank=True, default="", max_length=ADMIN_NOTES_MAX_LENGTH
+    )
 
     def __str__(self):
         return str(self.user)
@@ -1061,6 +1077,8 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             "subscriptionStatus": self.subscription_status,
             "stateLocked": self.state_locked,
             "adminDisabledAccess": self.admin_disabled_access,
+            # Presence flag only — the body is admin-only, see MemberAdminNotes.
+            "hasAdminNotes": bool(self.admin_notes.strip()),
         }
 
     def get_access_permissions(self, ignore_user_state=False):

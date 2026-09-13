@@ -33,6 +33,7 @@ from memberbucks.models import (
 )
 from profile.models import (
     CompleteSignupOutcome,
+    ADMIN_NOTES_MAX_LENGTH,
     Profile,
     SignupTriggeredBy,
     CancelTriggeredBy,
@@ -984,6 +985,63 @@ class MemberProfile(APIView):
                 door.sync()
 
         return Response()
+
+
+class MemberAdminNotes(APIView):
+    """
+    get: This method gets a member's admin-only notes.
+    put: This method updates a member's admin-only notes.
+
+    Unlike the read endpoints either side of it, this one does not accept
+    HasAPIKey: the notes are for logged-in admins, and no member-facing
+    endpoint returns them. `get_basic_profile()` carries only a
+    `hasAdminNotes` presence flag, never the body.
+    """
+
+    # TODO(permission-system): swap IsAdminUser for the capability gate once
+    # the `permission-system` branch lands (`HasPortalPermission`, currently
+    # `access_admin`). Notes are the strongest case in the admin API for a
+    # capability of their own, since their subject can never see them and so
+    # can never notice a wrongly-granted reader. Do not let this ship as a
+    # plain is_staff check once a narrower gate exists.
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request, member_id):
+        member = get_object_or_404(User, id=member_id)
+
+        return Response({"adminNotes": member.profile.admin_notes})
+
+    def put(self, request, member_id):
+        member = get_object_or_404(User, id=member_id)
+        body = json.loads(request.body)
+
+        notes = body.get("adminNotes")
+        if notes is None:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        # Rejected rather than truncated: silently trimming an incident record
+        # loses the part the admin most likely cared about.
+        if len(notes) > ADMIN_NOTES_MAX_LENGTH:
+            return Response(
+                {
+                    "message": "error.adminNotesTooLong",
+                    "maxLength": ADMIN_NOTES_MAX_LENGTH,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        member.profile.admin_notes = notes
+        member.profile.save(update_fields=["admin_notes"])
+
+        # The body never goes in the log — the log is rendered in the same
+        # admin UI, but a copy of the text there would survive the note being
+        # cleared, which is the one thing "delete the note" has to mean.
+        member.log_event(
+            f"Admin {request.user.get_full_name()} updated this member's admin notes.",
+            "admin",
+        )
+
+        return Response({"adminNotes": member.profile.admin_notes})
 
 
 class ManageMembershipTier(StripeAPIView):

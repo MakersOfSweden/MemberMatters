@@ -56,6 +56,11 @@ urlpatterns = [
         name="MemberProfile",
     ),
     path(
+        "api/admin/members/<int:member_id>/notes/",
+        views.MemberAdminNotes.as_view(),
+        name="MemberAdminNotes",
+    ),
+    path(
         "api/admin/members/<int:member_id>/billing/",
         views.MemberBillingInfo.as_view(),
         name="MemberBillingInfo",
