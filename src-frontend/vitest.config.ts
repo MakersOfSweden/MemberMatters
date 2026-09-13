@@ -22,5 +22,6 @@ export default defineConfig({
     // guards). Component tests would need @vue/test-utils + jsdom on top.
     environment: 'node',
     include: ['src/**/*.spec.ts'],
+    passWithNoTests: true,
   },
 });
