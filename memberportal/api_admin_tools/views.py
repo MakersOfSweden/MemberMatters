@@ -23,6 +23,7 @@ from sentry_sdk import capture_message
 
 from access import models
 from access.models import DoorLog, InterlockLog
+from api_billing.stripe_utils import invoice_subscription_id
 from api_billing.views import (
     ensure_stripe_customer,
     _email_admin_cancel_failed,
@@ -1364,12 +1365,25 @@ class ManageSettings(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
 
+# An invoice-billed member owes a membership invoice while signing up and again
+# at every renewal, until the subscription ends.
+OUTSTANDING_INVOICE_STATUSES = ("pending", "active", "cancelling")
+
+
+def _invoice_billed_profiles():
+    return Profile.objects.select_related("user", "membership_plan").filter(
+        billing_method="invoice",
+        subscription_status__in=OUTSTANDING_INVOICE_STATUSES,
+    )
+
+
 class PendingInvoices(StripeAPIView):
     """
-    get: Returns a list of members with an outstanding (open) Stripe invoice
-    for their subscription. Used by the admin Pending Invoices panel to
-    facilitate off-Stripe payment collection (bank transfer, cash, etc.)
-    while still using the Stripe subscription mechanism.
+    get: Returns every open Stripe invoice on an invoice-billed membership
+    subscription — the first invoice at signup, or a renewal. Used by the
+    admin Pending Invoices panel to facilitate off-Stripe payment collection
+    (bank transfer, cash, etc.) while still using the Stripe subscription
+    mechanism.
     """
 
     permission_classes = (permissions.IsAdminUser,)
@@ -1379,35 +1393,39 @@ class PendingInvoices(StripeAPIView):
         # subscriptions keep billing in Stripe even when new invoice signups
         # are disabled, so admins still need this view to record off-Stripe
         # payments for those members. The frontend shows a config warning.
-        pending_members = User.objects.select_related("profile").filter(
-            profile__subscription_status="pending"
-        )
+        profiles_by_subscription = {
+            profile.stripe_subscription_id: profile
+            for profile in _invoice_billed_profiles()
+            if profile.stripe_subscription_id
+        }
+        if not profiles_by_subscription:
+            return Response([])
+
+        try:
+            open_invoices = list(
+                stripe.Invoice.list(
+                    status="open", collection_method="send_invoice", limit=100
+                ).auto_paging_iter()
+            )
+        except stripe.error.StripeError as e:
+            capture_exception(e)
+            return Response(
+                {"success": False, "message": "Failed to load invoices from Stripe."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         results = []
-        for member in pending_members:
-            profile = member.profile
-            if not profile.stripe_subscription_id:
-                continue
-
-            try:
-                invoices = stripe.Invoice.list(
-                    subscription=profile.stripe_subscription_id,
-                    status="open",
-                    limit=1,
-                )
-                if not invoices.data:
-                    continue
-                invoice = invoices.data[0]
-            except stripe.error.StripeError as e:
-                capture_exception(e)
+        for invoice in open_invoices:
+            profile = profiles_by_subscription.get(invoice_subscription_id(invoice))
+            if profile is None:
                 continue
 
             plan = profile.membership_plan
             results.append(
                 {
-                    "memberId": member.id,
+                    "memberId": profile.user.id,
                     "memberName": profile.get_full_name(),
-                    "memberEmail": member.email,
+                    "memberEmail": profile.user.email,
                     "planName": plan.name if plan else None,
                     "invoiceId": invoice.id,
                     "invoiceNumber": invoice.number,
@@ -1449,22 +1467,22 @@ class MarkInvoicePaid(StripeAPIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Only allow paying invoices that belong to a member whose subscription
-        # is currently pending — this prevents marking arbitrary invoices in the
-        # Stripe account (memberbucks top-ups, unrelated charges, etc.) as paid.
+        # Only invoices on a live invoice-billed membership subscription can be
+        # marked paid — this prevents marking arbitrary invoices in the Stripe
+        # account (memberbucks top-ups, unrelated charges, etc.) as paid.
+        subscription_id = invoice_subscription_id(invoice)
         member_profile = (
-            Profile.objects.filter(
-                stripe_subscription_id=invoice.subscription,
-                subscription_status="pending",
-            ).first()
-            if invoice.subscription
+            _invoice_billed_profiles()
+            .filter(stripe_subscription_id=subscription_id)
+            .first()
+            if subscription_id
             else None
         )
         if member_profile is None:
             return Response(
                 {
                     "success": False,
-                    "message": "Invoice is not for a pending membership subscription.",
+                    "message": "Invoice is not for an invoice-billed membership subscription.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
