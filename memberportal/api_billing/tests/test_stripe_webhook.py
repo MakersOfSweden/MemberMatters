@@ -475,6 +475,47 @@ class TestSubscriptionDeleted:
         assert "Invoice.list" in stripe_api.names()
 
     @only()
+    def test_an_unpaid_signup_lapses_with_one_admin_notice(
+        self,
+        post_webhook,
+        stripe_event,
+        stripe_api,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # Stripe's past-due rule deleting the subscription of a member whose
+        # first invoice was never paid. The member's own "signup has lapsed"
+        # email is registered by complete_cancel from inside an on_commit
+        # callback that is already running, which Django 3.2's capture never
+        # executes, so that email is pinned in profile/tests instead.
+        profile = ProfileFactory(
+            subscription_pending=True,
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        full_name = profile.get_full_name()
+        stripe_event(
+            event=build_event(
+                "customer.subscription.deleted",
+                {"id": SUBSCRIPTION_ID, "customer": CUSTOMER_ID},
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert profile.state == "noob"
+        assert profile.subscription_status == "inactive"
+        assert profile.stripe_subscription_id is None
+        assert subjects(outbox) == [
+            f"The membership or pending signup for {full_name} has ended"
+        ]
+        assert "turned off" not in outbox[0]["HtmlBody"]
+
+    @only()
     def test_open_invoices_are_voided_on_deletion(
         self,
         post_webhook,
@@ -626,7 +667,7 @@ class TestSubscriptionDeleted:
             post_webhook()
 
         sent = subjects(outbox)
-        admin_notice = f"The membership for {full_name} was just cancelled"
+        admin_notice = f"The membership or pending signup for {full_name} has ended"
         assert admin_notice in sent
         member_mail = [i for i, m in enumerate(outbox) if m["To"] == profile.user.email]
         assert member_mail, "deactivate() should have emailed the member"
@@ -684,7 +725,10 @@ class TestSubscriptionDeleted:
             for name, args, _ in stripe_api.calls
             if name == "Invoice.void_invoice"
         ]
-        assert f"The membership for {full_name} was just cancelled" in subjects(outbox)
+        assert (
+            f"The membership or pending signup for {full_name} has ended"
+            in subjects(outbox)
+        )
 
 
 class TestRenewal:
@@ -1103,6 +1147,8 @@ class TestPaymentFailedCopy:
         assert subject == "Action needed: your membership payment failed"
         assert "last automatic attempt" in message
         assert "may be cancelled" in message
+        assert "If you have further questions, contact us." in message
+        assert "more time" not in message
 
     def test_an_invoice_member_before_the_due_date_gets_a_link_not_a_warning(self):
         subject, message = payment_failed_copy(
@@ -1115,7 +1161,8 @@ class TestPaymentFailedCopy:
             },
         )
 
-        assert subject == "Your membership invoice is awaiting payment"
+        assert subject == "Your membership invoice payment didn't go through"
+        assert "didn't go through" in message
         assert "https://invoice.stripe.com/i/test" in message
         # The card-flavoured phrases describe machinery this member has none of.
         assert "billing method" not in message
@@ -1133,9 +1180,11 @@ class TestPaymentFailedCopy:
         )
 
         assert subject == "Your membership invoice is overdue"
+        assert "didn't go through" in message
         assert "was due on" in message
         assert "https://invoice.stripe.com/i/test" in message
-        assert "need more time" in message
+        assert "If you have further questions, contact us." in message
+        assert "more time" not in message
         assert "try again" not in message
 
     def test_the_amount_owed_wins_over_stripes_zero_amount_paid(self):
@@ -1180,7 +1229,7 @@ class TestPaymentFailedCopy:
             self.invoice_member(), invoice, now=just_after
         )
 
-        assert before_subject == "Your membership invoice is awaiting payment"
+        assert before_subject == "Your membership invoice payment didn't go through"
         assert after_subject == "Your membership invoice is overdue"
 
 

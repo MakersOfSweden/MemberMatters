@@ -382,10 +382,10 @@ def handle_invoice_paid(ctx):
 def payment_failed_copy(profile, invoice_data, now=None):
     """Returns (subject, message) for a failed payment.
 
-    Split four ways because "we'll try again a few times, please update your
-    billing method" is wrong for an invoice-billed member: nothing was ever
-    going to be charged automatically, and there is no retry to wait for.
-    They need the amount, the due date and a link to pay.
+    Stripe retries a card invoice on its own but never retries a send_invoice
+    one, so for an invoice-billed member this event means a payment they
+    started — on the hosted invoice page, or a bank debit — did not go
+    through. They need the amount, the due date and a link to pay again.
     """
     amount = format_invoice_amount(invoice_data, prefer="due")
     hosted_url = invoice_data.get("hosted_invoice_url")
@@ -398,17 +398,18 @@ def payment_failed_copy(profile, invoice_data, now=None):
             due_text = f" It was due on {due_date}." if due_date else ""
             return (
                 "Your membership invoice is overdue",
-                f"Your membership invoice for {amount} hasn't been paid yet."
-                f"{due_text} Please pay it to keep your membership active, or "
-                f"contact us if you need more time.{pay_here}",
+                f"A payment towards your membership invoice for {amount} "
+                f"didn't go through, and the invoice is now overdue.{due_text} "
+                "Please pay it to keep your membership active. If you have "
+                f"further questions, contact us.{pay_here}",
             )
 
         due_text = f" It's due on {due_date}." if due_date else ""
         return (
-            "Your membership invoice is awaiting payment",
-            f"Your membership invoice for {amount} is still outstanding."
-            f"{due_text} Please pay it before the due date to keep your "
-            f"membership active.{pay_here}",
+            "Your membership invoice payment didn't go through",
+            f"A payment towards your membership invoice for {amount} didn't go "
+            f"through, so the invoice is still outstanding.{due_text} Please "
+            f"pay it before the due date to keep your membership active.{pay_here}",
         )
 
     if invoice_will_retry(invoice_data):
@@ -425,7 +426,7 @@ def payment_failed_copy(profile, invoice_data, now=None):
         f"We tried to collect your membership payment of {amount} and weren't "
         "successful. That was our last automatic attempt, so your membership "
         "may be cancelled unless the payment goes through. Please update your "
-        f"card at {config.SITE_URL}, or contact us if you need more time.",
+        f"card at {config.SITE_URL}. If you have further questions, contact us.",
     )
 
 
@@ -558,11 +559,11 @@ def handle_subscription_deleted(ctx):
     # complete_cancel. Registered before the complete_cancel
     # callback so it lands before the member-facing access-
     # disabled email that deactivate() sends.
-    admin_cancel_subject = f"The membership for {full_name} was just cancelled"
+    admin_cancel_subject = f"The membership or pending signup for {full_name} has ended"
     admin_cancel_message = (
-        f"The Stripe subscription for {full_name} ended, so "
-        "their membership has been cancelled. Their site "
-        "access has been turned off."
+        f"The Stripe subscription for {full_name} ended, so their membership — "
+        "or their signup, if they had not completed it — has been cancelled. "
+        "Any site access they had has been removed."
     )
 
     def _on_commit_admin_cancel_email(
