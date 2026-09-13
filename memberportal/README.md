@@ -120,7 +120,7 @@ Stripe.
 Once you're set up, run the following command to forward webhooks to your local dev server:
 
 ```bash
-stripe listen --skip-verify --events invoice.paid,invoice.payment_failed,customer.subscription.deleted --forward-to localhost:8080/api/billing/stripe-webhook/
+stripe listen --skip-verify --events invoice.paid,invoice.payment_failed,customer.subscription.updated,customer.subscription.deleted --forward-to localhost:8080/api/billing/stripe-webhook/
 ```
 
 Finally, check that you're running the frontend proxy on port 8080 and configure the signing secret in the Constance 

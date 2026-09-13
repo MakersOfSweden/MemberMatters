@@ -182,7 +182,7 @@ You cannot currently enable specific events, you either get "all or nothing".
 ### "Stripe Integration"
   * "STRIPE_PUBLISHABLE_KEY" - the publishable Stripe key.
   * "STRIPE_SECRET_KEY" - the secret Stripe key. You should create a restricted key - see info below on what permissions you need.
-  * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe.
+  * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe. Point the Stripe webhook endpoint at `/api/billing/stripe-webhook/` and select these events: `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated` and `customer.subscription.deleted`.
   * "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS" - enable the "Membership Plan" menu page on the front end so members can sign up with the Stripe billing integration. NOTE: make sure you configure these first from the "Admin Tools" > "Membership Plans" page.
   * "ENABLE_NEW_SUBSCRIPTIONS" - allow members without an existing subscription to start a new one. When `False`, `POST /api/billing/signup/<plan>/` returns 503 and the membership-plan page shows a "new subscriptions closed" banner. **Renewals (Stripe `invoice.paid` webhook), pending invoices being paid, and `PaymentPlanResume` for cancelling members are NOT affected** — existing members keep working normally. Use this for capacity freezes / scheduled outages without breaking renewals. Defaults to `True`.
   * "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS" - the options a member can see when on the MemberBucks top up page (in cents).
@@ -204,10 +204,11 @@ The following permissions are needed for all Member Matters payment features to 
 
 #### Pay by Invoice setup
 
-When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow).
+When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow). The same screen lists each renewal invoice for invoice-billed members who are already active, so a renewal paid by bank transfer or cash is recorded the same way.
 
-The activation and deactivation flow relies on Stripe webhooks:
-* `invoice.paid` → MemberMatters activates the member.
+Invoice billing relies on these Stripe webhook events:
+* `invoice.paid` → MemberMatters activates the member, or records their renewal.
+* `customer.subscription.updated` → when an invoice is still unpaid at its due date, Stripe marks the subscription `past_due` and MemberMatters emails the member a reminder. The reminder says that a bank transfer or cash payment may not have been registered yet, and asks the member to make sure they have paid. No Stripe Automation is needed.
 * `customer.subscription.deleted` → MemberMatters marks the member `inactive` and clears the subscription.
 
 **Required Stripe Dashboard configuration** (Billing → Settings → Subscriptions and emails → *Manage failed payments*):
@@ -216,7 +217,7 @@ After the invoice goes past due, configure Stripe to **cancel the subscription**
 
 You do **not** need to configure "Mark invoice as uncollectible" or any other invoice-handling option in Stripe. When MemberMatters receives `customer.subscription.deleted`, it voids any invoices still open against that subscription so nothing lingers in the customer's Stripe portal.
 
-When testing this locally, make sure the `stripe listen` command in the backend README includes `customer.subscription.deleted` (it does by default) so subscription cancellations are forwarded to your dev server.
+When testing this locally, make sure the `stripe listen` command in the backend README includes `customer.subscription.updated` and `customer.subscription.deleted` (it does by default) so overdue reminders and subscription cancellations are forwarded to your dev server.
 
 ### Trello Integration
   * "ENABLE_TRELLO_INTEGRATION" - [Deprecated]

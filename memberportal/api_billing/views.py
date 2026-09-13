@@ -10,6 +10,13 @@ from profile.models import (
 )
 from api_admin_tools.models import *
 from .models import ProcessedStripeEvent
+from .webhook_handlers import (
+    HANDLERS,
+    EventScope,
+    WebhookContext,
+    classify_event_scope,
+    handle_orphan_invoice_paid,
+)
 
 from rest_framework import status, permissions
 from rest_framework.response import Response
@@ -29,7 +36,6 @@ from django.db import transaction, IntegrityError
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
 from sentry_sdk import capture_exception
-from django.utils import timezone
 
 logger = logging.getLogger("billing")
 
@@ -1375,20 +1381,6 @@ class PaymentPlanCancel(StripeAPIView):
         return Response({"success": False})
 
 
-def _invoice_subscription_id(invoice_data):
-    # Stripe API 2025-03-31.basil moved Invoice.subscription to
-    # Invoice.parent.subscription_details.subscription. Pick whichever the
-    # payload actually exposes so a webhook endpoint signed with either API
-    # version works. The `in details` check (rather than truthiness) means an
-    # explicit `null` in the new schema is honored as "no subscription on this
-    # invoice" instead of silently falling back to the legacy field.
-    parent = invoice_data.get("parent") or {}
-    details = parent.get("subscription_details") or {}
-    if "subscription" in details:
-        return details["subscription"]
-    return invoice_data.get("subscription")
-
-
 class StripeWebhook(StripeAPIView):
     """
     post: processes a Stripe webhook event.
@@ -1419,6 +1411,8 @@ class StripeWebhook(StripeAPIView):
                 payload=request.body, sig_header=signature, secret=webhook_secret
             )
         except Exception as e:
+            # Deliberately 200: a non-2xx would make Stripe retry a forged or
+            # corrupt payload for ~3 days.
             logger.error(e)
             capture_exception(e)
             return Response({"error": "Error validating Stripe signature."})
@@ -1426,6 +1420,12 @@ class StripeWebhook(StripeAPIView):
         data = event["data"]
         event_type = event["type"]
         event_id = event["id"]
+
+        # Bail before taking a row lock or writing a dedup row for the
+        # account-level events we have no handler for.
+        handler = HANDLERS.get(event_type)
+        if handler is None:
+            return Response()
 
         # Atomic wraps dedup row + DB writes; on raise, rollback releases
         # the event id for Stripe's retry. External I/O (emails, SMS,
@@ -1435,6 +1435,7 @@ class StripeWebhook(StripeAPIView):
         # don't retry — a missed receipt email is better than a paid
         # member who never activates.
         with transaction.atomic():
+            previous_attributes = data.get("previous_attributes") or {}
             data = data["object"]
 
             # Some Stripe events (e.g. account-level ones) don't carry a customer
@@ -1459,22 +1460,12 @@ class StripeWebhook(StripeAPIView):
                 capture_exception(e)
                 return Response()
 
-            # Scope events to the member's current sub — the customer may
-            # have unrelated invoices/subs (admin one-offs, memberbucks,
-            # replayed cancelled subs) we must not act on. Run the scope
-            # check BEFORE the dedup insert so an out-of-scope event doesn't
-            # poison its own retries — fix it, redeliver, and processing
-            # picks up cleanly.
-            if event_type in ("invoice.paid", "invoice.payment_failed"):
-                invoice_subscription = _invoice_subscription_id(data)
-                if (
-                    not invoice_subscription
-                    or invoice_subscription != locked_profile.stripe_subscription_id
-                ):
-                    return Response()
-            elif event_type == "customer.subscription.deleted":
-                if data.get("id") != locked_profile.stripe_subscription_id:
-                    return Response()
+            # Run the scope check BEFORE the dedup insert so an out-of-scope
+            # event doesn't poison its own retries — fix it, redeliver, and
+            # processing picks up cleanly.
+            scope = classify_event_scope(event_type, data, locked_profile)
+            if scope is EventScope.IGNORE:
+                return Response()
 
             # Idempotency: Stripe retries deliveries for up to ~3 days on non-2xx
             # responses or timeouts. Skip any event id we've already processed so
@@ -1487,343 +1478,21 @@ class StripeWebhook(StripeAPIView):
                 if not created:
                     return Response()
 
-            if event_type == "invoice.paid":
-                invoice_status = data["status"]
+            context = WebhookContext(
+                event_id=event_id,
+                event_type=event_type,
+                data=data,
+                profile=locked_profile,
+                previous_attributes=previous_attributes,
+            )
 
-                locked_profile.user.log_event("Membership payment received.", "stripe")
-
-                if (
-                    invoice_status == "paid"
-                    and not locked_profile.subscription_first_created
-                ):
-                    locked_profile.subscription_first_created = timezone.now()
-                    locked_profile.save(update_fields=["subscription_first_created"])
-
-                # A state_locked member is by invariant subscription_status=inactive.
-                # If an invoice.paid arrives anyway (late/out-of-order delivery, or
-                # an admin manually marked an old invoice paid in Stripe), preserve
-                # the lock — do NOT flip subscription_status to "active" and do
-                # NOT auto-activate. Notify the admin so they can investigate.
-                if (
-                    locked_profile.state_locked
-                    and locked_profile.state != "active"
-                    and invoice_status == "paid"
-                ):
-                    locked_profile.user.log_event(
-                        "Invoice paid for a state_locked member — held; "
-                        "admin must unlock + reconcile.",
-                        "stripe",
-                    )
-
-                    held_full_name = locked_profile.get_full_name()
-                    held_user_email = locked_profile.user.email
-
-                    def _on_commit_locked_paid_admin(
-                        full_name=held_full_name,
-                        user_email=held_user_email,
-                        user=locked_profile.user,
-                    ):
-                        admin_subject = (
-                            f"Action Required: locked member {full_name} "
-                            "had an invoice paid"
-                        )
-                        admin_message = (
-                            f"{full_name} ({user_email}) is currently "
-                            "state-locked, but Stripe just reported a paid "
-                            "invoice on their subscription. The portal has "
-                            "NOT activated them. Investigate whether to "
-                            "unlock + activate, or to void the Stripe "
-                            "subscription."
-                        )
-                        try:
-                            send_email_to_admin(
-                                subject=admin_subject,
-                                template_vars={
-                                    "title": admin_subject,
-                                    "message": admin_message,
-                                },
-                                user=user,
-                                reply_to=user.email,
-                            )
-                        except Exception as e:
-                            capture_exception(e)
-
-                    transaction.on_commit(_on_commit_locked_paid_admin)
-
-                # If they aren't an active member, are allowed to signup, and have paid the invoice
-                # then lets activate their account (this could be a new OR returning member)
-                elif (
-                    locked_profile.state != "active"
-                    and locked_profile.can_signup()["success"]
-                    and invoice_status == "paid"
-                ):
-                    locked_profile.subscription_status = "active"
-                    locked_profile.save(update_fields=["subscription_status"])
-
-                    locked_profile.user.log_event(
-                        "Activated membership because member met all requirements.",
-                        "stripe",
-                    )
-
-                    # Both callbacks deferred to on_commit so the I/O can't
-                    # extend the row lock past Stripe's 30s webhook timeout.
-                    # The paid-confirmation email is registered first so it
-                    # arrives before activate()'s welcome email — the body
-                    # references "another email message confirming this was
-                    # successful" which is the welcome that follows.
-                    paid_subject = "Your payment was successful."
-                    paid_message = (
-                        "Thanks for making a membership payment using our "
-                        "online payment system. You've already met all of "
-                        "the requirements for activating your site access. "
-                        "Please check for another email message confirming "
-                        "this was successful."
-                    )
-
-                    def _on_commit_paid_email(
-                        user=locked_profile.user,
-                        subject=paid_subject,
-                        message=paid_message,
-                    ):
-                        try:
-                            user.email_notification(subject, message)
-                            user.log_event(
-                                "Payment-received email sent.",
-                                "email",
-                            )
-                        except Exception as e:
-                            capture_exception(e)
-
-                    transaction.on_commit(_on_commit_paid_email)
-
-                    def _on_commit_paid_activate(profile=locked_profile):
-                        try:
-                            profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
-                        except Exception as e:
-                            capture_exception(e)
-
-                    transaction.on_commit(_on_commit_paid_activate)
-
-                # If they aren't an active member, are NOT allowed to signup, and have paid the invoice
-                # then we need to let them know and mark the subscription as active
-                # (this could be a new OR returning member that's been too long since induction etc.)
-                elif locked_profile.state != "active" and invoice_status == "paid":
-                    locked_profile.subscription_status = "active"
-                    locked_profile.save(update_fields=["subscription_status"])
-
-                    locked_profile.user.log_event(
-                        "Did not activate membership because member did not meet all requirements.",
-                        "stripe",
-                    )
-
-                    paid_subject = "Your payment was received — additional steps needed"
-                    paid_message = (
-                        "Thanks for making a membership payment using our "
-                        "online payment system. Your access isn't enabled yet "
-                        "because you still need to complete your induction. "
-                        f"Please log in to {config.SITE_URL} and finish the "
-                        "induction step to activate your membership."
-                    )
-                    # Capture at decision time — state may shift before on_commit fires.
-                    notify_admin = locked_profile.state != "noob"
-
-                    def _on_commit_paid_no_activate(
-                        profile=locked_profile,
-                        subject=paid_subject,
-                        message=paid_message,
-                        notify_admin=notify_admin,
-                    ):
-                        # See _on_commit_paid_activate for why each call
-                        # is wrapped independently.
-                        try:
-                            profile.user.email_notification(subject, message)
-                        except Exception as e:
-                            capture_exception(e)
-                        if notify_admin:
-                            admin_subject = "Action Required: Verify returning member"
-                            admin_message = (
-                                "An existing member (or someone who clicked 'skip signup I just want an account') "
-                                "has setup a membership subscription. You must now decide whether to enable their site access."
-                            )
-                            try:
-                                send_email_to_admin(
-                                    admin_subject,
-                                    template_vars={
-                                        "title": admin_subject,
-                                        "message": admin_message,
-                                    },
-                                    reply_to=profile.user.email,
-                                )
-                            except Exception as e:
-                                capture_exception(e)
-
-                    transaction.on_commit(_on_commit_paid_no_activate)
-
-                # in all other instances, we don't care about a paid invoice and can ignore it
-
-            if event_type == "invoice.payment_failed":
-                locked_profile.user.log_event("Membership payment failed", "stripe")
-
-                failed_subject = "Your membership payment failed"
-                failed_message = (
-                    "Hi there, we tried to collect your membership payment but "
-                    "weren't successful. Please update your billing method or contact "
-                    "us if you need more time. We'll try again a few times, but if we're unable to "
-                    "collect your payment soon, your membership may be cancelled."
-                )
-
-                def _on_commit_payment_failed(
-                    profile=locked_profile,
-                    subject=failed_subject,
-                    message=failed_message,
-                ):
-                    try:
-                        profile.user.email_notification(subject, message)
-                    except Exception as e:
-                        capture_exception(e)
-
-                transaction.on_commit(_on_commit_payment_failed)
-
-            if event_type == "customer.subscription.deleted":
-                deleted_subscription_id = data["id"]
-                full_name = locked_profile.get_full_name()
-
-                locked_profile.membership_plan = None
-                locked_profile.stripe_subscription_id = None
-                locked_profile.subscription_status = "inactive"
-                locked_profile.save(
-                    update_fields=[
-                        "membership_plan",
-                        "stripe_subscription_id",
-                        "subscription_status",
-                    ]
-                )
-
-                # Void open invoices — Stripe doesn't auto-void on cancel.
-                # On on_commit so the Stripe call can't extend the row lock.
-                # If voiding fails, the deleted subscription's open invoices
-                # may still be visible to the customer in Stripe — email
-                # admin so they can void manually.
-                def _on_commit_void_open_invoices(
-                    subscription_id=deleted_subscription_id,
-                    user=locked_profile.user,
-                    full_name=full_name,
-                ):
-                    try:
-                        open_invoices = stripe.Invoice.list(
-                            subscription=subscription_id, status="open"
-                        )
-                        for invoice in open_invoices.auto_paging_iter():
-                            try:
-                                stripe.Invoice.void_invoice(invoice.id)
-                            except stripe.error.StripeError as e:
-                                capture_exception(e)
-                                user.log_event(
-                                    f"Failed to void open invoice "
-                                    f"{invoice.id} after subscription cancel.",
-                                    "stripe",
-                                    str(e),
-                                )
-                                failure_subject = (
-                                    f"Action Required: void Stripe invoice "
-                                    f"{invoice.id} for {full_name}"
-                                )
-                                failure_message = (
-                                    f"The Stripe subscription "
-                                    f"{subscription_id} for {full_name} "
-                                    "was cancelled, but voiding open "
-                                    f"invoice {invoice.id} failed. Please "
-                                    "void it manually in Stripe so the "
-                                    "customer isn't shown an unpaid "
-                                    "invoice."
-                                )
-                                try:
-                                    send_email_to_admin(
-                                        subject=failure_subject,
-                                        template_vars={
-                                            "title": failure_subject,
-                                            "message": failure_message,
-                                        },
-                                        user=user,
-                                        reply_to=user.email,
-                                    )
-                                except Exception as email_err:
-                                    capture_exception(email_err)
-                    except stripe.error.StripeError as e:
-                        # Couldn't even list invoices — don't know which
-                        # are open, so ask admin to audit the cancelled
-                        # sub.
-                        capture_exception(e)
-                        user.log_event(
-                            f"Failed to list open invoices for cancelled "
-                            f"subscription {subscription_id}; admin must "
-                            "audit Stripe manually.",
-                            "stripe",
-                            str(e),
-                        )
-                        failure_subject = (
-                            f"Action Required: audit cancelled Stripe "
-                            f"subscription {subscription_id} for {full_name}"
-                        )
-                        failure_message = (
-                            f"The Stripe subscription {subscription_id} "
-                            f"for {full_name} was cancelled, but we "
-                            "couldn't list its open invoices to void "
-                            "them. Please check Stripe and void any "
-                            "open invoices manually."
-                        )
-                        try:
-                            send_email_to_admin(
-                                subject=failure_subject,
-                                template_vars={
-                                    "title": failure_subject,
-                                    "message": failure_message,
-                                },
-                                user=user,
-                                reply_to=user.email,
-                            )
-                        except Exception as email_err:
-                            capture_exception(email_err)
-
-                transaction.on_commit(_on_commit_void_open_invoices)
-
-                # Notify the operator that this member's Stripe sub ended out
-                # of band. Stripe-specific messaging stays here, not in
-                # complete_cancel. Registered before the complete_cancel
-                # callback so it lands before the member-facing access-
-                # disabled email that deactivate() sends.
-                admin_cancel_subject = (
-                    f"The membership for {full_name} was just cancelled"
-                )
-                admin_cancel_message = (
-                    f"The Stripe subscription for {full_name} ended, so "
-                    "their membership has been cancelled. Their site "
-                    "access has been turned off."
-                )
-
-                def _on_commit_admin_cancel_email(
-                    user=locked_profile.user,
-                    subject=admin_cancel_subject,
-                    message=admin_cancel_message,
-                ):
-                    try:
-                        send_email_to_admin(
-                            subject=subject,
-                            template_vars={"title": subject, "message": message},
-                            user=user,
-                            reply_to=user.email,
-                        )
-                    except Exception as e:
-                        capture_exception(e)
-
-                transaction.on_commit(_on_commit_admin_cancel_email)
-
-                def _on_commit_complete_cancel(profile=locked_profile):
-                    try:
-                        profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
-                    except Exception as e:
-                        capture_exception(e)
-
-                transaction.on_commit(_on_commit_complete_cancel)
+            # An orphaned payment takes no state action, so unlike an
+            # out-of-scope event there is nothing to fix and redeliver — it
+            # passes through dedup so retries produce one alert, not one per
+            # delivery.
+            if scope is EventScope.ORPHAN_PAID:
+                handle_orphan_invoice_paid(context)
+            else:
+                handler(context)
 
         return Response()

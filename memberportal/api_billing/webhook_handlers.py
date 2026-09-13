@@ -1,0 +1,695 @@
+"""Per-event handlers for the Stripe webhook.
+
+`StripeWebhook.post` (api_billing/views.py) owns the transport concerns —
+signature verification, the profile row lock, scoping and idempotency — and
+then dispatches here. Each handler runs inside that transaction with the
+member's Profile row already locked, so all external I/O (emails, SMS,
+activate/deactivate, Stripe calls) must be deferred with
+`transaction.on_commit`; anything synchronous would hold the row lock for the
+duration of the upstream call and can blow past Stripe's ~30s webhook timeout.
+"""
+
+import dataclasses
+import enum
+import logging
+
+import stripe
+from constance import config
+from django.db import transaction
+from django.utils import timezone
+from sentry_sdk import capture_exception
+
+from profile.models import CancelTriggeredBy, SignupTriggeredBy
+from services.emails import send_email_to_admin
+
+from .stripe_utils import (
+    format_invoice_amount,
+    format_invoice_due_date,
+    invoice_billing_reason,
+    invoice_is_past_due,
+    invoice_subscription_id,
+    invoice_will_retry,
+    is_subscription_invoice,
+)
+
+logger = logging.getLogger("billing")
+
+
+class UnrecognisedInvoiceSchema(Exception):
+    """A subscription invoice exposed no subscription id under either schema."""
+
+
+class LockedMemberPaid(Exception):
+    """An invoice was paid for a state_locked member; an admin must reconcile it."""
+
+
+class EventScope(enum.Enum):
+    IN_SCOPE = "in_scope"
+    ORPHAN_PAID = "orphan_paid"
+    IGNORE = "ignore"
+
+
+@dataclasses.dataclass(frozen=True)
+class WebhookContext:
+    event_id: str
+    event_type: str
+    data: dict
+    profile: "Profile"  # noqa: F821 — already select_for_update()'d by the view
+    # From the event's data.previous_attributes: the old value of each field
+    # an update changed.
+    previous_attributes: dict = dataclasses.field(default_factory=dict)
+
+
+SUBSCRIPTION_EVENTS = ("customer.subscription.updated", "customer.subscription.deleted")
+
+
+def classify_event_scope(event_type, data, profile):
+    """Decide whether an event concerns the member's current subscription.
+
+    The customer may own unrelated invoices/subs (admin one-offs, memberbucks,
+    replayed cancelled subs) that we must not act on.
+    """
+    if event_type in SUBSCRIPTION_EVENTS:
+        if data.get("id") != profile.stripe_subscription_id:
+            return EventScope.IGNORE
+        return EventScope.IN_SCOPE
+
+    subscription_id = invoice_subscription_id(data)
+    if not subscription_id:
+        # A one-off invoice with no subscription is ordinary and ignorable.
+        # But if Stripe's own billing_reason says a subscription generated
+        # this invoice and we still couldn't find its id, the endpoint's API
+        # version has moved past what invoice_subscription_id() knows how to
+        # read. Say so loudly — the silent failure mode is that every renewal
+        # is dropped while the endpoint keeps answering 200.
+        if is_subscription_invoice(data):
+            message = (
+                f"{event_type} for invoice {data.get('id')} has "
+                f"billing_reason={data.get('billing_reason')!r} but exposes no "
+                "subscription id under either payload schema. Check the API "
+                "version on the Stripe webhook endpoint."
+            )
+            logger.error(message)
+            capture_exception(UnrecognisedInvoiceSchema(message))
+        return EventScope.IGNORE
+
+    if subscription_id != profile.stripe_subscription_id:
+        # Money has arrived against a subscription we no longer track — the
+        # member's own late payment on a cancelled subscription, or one they
+        # have since replaced. We cannot act on it (there is nothing left to
+        # reinstate, and activating would leave a member with no live
+        # billing), but dropping it silently loses a real payment.
+        if (
+            event_type == "invoice.paid"
+            and data.get("status") == "paid"
+            and is_subscription_invoice(data)
+        ):
+            return EventScope.ORPHAN_PAID
+        return EventScope.IGNORE
+    return EventScope.IN_SCOPE
+
+
+def handle_orphan_invoice_paid(ctx):
+    """Escalate a payment against a subscription the portal no longer tracks.
+
+    Deliberately changes no state. Reinstating from here would leave an active
+    member whose subscription does not exist, and the portal has no record of
+    what the old subscription was for. A human decides: refund it, or re-enrol
+    them.
+    """
+    profile = ctx.profile
+    data = ctx.data
+    subscription_id = invoice_subscription_id(data)
+    amount = format_invoice_amount(data)
+    invoice_id = data.get("id")
+
+    profile.user.log_event(
+        f"Payment of {amount} received on subscription {subscription_id}, which "
+        f"the portal no longer tracks (invoice {invoice_id}). No state change.",
+        "stripe",
+    )
+
+    full_name = profile.get_full_name()
+    user_email = profile.user.email
+    invoice_number = data.get("number")
+
+    def _on_commit_orphan_paid_admin(user=profile.user):
+        admin_subject = f"Action Required: untracked payment from {full_name}"
+        admin_message = (
+            f"{full_name} ({user_email}) has paid {amount} against Stripe "
+            f"subscription {subscription_id}, which is not the subscription "
+            "the portal has on file for them. Their membership has NOT been "
+            f"changed. Invoice {invoice_id}"
+            f"{f' ({invoice_number})' if invoice_number else ''}. "
+            "Decide whether to refund it in Stripe, or to re-enrol them."
+        )
+        try:
+            send_email_to_admin(
+                subject=admin_subject,
+                template_vars={"title": admin_subject, "message": admin_message},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_orphan_paid_admin)
+
+
+def handle_invoice_paid(ctx):
+    """Record a membership payment, and activate the member if they need it.
+
+    Bookkeeping runs for every paid invoice — first payment, renewal, or an
+    admin marking one paid out of band. Activation runs only for a member who
+    isn't already active.
+    """
+    profile = ctx.profile
+    data = ctx.data
+
+    if data.get("status") != "paid":
+        profile.user.log_event(
+            f"Ignored invoice.paid with unexpected status {data.get('status')!r}.",
+            "stripe",
+        )
+        return
+
+    profile.user.log_event("Membership payment received.", "stripe")
+
+    # A lock outranks a payment: the member keeps their state and
+    # subscription_status, and an admin reconciles the payment.
+    holding = profile.state_locked and profile.state != "active"
+
+    updates = []
+    if profile.subscription_first_created is None:
+        profile.subscription_first_created = timezone.now()
+        updates.append("subscription_first_created")
+
+    # Re-asserted on every payment so a status that has drifted out of step
+    # with Stripe is repaired by the next one. "cancelling" is excluded: a
+    # member who cancelled at period end can still have their final invoice
+    # settle afterwards, and that must not read as renewing.
+    if not holding and profile.subscription_status not in ("active", "cancelling"):
+        profile.subscription_status = "active"
+        updates.append("subscription_status")
+
+    if updates:
+        profile.save(update_fields=updates)
+
+    if holding:
+        amount = format_invoice_amount(data)
+        invoice_number = data.get("number")
+        invoice_label = (
+            f"{data.get('id')} ({invoice_number})" if invoice_number else data.get("id")
+        )
+        full_name = profile.get_full_name()
+        user_email = profile.user.email
+        held_state = profile.state
+
+        profile.user.log_event(
+            f"Payment of {amount} on invoice {invoice_label} held: the member is "
+            "locked. Not activated; an admin must refund it or unlock and "
+            "activate them.",
+            "stripe",
+        )
+
+        def _on_commit_locked_paid_alert(user=profile.user, profile_id=profile.pk):
+            alert = (
+                f"Locked member {full_name} (profile {profile_id}) paid {amount} "
+                f"on invoice {invoice_label}; the payment is held and the member "
+                f"left {held_state} and locked."
+            )
+            logger.error(alert)
+            capture_exception(LockedMemberPaid(alert))
+
+            admin_subject = (
+                f"Action Required: locked member {full_name} has paid {amount}"
+            )
+            admin_message = (
+                f"{full_name} ({user_email}) is locked, but Stripe reports that "
+                f"invoice {invoice_label} for {amount} has been paid. The portal "
+                f"has NOT activated them: they remain {held_state} and locked. "
+                "Decide whether to refund the payment in Stripe, or to unlock "
+                "and activate them."
+            )
+            try:
+                send_email_to_admin(
+                    subject=admin_subject,
+                    template_vars={"title": admin_subject, "message": admin_message},
+                    user=user,
+                    reply_to=user.email,
+                )
+            except Exception as e:
+                capture_exception(e)
+
+        transaction.on_commit(_on_commit_locked_paid_alert)
+        return
+
+    if profile.state == "active":
+        # Nothing to activate. Stripe only emails a payment receipt when
+        # "Successful payments" is enabled in the Dashboard, which is off by
+        # default, so send our own — otherwise a member who has just been
+        # charged hears nothing either way.
+        billing_reason = invoice_billing_reason(data)
+        amount = format_invoice_amount(data)
+        profile.user.log_event(
+            f"Payment recorded (billing_reason={billing_reason}); "
+            "membership already active.",
+            "stripe",
+        )
+
+        if profile.subscription_status == "cancelling":
+            # The same case the status re-assert above excludes: the final
+            # invoice of a member who cancelled at period end. They are owed a
+            # receipt, but not one telling them their membership carries on.
+            receipt_subject = "Your final membership payment"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount}. "
+                "Your membership is still set to end at the end of your current "
+                "billing period, as you requested. You can review your "
+                f"membership at any time at {config.SITE_URL}."
+            )
+        elif billing_reason == "subscription_cycle":
+            receipt_subject = "Your membership has been renewed"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount} "
+                "and your membership continues as normal. You can review your "
+                f"membership at any time at {config.SITE_URL}."
+            )
+        else:
+            # Not a renewal. Usually the first invoice of a card signup:
+            # PaymentPlanSignup activates the member within the request, so
+            # this webhook tends to land after they are already active.
+            receipt_subject = "Your membership payment was received"
+            receipt_message = (
+                f"Thanks — we've received your membership payment of {amount}. "
+                "You can review your membership at any time at "
+                f"{config.SITE_URL}."
+            )
+
+        def _on_commit_receipt_email(
+            user=profile.user,
+            subject=receipt_subject,
+            message=receipt_message,
+        ):
+            try:
+                user.email_notification(subject, message)
+                user.log_event("Payment-receipt email sent.", "email")
+            except Exception as e:
+                capture_exception(e)
+
+        transaction.on_commit(_on_commit_receipt_email)
+        return
+
+    # A new or returning member who has met every requirement.
+    if profile.can_signup()["success"]:
+        profile.user.log_event(
+            "Activated membership because member met all requirements.",
+            "stripe",
+        )
+
+        # Registered before the activation callback so it arrives ahead of
+        # activate()'s welcome email, which is the "another email message"
+        # the body below refers to.
+        paid_subject = "Your payment was successful."
+        paid_message = (
+            "Thanks for making a membership payment using our "
+            "online payment system. You've already met all of "
+            "the requirements for activating your site access. "
+            "Please check for another email message confirming "
+            "this was successful."
+        )
+
+        def _on_commit_paid_email(
+            user=profile.user,
+            subject=paid_subject,
+            message=paid_message,
+        ):
+            try:
+                user.email_notification(subject, message)
+                user.log_event(
+                    "Payment-received email sent.",
+                    "email",
+                )
+            except Exception as e:
+                capture_exception(e)
+
+        transaction.on_commit(_on_commit_paid_email)
+
+        def _on_commit_paid_activate(profile=profile):
+            try:
+                profile.complete_signup(SignupTriggeredBy.INVOICE_PAID)
+            except Exception as e:
+                capture_exception(e)
+
+        transaction.on_commit(_on_commit_paid_activate)
+
+    # Still owes an induction, terms acceptance or access card. The payment
+    # stands; access does not start yet.
+    else:
+        profile.user.log_event(
+            "Did not activate membership because member did not meet all requirements.",
+            "stripe",
+        )
+
+        paid_subject = "Your payment was received — additional steps needed"
+        paid_message = (
+            "Thanks for making a membership payment using our "
+            "online payment system. Your access isn't enabled yet "
+            "because you still need to complete your induction. "
+            f"Please log in to {config.SITE_URL} and finish the "
+            "induction step to activate your membership."
+        )
+        # Capture at decision time — state may shift before on_commit fires.
+        notify_admin = profile.state != "noob"
+
+        def _on_commit_paid_no_activate(
+            profile=profile,
+            subject=paid_subject,
+            message=paid_message,
+            notify_admin=notify_admin,
+        ):
+            # See _on_commit_paid_activate for why each call
+            # is wrapped independently.
+            try:
+                profile.user.email_notification(subject, message)
+            except Exception as e:
+                capture_exception(e)
+            if notify_admin:
+                admin_subject = "Action Required: Verify returning member"
+                admin_message = (
+                    "An existing member (or someone who clicked 'skip signup I just want an account') "
+                    "has setup a membership subscription. You must now decide whether to enable their site access."
+                )
+                try:
+                    send_email_to_admin(
+                        admin_subject,
+                        template_vars={
+                            "title": admin_subject,
+                            "message": admin_message,
+                        },
+                        reply_to=profile.user.email,
+                    )
+                except Exception as e:
+                    capture_exception(e)
+
+        transaction.on_commit(_on_commit_paid_no_activate)
+
+
+def payment_failed_copy(profile, invoice_data, now=None):
+    """Returns (subject, message) for a failed payment.
+
+    Stripe retries a card invoice on its own but never retries a send_invoice
+    one, so for an invoice-billed member this event means a payment they
+    started — on the hosted invoice page, or a bank debit — did not go
+    through. They need the amount, the due date and a link to pay again.
+    """
+    amount = format_invoice_amount(invoice_data, prefer="due")
+    hosted_url = invoice_data.get("hosted_invoice_url")
+    pay_here = f" You can pay it here: {hosted_url}" if hosted_url else ""
+
+    if profile.billing_method == "invoice":
+        due_date = format_invoice_due_date(invoice_data)
+
+        if invoice_is_past_due(invoice_data, now=now):
+            due_text = f" It was due on {due_date}." if due_date else ""
+            return (
+                "Your membership invoice is overdue",
+                f"A payment towards your membership invoice for {amount} "
+                f"didn't go through, and the invoice is now overdue.{due_text} "
+                "Please pay it to keep your membership active. If you have "
+                f"further questions, contact us.{pay_here}",
+            )
+
+        due_text = f" It's due on {due_date}." if due_date else ""
+        return (
+            "Your membership invoice payment didn't go through",
+            f"A payment towards your membership invoice for {amount} didn't go "
+            f"through, so the invoice is still outstanding.{due_text} Please "
+            f"pay it before the due date to keep your membership active.{pay_here}",
+        )
+
+    if invoice_will_retry(invoice_data):
+        return (
+            "Your membership payment failed",
+            f"We tried to collect your membership payment of {amount} but "
+            "weren't successful. We'll try again automatically, so there may "
+            "be nothing for you to do — but it's worth checking the card we "
+            f"have on file is still current at {config.SITE_URL}.",
+        )
+
+    return (
+        "Action needed: your membership payment failed",
+        f"We tried to collect your membership payment of {amount} and weren't "
+        "successful. That was our last automatic attempt, so your membership "
+        "may be cancelled unless the payment goes through. Please update your "
+        f"card at {config.SITE_URL}. If you have further questions, contact us.",
+    )
+
+
+def handle_invoice_payment_failed(ctx):
+    profile = ctx.profile
+
+    profile.user.log_event("Membership payment failed", "stripe")
+
+    failed_subject, failed_message = payment_failed_copy(profile, ctx.data)
+
+    def _on_commit_payment_failed(
+        profile=profile,
+        subject=failed_subject,
+        message=failed_message,
+    ):
+        try:
+            profile.user.email_notification(subject, message)
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_payment_failed)
+
+
+def handle_subscription_deleted(ctx):
+    profile = ctx.profile
+    deleted_subscription_id = ctx.data["id"]
+    full_name = profile.get_full_name()
+
+    profile.membership_plan = None
+    profile.stripe_subscription_id = None
+    profile.subscription_status = "inactive"
+    profile.save(
+        update_fields=[
+            "membership_plan",
+            "stripe_subscription_id",
+            "subscription_status",
+        ]
+    )
+
+    # Void open invoices — Stripe doesn't auto-void on cancel.
+    # On on_commit so the Stripe call can't extend the row lock.
+    # If voiding fails, the deleted subscription's open invoices
+    # may still be visible to the customer in Stripe — email
+    # admin so they can void manually.
+    def _on_commit_void_open_invoices(
+        subscription_id=deleted_subscription_id,
+        user=profile.user,
+        full_name=full_name,
+    ):
+        try:
+            open_invoices = stripe.Invoice.list(
+                subscription=subscription_id, status="open"
+            )
+            for invoice in open_invoices.auto_paging_iter():
+                try:
+                    stripe.Invoice.void_invoice(invoice.id)
+                except stripe.error.StripeError as e:
+                    capture_exception(e)
+                    user.log_event(
+                        f"Failed to void open invoice "
+                        f"{invoice.id} after subscription cancel.",
+                        "stripe",
+                        str(e),
+                    )
+                    failure_subject = (
+                        f"Action Required: void Stripe invoice "
+                        f"{invoice.id} for {full_name}"
+                    )
+                    failure_message = (
+                        f"The Stripe subscription "
+                        f"{subscription_id} for {full_name} "
+                        "was cancelled, but voiding open "
+                        f"invoice {invoice.id} failed. Please "
+                        "void it manually in Stripe so the "
+                        "customer isn't shown an unpaid "
+                        "invoice."
+                    )
+                    try:
+                        send_email_to_admin(
+                            subject=failure_subject,
+                            template_vars={
+                                "title": failure_subject,
+                                "message": failure_message,
+                            },
+                            user=user,
+                            reply_to=user.email,
+                        )
+                    except Exception as email_err:
+                        capture_exception(email_err)
+        except stripe.error.StripeError as e:
+            # Couldn't even list invoices — don't know which
+            # are open, so ask admin to audit the cancelled
+            # sub.
+            capture_exception(e)
+            user.log_event(
+                f"Failed to list open invoices for cancelled "
+                f"subscription {subscription_id}; admin must "
+                "audit Stripe manually.",
+                "stripe",
+                str(e),
+            )
+            failure_subject = (
+                f"Action Required: audit cancelled Stripe "
+                f"subscription {subscription_id} for {full_name}"
+            )
+            failure_message = (
+                f"The Stripe subscription {subscription_id} "
+                f"for {full_name} was cancelled, but we "
+                "couldn't list its open invoices to void "
+                "them. Please check Stripe and void any "
+                "open invoices manually."
+            )
+            try:
+                send_email_to_admin(
+                    subject=failure_subject,
+                    template_vars={
+                        "title": failure_subject,
+                        "message": failure_message,
+                    },
+                    user=user,
+                    reply_to=user.email,
+                )
+            except Exception as email_err:
+                capture_exception(email_err)
+
+    transaction.on_commit(_on_commit_void_open_invoices)
+
+    # Notify the operator that this member's Stripe sub ended out
+    # of band. Stripe-specific messaging stays here, not in
+    # complete_cancel. Registered before the complete_cancel
+    # callback so it lands before the member-facing access-
+    # disabled email that deactivate() sends.
+    admin_cancel_subject = f"The membership or pending signup for {full_name} has ended"
+    admin_cancel_message = (
+        f"The Stripe subscription for {full_name} ended, so their membership — "
+        "or their signup, if they had not completed it — has been cancelled. "
+        "Any site access they had has been removed."
+    )
+
+    def _on_commit_admin_cancel_email(
+        user=profile.user,
+        subject=admin_cancel_subject,
+        message=admin_cancel_message,
+    ):
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={"title": subject, "message": message},
+                user=user,
+                reply_to=user.email,
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_admin_cancel_email)
+
+    def _on_commit_complete_cancel(profile=profile):
+        try:
+            profile.complete_cancel(CancelTriggeredBy.SUBSCRIPTION_DELETED)
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_complete_cancel)
+
+
+def overdue_reminder_copy(invoice_data):
+    """Returns (subject, message) for a membership invoice past its due date.
+
+    Bank transfer and cash payments are recorded by an admin by hand, so the
+    copy allows for a member who has paid but is not yet marked as paid.
+    """
+    amount_text = (
+        f" for {format_invoice_amount(invoice_data, prefer='due')}"
+        if invoice_data.get("amount_due") is not None
+        else ""
+    )
+    due_date = format_invoice_due_date(invoice_data)
+    due_text = f" was due on {due_date}" if due_date else " is past its due date"
+    hosted_url = invoice_data.get("hosted_invoice_url")
+    pay_here = f" Otherwise, you can pay it here: {hosted_url}." if hosted_url else ""
+
+    return (
+        "Reminder: your membership invoice is overdue",
+        f"Your membership invoice{amount_text}{due_text}, and we haven't "
+        "registered a payment yet. If you have paid in another way than through "
+        "the invoice link, for example by bank transfer, we may not have had time "
+        "to register your payment yet. Please make sure the payment has been "
+        f"made.{pay_here} If you have further questions, contact us.",
+    )
+
+
+def handle_subscription_updated(ctx):
+    """Remind an invoice-billed member once their invoice is past its due date.
+
+    Stripe moves a send_invoice subscription to past_due when its invoice is
+    still unpaid at the due date. Every other subscription update is ignored.
+    """
+    profile = ctx.profile
+    subscription = ctx.data
+
+    became_past_due = (
+        subscription.get("status") == "past_due" and "status" in ctx.previous_attributes
+    )
+    if not became_past_due or subscription.get("collection_method") != "send_invoice":
+        return
+
+    latest_invoice = subscription.get("latest_invoice")
+    invoice_id = (
+        latest_invoice.get("id") if isinstance(latest_invoice, dict) else latest_invoice
+    )
+
+    if profile.state_locked:
+        profile.user.log_event(
+            f"Invoice {invoice_id} is past due; no reminder sent to a locked member.",
+            "stripe",
+        )
+        return
+
+    profile.user.log_event(
+        f"Invoice {invoice_id} is past due; overdue reminder queued.", "stripe"
+    )
+
+    def _on_commit_overdue_reminder(user=profile.user, invoice_id=invoice_id):
+        invoice_data = {}
+        if invoice_id:
+            try:
+                invoice_data = stripe.Invoice.retrieve(invoice_id)
+            except Exception as e:
+                capture_exception(e)
+
+        # Paid or voided since Stripe marked the subscription past due.
+        if invoice_data and invoice_data.get("status") != "open":
+            return
+
+        subject, message = overdue_reminder_copy(invoice_data)
+        try:
+            user.email_notification(subject, message)
+            user.log_event("Overdue-invoice reminder email sent.", "email")
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_overdue_reminder)
+
+
+HANDLERS = {
+    "invoice.paid": handle_invoice_paid,
+    "invoice.payment_failed": handle_invoice_payment_failed,
+    "customer.subscription.updated": handle_subscription_updated,
+    "customer.subscription.deleted": handle_subscription_deleted,
+}
