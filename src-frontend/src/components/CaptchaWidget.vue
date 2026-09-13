@@ -19,56 +19,7 @@
 <script lang="ts">
 import { mapGetters } from 'vuex';
 import { defineComponent } from 'vue';
-
-// Cloudflare Turnstile is the only provider referenced in the frontend, and
-// only in this file — swapping providers means editing here + the backend
-// verify helper, nothing else.
-interface TurnstileRenderOptions {
-  sitekey: string;
-  action?: string;
-  callback?: (token: string) => void;
-  'expired-callback'?: () => void;
-  'error-callback'?: () => void;
-}
-interface TurnstileApi {
-  render: (el: HTMLElement | string, opts: TurnstileRenderOptions) => string;
-  reset: (id?: string) => void;
-  remove: (id?: string) => void;
-}
-declare global {
-  interface Window {
-    turnstile?: TurnstileApi;
-  }
-}
-
-const TURNSTILE_SRC =
-  'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-
-// Load the script once for the whole app; every widget instance awaits the
-// same promise so the ones that mount before it loads just queue.
-let turnstileReady: Promise<void> | null = null;
-function loadTurnstile(): Promise<void> {
-  if (turnstileReady) return turnstileReady;
-  turnstileReady = new Promise((resolve, reject) => {
-    if (window.turnstile) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = TURNSTILE_SRC;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      // Drop the cached rejection so a later mount can retry the load instead
-      // of being stuck "unavailable" for the rest of the SPA session.
-      turnstileReady = null;
-      reject(new Error('Turnstile script failed to load'));
-    };
-    document.head.appendChild(script);
-  });
-  return turnstileReady;
-}
+import { loadTurnstile } from './turnstile';
 
 export default defineComponent({
   name: 'CaptchaWidget',
@@ -94,6 +45,9 @@ export default defineComponent({
   },
   beforeUnmount() {
     this.removeWidget();
+    // Otherwise the host keeps a token with no widget behind it, and the next
+    // mount starts with Submit enabled on a token that may have expired.
+    this.$emit('update:modelValue', '');
   },
   methods: {
     async renderWidget() {

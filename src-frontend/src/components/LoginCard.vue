@@ -243,10 +243,7 @@
               flat
               :label="$t('button.submit')"
               :loading="reset.loading"
-              :disable="
-                reset.disableResetSubmitButton ||
-                (features?.enableCaptcha && !reset.captchaToken)
-              "
+              :disable="resetSubmitDisabled"
               @click="resetPassword()"
             />
           </q-card-actions>
@@ -523,6 +520,8 @@ export default defineComponent({
      * This submits the password reset request so the user gets a reset link in their email.
      */
     resetPassword() {
+      // Enter in the email field calls this even while Submit is disabled.
+      if (this.resetSubmitDisabled) return;
       this.loginFailed = false;
       this.reset.success = false;
       this.reset.errorKey = false;
@@ -619,6 +618,12 @@ export default defineComponent({
   computed: {
     ...mapGetters('profile', ['loggedIn']),
     ...mapGetters('config', ['siteName', 'images', 'features']),
+    resetSubmitDisabled(): boolean {
+      return (
+        this.reset.disableResetSubmitButton ||
+        (this.features?.enableCaptcha && !this.reset.captchaToken)
+      );
+    },
   },
 });
 </script>
