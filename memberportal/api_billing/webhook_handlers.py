@@ -51,6 +51,12 @@ class WebhookContext:
     event_type: str
     data: dict
     profile: "Profile"  # noqa: F821 — already select_for_update()'d by the view
+    # From the event's data.previous_attributes: the old value of each field
+    # an update changed.
+    previous_attributes: dict = dataclasses.field(default_factory=dict)
+
+
+SUBSCRIPTION_EVENTS = ("customer.subscription.updated", "customer.subscription.deleted")
 
 
 def classify_event_scope(event_type, data, profile):
@@ -59,7 +65,7 @@ def classify_event_scope(event_type, data, profile):
     The customer may own unrelated invoices/subs (admin one-offs, memberbucks,
     replayed cancelled subs) that we must not act on.
     """
-    if event_type == "customer.subscription.deleted":
+    if event_type in SUBSCRIPTION_EVENTS:
         if data.get("id") != profile.stripe_subscription_id:
             return EventScope.IGNORE
         return EventScope.IN_SCOPE
@@ -592,8 +598,88 @@ def handle_subscription_deleted(ctx):
     transaction.on_commit(_on_commit_complete_cancel)
 
 
+def overdue_reminder_copy(invoice_data):
+    """Returns (subject, message) for a membership invoice past its due date.
+
+    Bank transfer and cash payments are recorded by an admin by hand, so the
+    copy allows for a member who has paid but is not yet marked as paid.
+    """
+    amount_text = (
+        f" for {format_invoice_amount(invoice_data, prefer='due')}"
+        if invoice_data.get("amount_due") is not None
+        else ""
+    )
+    due_date = format_invoice_due_date(invoice_data)
+    due_text = f" was due on {due_date}" if due_date else " is past its due date"
+    hosted_url = invoice_data.get("hosted_invoice_url")
+    pay_here = f" Otherwise, you can pay it here: {hosted_url}." if hosted_url else ""
+
+    return (
+        "Reminder: your membership invoice is overdue",
+        f"Your membership invoice{amount_text}{due_text}, and we haven't "
+        "registered a payment yet. If you have paid in another way than through "
+        "the invoice link, for example by bank transfer, we may not have had time "
+        "to register your payment yet. Please make sure the payment has been "
+        f"made.{pay_here} If you have further questions, contact us.",
+    )
+
+
+def handle_subscription_updated(ctx):
+    """Remind an invoice-billed member once their invoice is past its due date.
+
+    Stripe moves a send_invoice subscription to past_due when its invoice is
+    still unpaid at the due date. Every other subscription update is ignored.
+    """
+    profile = ctx.profile
+    subscription = ctx.data
+
+    became_past_due = (
+        subscription.get("status") == "past_due" and "status" in ctx.previous_attributes
+    )
+    if not became_past_due or subscription.get("collection_method") != "send_invoice":
+        return
+
+    latest_invoice = subscription.get("latest_invoice")
+    invoice_id = (
+        latest_invoice.get("id") if isinstance(latest_invoice, dict) else latest_invoice
+    )
+
+    if profile.state_locked:
+        profile.user.log_event(
+            f"Invoice {invoice_id} is past due; no reminder sent to a locked member.",
+            "stripe",
+        )
+        return
+
+    profile.user.log_event(
+        f"Invoice {invoice_id} is past due; overdue reminder queued.", "stripe"
+    )
+
+    def _on_commit_overdue_reminder(user=profile.user, invoice_id=invoice_id):
+        invoice_data = {}
+        if invoice_id:
+            try:
+                invoice_data = stripe.Invoice.retrieve(invoice_id)
+            except Exception as e:
+                capture_exception(e)
+
+        # Paid or voided since Stripe marked the subscription past due.
+        if invoice_data and invoice_data.get("status") != "open":
+            return
+
+        subject, message = overdue_reminder_copy(invoice_data)
+        try:
+            user.email_notification(subject, message)
+            user.log_event("Overdue-invoice reminder email sent.", "email")
+        except Exception as e:
+            capture_exception(e)
+
+    transaction.on_commit(_on_commit_overdue_reminder)
+
+
 HANDLERS = {
     "invoice.paid": handle_invoice_paid,
     "invoice.payment_failed": handle_invoice_payment_failed,
+    "customer.subscription.updated": handle_subscription_updated,
     "customer.subscription.deleted": handle_subscription_deleted,
 }

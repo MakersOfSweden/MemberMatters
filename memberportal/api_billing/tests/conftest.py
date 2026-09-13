@@ -126,6 +126,7 @@ class StripeAPIRecorder:
     def __init__(self):
         self.calls = []
         self.open_invoices = []
+        self.invoices = {}
         self.raise_on = {}
 
     def _record(self, name):
@@ -146,6 +147,8 @@ class StripeAPIRecorder:
     def _result(self, name, *args, **kwargs):
         if name == "Invoice.list":
             return _InvoiceList(self.open_invoices)
+        if name == "Invoice.retrieve":
+            return self.invoices.get(args[0], {})
         return {}
 
     def names(self):
@@ -220,8 +223,11 @@ def build_invoice(
     return data
 
 
-def build_event(event_type, obj, event_id="evt_test123"):
-    return {"id": event_id, "type": event_type, "data": {"object": obj}}
+def build_event(event_type, obj, event_id="evt_test123", previous_attributes=None):
+    data = {"object": obj}
+    if previous_attributes is not None:
+        data["previous_attributes"] = previous_attributes
+    return {"id": event_id, "type": event_type, "data": data}
 
 
 @pytest.fixture

@@ -1045,16 +1045,282 @@ class TestCallbackIsolation:
 
 class TestHandlerRegistry:
     def test_every_handler_type_is_understood_by_the_scope_classifier(self):
-        # classify_event_scope special-cases customer.subscription.deleted and
-        # treats everything else as an invoice event, scoping it by an invoice
-        # subscription lookup. A handler registered for some other event shape
-        # would be scoped out silently and never run. This assertion exists to
-        # fail when HANDLERS grows, forcing a look at the classifier.
+        # classify_event_scope scopes SUBSCRIPTION_EVENTS by the subscription's
+        # own id and treats everything else as an invoice event, scoping it by
+        # an invoice subscription lookup. A handler registered for some other
+        # event shape would be scoped out silently and never run. This
+        # assertion exists to fail when HANDLERS grows, forcing a look at the
+        # classifier.
         assert set(HANDLERS) == {
             "invoice.paid",
             "invoice.payment_failed",
+            "customer.subscription.updated",
             "customer.subscription.deleted",
         }
+
+
+class TestOverdueReminder:
+    """customer.subscription.updated moving an invoice-billed subscription to
+    past_due, which Stripe sends when the invoice is still unpaid at its due
+    date. No Stripe Automation is involved."""
+
+    DUE = 1700000000  # 2023-11-14
+
+    @pytest.fixture
+    def overdue_invoice(self, stripe_api):
+        stripe_api.invoices["in_overdue"] = {
+            "id": "in_overdue",
+            "status": "open",
+            "amount_due": 5500,
+            "currency": "aud",
+            "due_date": self.DUE,
+            "hosted_invoice_url": "https://invoice.stripe.com/i/overdue",
+        }
+        return stripe_api
+
+    @staticmethod
+    def invoice_member(**overrides):
+        return ProfileFactory(
+            **{
+                "state": "active",
+                "subscription_status": "active",
+                "billing_method": "invoice",
+                "stripe_customer_id": CUSTOMER_ID,
+                "stripe_subscription_id": SUBSCRIPTION_ID,
+                "membership_plan": PaymentPlanFactory(),
+                **overrides,
+            }
+        )
+
+    @staticmethod
+    def went_past_due(previous_attributes=None, event_id="evt_past_due", **fields):
+        subscription = {
+            "id": SUBSCRIPTION_ID,
+            "customer": CUSTOMER_ID,
+            "status": "past_due",
+            "collection_method": "send_invoice",
+            "latest_invoice": "in_overdue",
+            **fields,
+        }
+        return build_event(
+            "customer.subscription.updated",
+            subscription,
+            event_id=event_id,
+            previous_attributes=(
+                {"status": "active"}
+                if previous_attributes is None
+                else previous_attributes
+            ),
+        )
+
+    @only()
+    @pytest.mark.parametrize(
+        "state, subscription_status",
+        [
+            pytest.param("active", "active", id="renewal"),
+            pytest.param("noob", "pending", id="signup"),
+            pytest.param("active", "cancelling", id="final-renewal"),
+        ],
+    )
+    def test_an_invoice_member_whose_invoice_goes_past_due_is_reminded(
+        self,
+        state,
+        subscription_status,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        profile = self.invoice_member(
+            state=state, subscription_status=subscription_status
+        )
+        stripe_event(event=self.went_past_due())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            assert post_webhook().status_code == 200
+
+        assert [(m["To"], m["Subject"]) for m in outbox] == [
+            (profile.user.email, "Reminder: your membership invoice is overdue")
+        ]
+        profile.refresh_from_db()
+        assert (profile.state, profile.subscription_status) == (
+            state,
+            subscription_status,
+        )
+
+    @only()
+    def test_the_reminder_states_the_debt_and_allows_for_an_unrecorded_payment(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        self.invoice_member()
+        stripe_event(event=self.went_past_due())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        body = outbox[0]["HtmlBody"]
+        assert "55.00 AUD" in body
+        assert format_invoice_due_date({"due_date": self.DUE}) in body
+        assert "https://invoice.stripe.com/i/overdue" in body
+        assert "bank transfer" in body
+        assert "may not have had time to register your payment" in body
+        assert "If you have further questions, contact us." in body
+        assert "more time" not in body
+
+    @only()
+    def test_a_card_subscription_going_past_due_is_left_to_the_failed_payment_emails(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        self.invoice_member(billing_method="card")
+        stripe_event(event=self.went_past_due(collection_method="charge_automatically"))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+        assert "Invoice.retrieve" not in overdue_invoice.names()
+
+    @only()
+    @pytest.mark.parametrize(
+        "status, previous_attributes",
+        [
+            pytest.param("past_due", {}, id="past-due-but-status-unchanged"),
+            pytest.param("active", {"status": "past_due"}, id="paid-back-to-active"),
+            pytest.param(
+                "active", {"cancel_at_period_end": False}, id="cancel-scheduled"
+            ),
+        ],
+    )
+    def test_an_update_that_is_not_a_move_into_past_due_sends_nothing(
+        self,
+        status,
+        previous_attributes,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        self.invoice_member()
+        stripe_event(
+            event=self.went_past_due(
+                previous_attributes=previous_attributes, status=status
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+
+    @only()
+    def test_an_invoice_settled_before_the_reminder_goes_out_is_not_chased(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        overdue_invoice.invoices["in_overdue"]["status"] = "paid"
+        self.invoice_member()
+        stripe_event(event=self.went_past_due())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+
+    @only()
+    def test_a_locked_member_is_not_chased(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        profile = self.invoice_member(
+            state="noob", subscription_status="pending", state_locked=True
+        )
+        stripe_event(event=self.went_past_due())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+        assert any("no reminder sent to a locked member" in e for e in logged(profile))
+
+    @only()
+    def test_a_stripe_outage_still_sends_a_plain_reminder(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        import stripe as stripe_lib
+
+        overdue_invoice.raise_on["Invoice.retrieve"] = (
+            stripe_lib.error.APIConnectionError("down")
+        )
+        self.invoice_member()
+        stripe_event(event=self.went_past_due())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            assert post_webhook().status_code == 200
+
+        assert subjects(outbox) == ["Reminder: your membership invoice is overdue"]
+        body = outbox[0]["HtmlBody"]
+        assert "is past its due date" in body
+        assert "None" not in body
+
+    def test_an_update_for_another_subscription_is_ignored(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        self.invoice_member()
+        stripe_event(event=self.went_past_due(id="sub_somethingelse"))
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        assert outbox == []
+        assert not ProcessedStripeEvent.objects.exists()
+
+    @only()
+    def test_a_redelivered_update_reminds_once(
+        self,
+        post_webhook,
+        stripe_event,
+        overdue_invoice,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        self.invoice_member()
+        stripe_event(event=self.went_past_due())
+
+        for _ in range(2):
+            with django_capture_on_commit_callbacks(execute=True):
+                post_webhook()
+
+        assert len(outbox) == 1
 
 
 class TestInvoicePaymentFailed:

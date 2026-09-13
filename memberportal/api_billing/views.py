@@ -1435,6 +1435,7 @@ class StripeWebhook(StripeAPIView):
         # don't retry — a missed receipt email is better than a paid
         # member who never activates.
         with transaction.atomic():
+            previous_attributes = data.get("previous_attributes") or {}
             data = data["object"]
 
             # Some Stripe events (e.g. account-level ones) don't carry a customer
@@ -1482,6 +1483,7 @@ class StripeWebhook(StripeAPIView):
                 event_type=event_type,
                 data=data,
                 profile=locked_profile,
+                previous_attributes=previous_attributes,
             )
 
             # An orphaned payment takes no state action, so unlike an
