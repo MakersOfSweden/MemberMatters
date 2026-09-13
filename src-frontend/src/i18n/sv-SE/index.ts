@@ -477,6 +477,7 @@ export default {
     resumeAccessDescription:
       'Åtkomstpausen hävs. Om medlemmens status är aktiv återfås dörråtkomsten omedelbart.',
     accessDisabledTooltip: 'Åtkomst inaktiverad av en administratör.',
+    hasAdminNotesTooltip: 'Den här medlemmen har administratörsanteckningar.',
     makeMemberTitle: 'Gör den här medlemmen aktiv?',
     makeMemberDescription:
       'Aktiverar medlemmen och tilldelar standardåtkomst till dörrar / förreglingar, förbi den vanliga registreringskontrollen.',

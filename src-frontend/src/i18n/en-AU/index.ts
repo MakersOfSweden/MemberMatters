@@ -488,6 +488,7 @@ export default {
     resumeAccessDescription:
       "This member's access pause will be lifted. If their state is active they'll regain door access immediately.",
     accessDisabledTooltip: 'Access disabled by an admin.',
+    hasAdminNotesTooltip: 'This member has admin notes.',
     makeMemberTitle: 'Make this member active?',
     makeMemberDescription:
       'Activates the member and grants default door / interlock access, bypassing the usual signup gates.',

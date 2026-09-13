@@ -23,6 +23,15 @@
       >
         <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
       </q-icon>
+      <q-icon
+        v-if="selectedMember.hasAdminNotes"
+        :name="icons.adminNotes"
+        color="grey-7"
+        size="md"
+        class="q-ml-sm"
+      >
+        <q-tooltip>{{ $t('adminTools.hasAdminNotesTooltip') }}</q-tooltip>
+      </q-icon>
     </h3>
     <q-card
       class="q-mb-none"

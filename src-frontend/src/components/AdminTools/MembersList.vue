@@ -131,6 +131,15 @@
           >
             <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
           </q-icon>
+          <q-icon
+            v-if="props.row.hasAdminNotes"
+            :name="icons.adminNotes"
+            color="grey-7"
+            size="sm"
+            class="q-ml-xs"
+          >
+            <q-tooltip>{{ $t('adminTools.hasAdminNotesTooltip') }}</q-tooltip>
+          </q-icon>
         </q-td>
       </template>
     </q-table>

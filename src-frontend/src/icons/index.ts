@@ -81,6 +81,7 @@ export default {
   lock: 'mdi-lock-outline',
   unlock: 'mdi-lock-open-variant-outline',
   accessDisabled: 'mdi-block-helper',
+  adminNotes: 'mdi-note-text-outline',
 
   member_count_total: 'mdi-account-multiple',
   member_count_6_months_total: 'mdi-account-multiple',
