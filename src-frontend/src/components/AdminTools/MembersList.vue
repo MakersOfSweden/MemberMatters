@@ -6,6 +6,7 @@
       :columns="columns"
       row-key="email"
       :filter="filter"
+      :filter-method="fuzzyFilter"
       v-model:pagination="pagination"
       :loading="loading"
       :grid="$q.screen.lt.md"
@@ -98,11 +99,14 @@
         />
 
         <q-input
+          ref="searchInput"
           v-model="filter"
           outlined
           dense
+          clearable
+          :clear-icon="icons.close"
           debounce="300"
-          placeholder="Search"
+          :placeholder="$t('adminTools.searchMembers')"
         >
           <template v-slot:append>
             <q-icon :name="icons.search" />
@@ -145,7 +149,9 @@ import { exportFile } from 'quasar';
 import { stringify } from 'csv-stringify';
 import { mapGetters } from 'vuex';
 import { MemberProfile } from 'types/member';
+import { memberMatchesQuery } from '../../utils/fuzzySearch';
 import { defineComponent } from 'vue';
+import type { QInput } from 'quasar';
 
 export default defineComponent({
   name: 'MembersList',
@@ -162,8 +168,10 @@ export default defineComponent({
       get(): string {
         return this.$store.getters['adminTools/membersFilter'];
       },
-      set(value: string) {
-        this.$store.commit('adminTools/setMembersFilter', value);
+      // The clear button hands back null, but the store (and QTable's filter
+      // prop) expect a string.
+      set(value: string | null) {
+        this.$store.commit('adminTools/setMembersFilter', value ?? '');
       },
     },
     memberState: {
@@ -264,8 +272,34 @@ export default defineComponent({
   },
   mounted() {
     this.getMembers();
+    window.addEventListener('keydown', this.onKeydown);
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.onKeydown);
   },
   methods: {
+    fuzzyFilter(rows: MemberProfile[], terms: string) {
+      return rows.filter((row) => memberMatchesQuery(row, terms));
+    },
+    // Ctrl/Cmd+F jumps to the member search instead of the browser's find bar,
+    // which can only see the current page of the table anyway. Typing in any
+    // other field still gets native find.
+    onKeydown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+        return;
+      }
+      // Caps Lock reports 'F' even with shift up.
+      if (event.key.toLowerCase() !== 'f') return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) {
+        return;
+      }
+
+      event.preventDefault();
+      (this.$refs.searchInput as QInput | undefined)?.focus();
+    },
     getMembers() {
       this.loading = true;
       this.$axios

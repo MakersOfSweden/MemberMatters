@@ -14,7 +14,7 @@ export default {
     tiers: [],
     // Kept in the store so the members list survives navigating to a member.
     membersFilter: '',
-    membersState: 'active',
+    membersState: 'all',
     // rowsPerPage default depends on screen size, so MembersList sets it.
     membersPagination: {
       sortBy: 'date',

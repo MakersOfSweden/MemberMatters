@@ -460,6 +460,7 @@ export default {
     exportCsv: 'Export CSV',
     exportOptions: 'Export Options',
     filterOptions: 'Filter',
+    searchMembers: 'Sök',
     all: 'Alla',
     active: 'Aktiva',
     inactive: 'Inaktiva',
