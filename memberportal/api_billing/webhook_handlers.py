@@ -39,6 +39,10 @@ class UnrecognisedInvoiceSchema(Exception):
     """A subscription invoice exposed no subscription id under either schema."""
 
 
+class LockedMemberPaid(Exception):
+    """An invoice was paid for a state_locked member; an admin must reconcile it."""
+
+
 class EventScope(enum.Enum):
     IN_SCOPE = "in_scope"
     ORPHAN_PAID = "orphan_paid"
@@ -171,9 +175,8 @@ def handle_invoice_paid(ctx):
 
     profile.user.log_event("Membership payment received.", "stripe")
 
-    # A state_locked member is by invariant subscription_status=inactive. An
-    # invoice can still be paid against them (late delivery, or an admin
-    # marking an old one paid in Stripe); the lock outranks it.
+    # A lock outranks a payment: the member keeps their state and
+    # subscription_status, and an admin reconciles the payment.
     holding = profile.state_locked and profile.state != "active"
 
     updates = []
@@ -193,45 +196,52 @@ def handle_invoice_paid(ctx):
         profile.save(update_fields=updates)
 
     if holding:
+        amount = format_invoice_amount(data)
+        invoice_number = data.get("number")
+        invoice_label = (
+            f"{data.get('id')} ({invoice_number})" if invoice_number else data.get("id")
+        )
+        full_name = profile.get_full_name()
+        user_email = profile.user.email
+        held_state = profile.state
+
         profile.user.log_event(
-            "Invoice paid for a state_locked member — held; "
-            "admin must unlock + reconcile.",
+            f"Payment of {amount} on invoice {invoice_label} held: the member is "
+            "locked. Not activated; an admin must refund it or unlock and "
+            "activate them.",
             "stripe",
         )
 
-        held_full_name = profile.get_full_name()
-        held_user_email = profile.user.email
+        def _on_commit_locked_paid_alert(user=profile.user, profile_id=profile.pk):
+            alert = (
+                f"Locked member {full_name} (profile {profile_id}) paid {amount} "
+                f"on invoice {invoice_label}; the payment is held and the member "
+                f"left {held_state} and locked."
+            )
+            logger.error(alert)
+            capture_exception(LockedMemberPaid(alert))
 
-        def _on_commit_locked_paid_admin(
-            full_name=held_full_name,
-            user_email=held_user_email,
-            user=profile.user,
-        ):
             admin_subject = (
-                f"Action Required: locked member {full_name} had an invoice paid"
+                f"Action Required: locked member {full_name} has paid {amount}"
             )
             admin_message = (
-                f"{full_name} ({user_email}) is currently "
-                "state-locked, but Stripe just reported a paid "
-                "invoice on their subscription. The portal has "
-                "NOT activated them. Investigate whether to "
-                "unlock + activate, or to void the Stripe "
-                "subscription."
+                f"{full_name} ({user_email}) is locked, but Stripe reports that "
+                f"invoice {invoice_label} for {amount} has been paid. The portal "
+                f"has NOT activated them: they remain {held_state} and locked. "
+                "Decide whether to refund the payment in Stripe, or to unlock "
+                "and activate them."
             )
             try:
                 send_email_to_admin(
                     subject=admin_subject,
-                    template_vars={
-                        "title": admin_subject,
-                        "message": admin_message,
-                    },
+                    template_vars={"title": admin_subject, "message": admin_message},
                     user=user,
                     reply_to=user.email,
                 )
             except Exception as e:
                 capture_exception(e)
 
-        transaction.on_commit(_on_commit_locked_paid_admin)
+        transaction.on_commit(_on_commit_locked_paid_alert)
         return
 
     if profile.state == "active":

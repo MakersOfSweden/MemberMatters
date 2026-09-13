@@ -27,6 +27,7 @@ from api_billing.models import ProcessedStripeEvent
 from api_billing.stripe_utils import format_invoice_due_date
 from api_billing.webhook_handlers import (
     HANDLERS,
+    LockedMemberPaid,
     UnrecognisedInvoiceSchema,
     payment_failed_copy,
 )
@@ -436,7 +437,109 @@ class TestStateLockHold:
         assert profile.state == "noob"
         assert profile.subscription_status == "inactive"
         assert profile.state_locked is True
-        assert any("had an invoice paid" in subject for subject in subjects(outbox))
+        assert any(
+            subject.startswith(
+                f"Action Required: locked member {profile.get_full_name()} has paid"
+            )
+            for subject in subjects(outbox)
+        )
+
+    @only()
+    def test_a_locked_pending_member_who_pays_stays_noob_and_locked(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        # The member a lock is usually for: a signup whose invoice is still open.
+        signups = []
+        monkeypatch.setattr(
+            "profile.models.Profile.complete_signup",
+            lambda self, *a, **kw: signups.append(self),
+            raising=True,
+        )
+        profile = ProfileFactory(
+            state_locked=True,
+            subscription_status="pending",
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        full_name = profile.get_full_name()
+        stripe_event(
+            event=build_event(
+                "invoice.paid",
+                build_invoice(
+                    billing_reason="subscription_create",
+                    amount_paid=5500,
+                    currency="aud",
+                    number="INV-0007",
+                ),
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert (profile.state, profile.subscription_status, profile.state_locked) == (
+            "noob",
+            "pending",
+            True,
+        )
+        assert signups == []
+        assert profile.user.email not in [m["To"] for m in outbox]
+        assert subjects(outbox) == [
+            f"Action Required: locked member {full_name} has paid 55.00 AUD"
+        ]
+        body = outbox[0]["HtmlBody"]
+        assert "in_test123 (INV-0007)" in body
+        assert "NOT activated" in body
+        assert "refund" in body
+        assert "unlock and activate" in body
+
+    @only()
+    def test_the_hold_is_logged_as_an_error_and_reported_to_sentry(
+        self,
+        post_webhook,
+        stripe_event,
+        monkeypatch,
+        caplog,
+        django_capture_on_commit_callbacks,
+    ):
+        captured = []
+        monkeypatch.setattr(
+            "api_billing.webhook_handlers.capture_exception", captured.append
+        )
+        ProfileFactory(
+            state_locked=True,
+            subscription_status="pending",
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        stripe_event(
+            event=build_event(
+                "invoice.paid", build_invoice(amount_paid=5500, currency="aud")
+            )
+        )
+
+        with caplog.at_level("ERROR", logger="billing"):
+            with django_capture_on_commit_callbacks(execute=True):
+                post_webhook()
+
+        [alert] = [e for e in captured if isinstance(e, LockedMemberPaid)]
+        assert "in_test123" in str(alert)
+        assert "55.00 AUD" in str(alert)
+        assert any(
+            "in_test123" in record.message
+            for record in caplog.records
+            if record.levelname == "ERROR"
+        )
 
 
 class TestSubscriptionDeleted:
@@ -1006,7 +1109,12 @@ class TestRenewal:
         assert profile.state == "inactive"
         assert profile.subscription_status == "inactive"
         assert signups == []
-        assert any("had an invoice paid" in subject for subject in subjects(outbox))
+        assert any(
+            subject.startswith(
+                f"Action Required: locked member {profile.get_full_name()} has paid"
+            )
+            for subject in subjects(outbox)
+        )
 
 
 class TestCallbackIsolation:
