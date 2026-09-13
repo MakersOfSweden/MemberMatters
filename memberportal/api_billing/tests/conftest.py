@@ -1,9 +1,7 @@
 """Fixtures for the Stripe webhook and billing API tests.
 
-Deliberately local to `api_billing` rather than added to the top-level
-conftest/factories: nothing outside billing needs a Stripe-subscribed member,
-and keeping the new seams here means this package can be reviewed — and
-rebased — without touching the shared fixtures every other suite depends on.
+Kept in `api_billing` because nothing outside billing needs a
+Stripe-subscribed member. Model factories come from `tests.factories`.
 
 The stub strategy follows memberportal/conftest.py: patch each service at its
 module boundary. The autouse `_no_network` guard is the backstop — any Stripe
@@ -11,35 +9,10 @@ call these fixtures fail to intercept raises NetworkAccessInTestError naming
 api.stripe.com, instead of hanging or, worse, silently passing.
 """
 
-import factory
 import pytest
 from constance.test import override_config
 
-from api_admin_tools.models import MemberTier, PaymentPlan
-from tests.factories import ProfileFactory
-
-
-class MemberTierFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = MemberTier
-
-    # name, description and stripe_id are all unique on the model.
-    name = factory.Sequence(lambda n: f"Tier {n}")
-    description = factory.Sequence(lambda n: f"Tier {n} description")
-    stripe_id = factory.Sequence(lambda n: f"prod_tier{n}")
-
-
-class PaymentPlanFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = PaymentPlan
-
-    name = factory.Sequence(lambda n: f"Plan {n}")
-    description = "Test plan"
-    stripe_id = factory.Sequence(lambda n: f"price_plan{n}")
-    member_tier = factory.SubFactory(MemberTierFactory)
-    cost = 5500
-    interval_count = 1
-    interval = "month"
+from tests.factories import PaymentPlanFactory, ProfileFactory
 
 
 CUSTOMER_ID = "cus_test123"

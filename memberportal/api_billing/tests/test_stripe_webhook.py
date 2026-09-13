@@ -32,12 +32,11 @@ from api_billing.webhook_handlers import (
     payment_failed_copy,
 )
 from profile.models import SignupTriggeredBy, UserEventLog
-from tests.factories import ProfileFactory
+from tests.factories import PaymentPlanFactory, ProfileFactory
 
 from .conftest import (
     CUSTOMER_ID,
     SUBSCRIPTION_ID,
-    PaymentPlanFactory,
     build_event,
     build_invoice,
 )
