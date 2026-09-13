@@ -407,6 +407,73 @@ class TestInvoicePaidActivates:
         assert profile.state == "inactive"
         assert "Action Required: Verify returning member" in subjects(outbox)
 
+    @only()
+    def test_a_payment_repairs_a_drifted_status_before_checking_requirements(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # The payment shows the subscription is live, so a noob whose status
+        # has drifted to "inactive" activates instead of being told to finish
+        # steps they have already done.
+        profile = ProfileFactory(
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        assert profile.subscription_status == "inactive"
+        stripe_event(
+            event=build_event(
+                "invoice.paid", build_invoice(billing_reason="subscription_create")
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert (profile.state, profile.subscription_status) == ("active", "active")
+        sent = subjects(outbox)
+        assert "Your payment was successful." in sent
+        assert "Your payment was received — additional steps needed" not in sent
+
+    @only()
+    def test_a_returning_member_who_meets_every_requirement_is_reactivated(
+        self,
+        post_webhook,
+        stripe_event,
+        outbox,
+        django_capture_on_commit_callbacks,
+    ):
+        # A former member re-joining by invoice stays inactive with a pending
+        # subscription until their first invoice is paid.
+        profile = ProfileFactory(
+            inactive=True,
+            subscription_pending=True,
+            billing_method="invoice",
+            stripe_customer_id=CUSTOMER_ID,
+            stripe_subscription_id=SUBSCRIPTION_ID,
+            membership_plan=PaymentPlanFactory(),
+        )
+        stripe_event(
+            event=build_event(
+                "invoice.paid", build_invoice(billing_reason="subscription_create")
+            )
+        )
+
+        with django_capture_on_commit_callbacks(execute=True):
+            post_webhook()
+
+        profile.refresh_from_db()
+        assert (profile.state, profile.subscription_status) == ("active", "active")
+        sent = subjects(outbox)
+        assert "Your payment was successful." in sent
+        assert any("site access has been enabled" in subject for subject in sent)
+        assert "Action Required: Verify returning member" not in sent
+
 
 class TestStateLockHold:
     @only()
