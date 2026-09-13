@@ -204,7 +204,7 @@ The following permissions are needed for all Member Matters payment features to 
 
 #### Pay by Invoice setup
 
-When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow).
+When `ENABLE_INVOICE_BILLING` is on, members can choose to receive a Stripe invoice by email instead of paying with a card at signup. Their membership is created in a `pending` state and is only activated once the invoice is paid — either by the member (via Stripe's hosted invoice page) or by an admin out-of-band (via the "Pending Invoices" admin screen, which calls Stripe's `paid_out_of_band` flow). The same screen lists each renewal invoice for invoice-billed members who are already active, so a renewal paid by bank transfer or cash is recorded the same way.
 
 The activation and deactivation flow relies on Stripe webhooks:
 * `invoice.paid` → MemberMatters activates the member.
