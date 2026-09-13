@@ -71,7 +71,7 @@ def _client_ip(request):
 def _allowed_hostnames() -> set:
     # Empty default skips the check, so native WebView origins keep working.
     raw = (config.CAPTCHA_ALLOWED_HOSTNAMES or "").strip()
-    return {h.strip() for h in raw.split(",") if h.strip()}
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
 
 
 def verify_captcha(request, action=None) -> bool:
@@ -95,6 +95,8 @@ def verify_captcha(request, action=None) -> bool:
         # requests doesn't raise on 4xx/5xx and an error page is HTML, so
         # .json() can raise ValueError — catch it too and fail closed.
         result = resp.json()
+        if not isinstance(result, dict):
+            raise ValueError("siteverify did not answer with a JSON object")
     except (requests.RequestException, ValueError):
         # Error, not warning: reaching here means signup, login and password
         # reset are all failing closed, so it should stand out in the log.
@@ -108,10 +110,20 @@ def verify_captcha(request, action=None) -> bool:
     # Defence in depth (the site key is public): bind the token to the form that
     # minted it, and — only when configured — to one of our own hostnames.
     if action is not None and result.get("action") != action:
+        logger.warning(
+            "CAPTCHA token was solved for action %r, expected %r",
+            result.get("action"),
+            action,
+        )
         return False
 
     allowed = _allowed_hostnames()
-    if allowed and result.get("hostname") not in allowed:
+    hostname = str(result.get("hostname") or "").lower()
+    if allowed and hostname not in allowed:
+        logger.warning(
+            "CAPTCHA token was solved on %r, not in CAPTCHA_ALLOWED_HOSTNAMES",
+            hostname,
+        )
         return False
 
     return True

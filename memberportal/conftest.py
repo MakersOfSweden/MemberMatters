@@ -140,6 +140,54 @@ def sms_outbox(monkeypatch):
 
 
 @pytest.fixture
+def siteverify(monkeypatch):
+    """Stand in for the CAPTCHA provider's siteverify endpoint.
+
+    Patched at the ``requests`` reference inside ``services.captcha`` — the
+    transport — so token extraction, the remoteip choice and the action and
+    hostname checks all stay real.
+
+    Not autouse: CAPTCHA is off by default, and then nothing calls out. A test
+    that turns it on without this fixture trips `_no_network` instead.
+
+    Set ``.result`` to the JSON verdict the provider answers with — or to an
+    exception, raised when the body is decoded — and ``.raises`` to an
+    exception for the POST itself to raise. ``.calls`` records the url, form
+    payload and timeout of each POST, in order.
+    """
+    from types import SimpleNamespace
+
+    import requests
+
+    from services import captcha
+
+    class _Siteverify:
+        def __init__(self):
+            self.calls = []
+            self.result = {"success": True}
+            self.raises = None
+
+        def post(self, url, data=None, timeout=None):
+            self.calls.append({"url": url, "data": data, "timeout": timeout})
+            if self.raises is not None:
+                raise self.raises
+            return SimpleNamespace(json=self._decode)
+
+        def _decode(self):
+            if isinstance(self.result, Exception):
+                raise self.result
+            return self.result
+
+    fake = _Siteverify()
+    monkeypatch.setattr(
+        captcha,
+        "requests",
+        SimpleNamespace(post=fake.post, RequestException=requests.RequestException),
+    )
+    return fake
+
+
+@pytest.fixture
 def admin_request(admin_member):
     """A request object for the `request=` argument on admin state changes.
 
@@ -189,15 +237,26 @@ def admin_client(admin_member):
 
 
 @pytest.fixture
-def enable_throttling(settings):
-    """Restore the real DRF throttle rates for tests that assert on them."""
+def enable_throttling(settings, monkeypatch):
+    """Restore the real DRF throttle rates for tests that assert on them.
+
+    Overriding the setting alone doesn't reach ScopedRateThrottle: DRF copies
+    DEFAULT_THROTTLE_RATES into `SimpleRateThrottle.THROTTLE_RATES` at import,
+    so the class keeps the empty test rates and every scoped view raises
+    ImproperlyConfigured. The copy is patched too, with a fresh dict so a test
+    can tighten one scope via `monkeypatch.setitem`.
+    """
+    from rest_framework.throttling import SimpleRateThrottle
+
     from membermatters.settings import REST_FRAMEWORK as REAL_REST_FRAMEWORK
 
+    real_rates = dict(REAL_REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
     settings.REST_FRAMEWORK = {
         **settings.REST_FRAMEWORK,
         "DEFAULT_THROTTLE_CLASSES": REAL_REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"],
-        "DEFAULT_THROTTLE_RATES": REAL_REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+        "DEFAULT_THROTTLE_RATES": real_rates,
     }
+    monkeypatch.setattr(SimpleRateThrottle, "THROTTLE_RATES", real_rates)
     return settings.REST_FRAMEWORK
 
 
