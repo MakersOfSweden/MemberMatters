@@ -234,19 +234,15 @@ export default defineComponent({
       return this?.profile?.financial?.billingMethod;
     },
     currentPeriodEnd() {
-      return new Date(
-        this.subscriptionInfo?.currentPeriodEnd * 1000
-      ).toLocaleString('en-au');
+      return new Date(this.subscriptionInfo?.currentPeriodEnd).toLocaleString(
+        'en-au'
+      );
     },
     signupDate() {
-      return new Date(this.subscriptionInfo?.startDate * 1000).toLocaleString(
-        'en-au'
-      );
+      return new Date(this.subscriptionInfo?.startDate).toLocaleString('en-au');
     },
     cancelAtDate() {
-      return new Date(this.subscriptionInfo?.cancelAt * 1000).toLocaleString(
-        'en-au'
-      );
+      return new Date(this.subscriptionInfo?.cancelAt).toLocaleString('en-au');
     },
     paymentMethodLabel() {
       const method = this.profile?.financial?.billingMethod;

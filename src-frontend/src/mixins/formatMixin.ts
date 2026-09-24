@@ -17,31 +17,25 @@ export function formatCsvList(list: Array<string>) {
   });
 }
 
-export function formatDate(date: Date | number, time = true) {
-  let parsedDate = date;
-  // if it's earlier than 2000 it's clearly not been scaled to js time which is stored in milliseconds
-  if (typeof date === 'number' && date < 9439200000) {
-    parsedDate = date * 1000;
-  }
-  if (time) return dayjs(parsedDate).local().format('D MMM YYYY, h:mm a');
-  return dayjs(parsedDate).local().format('D MMM YYYY');
+// The API sends every date/time as an ISO 8601 UTC string
+// (e.g. "2026-09-24T08:15:00.000Z"); these render it in the viewer's timezone.
+export type ApiDate = string | Date;
+
+export function formatDate(date: ApiDate, time = true) {
+  if (time) return dayjs(date).local().format('D MMM YYYY, h:mm a');
+  return dayjs(date).local().format('D MMM YYYY');
 }
 
-export function formatDay(date: Date | number) {
-  let parsedDate = date;
-  // mirror formatDate's heuristic for unscaled (seconds-based) timestamps
-  if (typeof date === 'number' && date < 9439200000) {
-    parsedDate = date * 1000;
-  }
-  return dayjs(parsedDate).local().format('D MMM YYYY');
+export function formatDay(date: ApiDate) {
+  return dayjs(date).local().format('D MMM YYYY');
 }
 
-export function formatDateSimple(date: Date, time = true) {
+export function formatDateSimple(date: ApiDate, time = true) {
   if (time) return dayjs(date).local().format('DD/MM/YYYY, h:mm a');
   return dayjs(date).local().format('D/MMM/YYYY');
 }
 
-export function formatWhen(date: Date) {
+export function formatWhen(date: ApiDate) {
   return dayjs(date).local().fromNow();
 }
 

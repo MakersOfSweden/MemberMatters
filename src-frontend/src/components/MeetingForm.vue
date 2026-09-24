@@ -181,11 +181,15 @@ export default {
   },
   methods: {
     ...mapActions('adminTools', ['getMeetings', 'getMeetingTypes']),
+    requestBody() {
+      // form.date is local wall-clock time ("YYYY-MM-DD HH:mm").
+      return { ...this.form, date: dayjs(this.form.date).toISOString() };
+    },
     updateMeeting() {
       this.loading = true;
 
       this.$axios
-        .put(`/api/meetings/${this.meetingId}/`, this.form)
+        .put(`/api/meetings/${this.meetingId}/`, this.requestBody())
         .then(() => {
           this.form.error = false;
           this.form.success = true;
@@ -202,7 +206,7 @@ export default {
       this.loading = true;
 
       this.$axios
-        .post('/api/meetings/', this.form)
+        .post('/api/meetings/', this.requestBody())
         .then(() => {
           this.form.error = false;
           this.form.success = true;
@@ -226,7 +230,7 @@ export default {
         this.meetings[this.meetings.findIndex((p) => p.id === this.meetingId)];
 
       this.form.type = meetingInfo.type;
-      this.form.date = meetingInfo.date;
+      this.form.date = dayjs(meetingInfo.date).format('YYYY-MM-DD HH:mm');
       this.form.chair = meetingInfo.chair;
     }
   },

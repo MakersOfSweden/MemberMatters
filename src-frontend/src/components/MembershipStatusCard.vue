@@ -256,19 +256,19 @@ export default {
     },
     formattedRenewalDate() {
       if (!this.currentPeriodEnd) return null;
-      return new Date(this.currentPeriodEnd * 1000).toLocaleDateString();
+      return new Date(this.currentPeriodEnd).toLocaleDateString();
     },
     daysUntilRenewal() {
       if (!this.currentPeriodEnd) return null;
-      return dayjs(this.currentPeriodEnd * 1000).diff(dayjs(), 'day');
+      return dayjs(this.currentPeriodEnd).diff(dayjs(), 'day');
     },
     formattedCancelAt() {
       if (!this.cancelAt) return null;
-      return new Date(this.cancelAt * 1000).toLocaleDateString();
+      return new Date(this.cancelAt).toLocaleDateString();
     },
     daysUntilExpiration() {
       if (!this.cancelAt) return null;
-      return dayjs(this.cancelAt * 1000).diff(dayjs(), 'day');
+      return dayjs(this.cancelAt).diff(dayjs(), 'day');
     },
     actionLabel() {
       if (this.isSignupInProgress) {

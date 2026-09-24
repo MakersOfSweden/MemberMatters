@@ -336,12 +336,10 @@ class MeetingList(APIView):
 
     def get(self, request):
         def get_meeting(meeting):
-            date = timezone.localtime(meeting.date).strftime("%x %X")
-
             return {
                 "id": meeting.id,
                 "name": meeting.get_type_display(),
-                "date": date,
+                "date": meeting.date,
             }
 
         response = list(map(get_meeting, self.queryset.all()))

@@ -21,11 +21,11 @@ export default {
       return date >= dayjs().format('YYYY/MM/DD');
     },
     validateFutureTime(time: string) {
-      return time >= dayjs().format('HH:MM');
+      return time >= dayjs().format('HH:mm');
     },
     validateFutureDateTime(date: string, disable: boolean) {
       if (disable) return true;
-      return date >= dayjs().format('YYYY-MM-DD HH:MM');
+      return date >= dayjs().format('YYYY-MM-DD HH:mm');
     },
     validateMax30(value: string | number | null) {
       return value == null || value.toString().length <= 30;

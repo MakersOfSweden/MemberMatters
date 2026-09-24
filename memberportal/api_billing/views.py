@@ -38,6 +38,7 @@ from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext
 from sentry_sdk import capture_exception
+from membermatters.dates import from_unix
 
 logger = logging.getLogger("billing")
 
@@ -825,11 +826,11 @@ class SubscriptionInfo(StripeAPIView):
                     invoice_url = s.latest_invoice.hosted_invoice_url
 
                 subscription = {
-                    "billingCycleAnchor": s.billing_cycle_anchor,
-                    "currentPeriodEnd": s.current_period_end,
-                    "cancelAt": s.cancel_at,
+                    "billingCycleAnchor": from_unix(s.billing_cycle_anchor),
+                    "currentPeriodEnd": from_unix(s.current_period_end),
+                    "cancelAt": from_unix(s.cancel_at),
                     "cancelAtPeriodEnd": s.cancel_at_period_end,
-                    "startDate": s.start_date,
+                    "startDate": from_unix(s.start_date),
                     "collectionMethod": s.collection_method,
                     "invoiceUrl": invoice_url,
                     "membershipTier": request.user.profile.membership_plan.member_tier.get_object(),

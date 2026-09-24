@@ -61,7 +61,7 @@ export const MemberbucksTransactionSchema = z.object({
   amount: z.number(),
   type: MemberTransactionTypeSchema,
   description: z.string(),
-  date: z.date(),
+  date: z.string(),
 });
 
 export type MemberbucksTransaction = z.infer<
@@ -74,7 +74,7 @@ export interface MemberBillingInfo {
     stripe_card_last_digits: string;
     stripe_card_expiry: string;
     transactions: MemberbucksTransaction[];
-    lastPurchase: Date;
+    lastPurchase: string | null;
   };
 }
 
