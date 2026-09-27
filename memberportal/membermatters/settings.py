@@ -446,6 +446,12 @@ CONSTANCE_ADDITIONAL_FIELDS = CONSTANCE_ADDITIONAL_FIELDS
 OIDC_USERINFO = "membermatters.oidc_provider_settings.userinfo"
 OIDC_EXTRA_SCOPE_CLAIMS = "membermatters.oidc_provider_settings.CustomScopeClaims"
 
+# Without these, django-import-export lets anyone into the Django admin import
+# and export users, and portal staff can get in. They need the same permission
+# as the User list instead, which in practice means superusers.
+IMPORT_EXPORT_IMPORT_PERMISSION_CODE = "change"
+IMPORT_EXPORT_EXPORT_PERMISSION_CODE = "view"
+
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
