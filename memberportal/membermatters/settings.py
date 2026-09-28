@@ -364,6 +364,11 @@ _num_proxies = os.environ.get("MM_NUM_PROXIES")
 
 REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "membermatters.custom_exception_handlers.fix_401",
+    # Emits every datetime as ISO 8601 UTC ("...Z"); see membermatters/dates.py.
+    "DEFAULT_RENDERER_CLASSES": (
+        "membermatters.dates.UTCJSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",

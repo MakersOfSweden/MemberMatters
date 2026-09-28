@@ -134,7 +134,7 @@ class TestPendingInvoices:
         profile = invoice_member(state="active", subscription_status="active")
         stripe_invoices.open = [build_invoice()]
 
-        [row] = admin_client.get(reverse("PendingInvoices")).data
+        [row] = admin_client.get(reverse("PendingInvoices")).json()
 
         assert row == {
             "memberId": profile.user.id,
@@ -145,8 +145,8 @@ class TestPendingInvoices:
             "invoiceNumber": "INV-0001",
             "amountDue": 5500,
             "currency": "aud",
-            "created": 1700000000,
-            "dueDate": 1702592000,
+            "created": "2023-11-14T22:13:20.000Z",
+            "dueDate": "2023-12-14T22:13:20.000Z",
             "hostedInvoiceUrl": "https://invoice.stripe.com/i/test",
         }
 

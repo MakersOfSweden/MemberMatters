@@ -33,6 +33,7 @@ from api_billing.views import (
     ensure_stripe_customer,
     _email_admin_cancel_failed,
 )
+from membermatters.dates import from_unix
 from memberbucks.models import (
     MemberBucks,
     MemberbucksProductPurchaseLog,
@@ -1248,11 +1249,11 @@ class MemberSubscriptionInfo(StripeAPIView):
 
             result["subscription"] = {
                 "status": member.profile.subscription_status,
-                "billingCycleAnchor": s.billing_cycle_anchor,
-                "currentPeriodEnd": s.current_period_end,
-                "cancelAt": s.cancel_at,
+                "billingCycleAnchor": from_unix(s.billing_cycle_anchor),
+                "currentPeriodEnd": from_unix(s.current_period_end),
+                "cancelAt": from_unix(s.cancel_at),
                 "cancelAtPeriodEnd": s.cancel_at_period_end,
-                "startDate": s.start_date,
+                "startDate": from_unix(s.start_date),
                 "collectionMethod": s.collection_method,
                 "billingMethod": member.profile.billing_method,
                 "invoiceUrl": invoice_url,
@@ -1443,8 +1444,8 @@ class PendingInvoices(StripeAPIView):
                     "invoiceNumber": invoice.number,
                     "amountDue": invoice.amount_due,
                     "currency": invoice.currency,
-                    "created": invoice.created,
-                    "dueDate": invoice.due_date,
+                    "created": from_unix(invoice.created),
+                    "dueDate": from_unix(invoice.due_date),
                     "hostedInvoiceUrl": invoice.hosted_invoice_url,
                 }
             )

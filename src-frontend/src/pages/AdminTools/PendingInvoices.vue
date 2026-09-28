@@ -210,8 +210,8 @@ export default {
         currency: (currency || 'aud').toUpperCase(),
       }).format((cents || 0) / 100);
     },
-    formatDate(unixSeconds) {
-      return new Date(unixSeconds * 1000).toLocaleDateString();
+    formatDate(isoDate) {
+      return new Date(isoDate).toLocaleDateString();
     },
     openMarkPaidDialog(row) {
       this.selectedInvoice = row;

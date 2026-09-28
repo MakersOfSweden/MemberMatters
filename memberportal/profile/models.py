@@ -2,7 +2,6 @@ from django.db import models, transaction
 from django.utils import timezone
 from datetime import timedelta, datetime
 import pytz
-from django.utils.timezone import make_aware
 from django.utils.translation import gettext
 from django.contrib.auth.models import (
     BaseUserManager,
@@ -19,6 +18,7 @@ import uuid
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
+from membermatters.dates import to_utc_iso
 from services.emails import send_single_email, send_email_to_admin
 from services.email_i18n import (
     ADMIN_EMAIL_LANGUAGE,
@@ -571,17 +571,16 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
 
     def generate_digital_id_token(self):
         self.digital_id_token = uuid.uuid4()
-        self.digital_id_token_expire = make_aware(
-            datetime.now() + timedelta(minutes=10)
-        )
+        self.digital_id_token_expire = timezone.now() + timedelta(minutes=10)
         self.save()
 
         return self.digital_id_token
 
     def validate_digital_id_token(self, token: str):
-        if make_aware(
-            datetime.now()
-        ) < self.digital_id_token_expire and self.digital_id_token == uuid.UUID(token):
+        if (
+            timezone.now() < self.digital_id_token_expire
+            and self.digital_id_token == uuid.UUID(token)
+        ):
             return True
 
         else:
@@ -1107,8 +1106,8 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             "admin": self.user.is_staff,
             "email": self.user.email,
             "excludeFromEmailExport": self.exclude_from_email_export,
-            "registrationDate": self.created.strftime("%m/%d/%Y, %H:%M:%S"),
-            "lastUpdatedProfile": self.modified.strftime("%m/%d/%Y, %H:%M:%S"),
+            "registrationDate": to_utc_iso(self.created),
+            "lastUpdatedProfile": to_utc_iso(self.modified),
             "screenName": self.screen_name,
             "name": {
                 "first": self.first_name,
@@ -1121,28 +1120,12 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             "rfid": self.rfid,
             "memberBucks": {
                 "balance": self.memberbucks_balance,
-                "lastPurchase": (
-                    self.last_memberbucks_purchase.strftime("%m/%d/%Y, %H:%M:%S")
-                    if self.last_memberbucks_purchase
-                    else None
-                ),
+                "lastPurchase": to_utc_iso(self.last_memberbucks_purchase),
             },
             "updateProfileRequired": self.must_update_profile,
-            "lastSeen": (
-                self.last_seen.strftime("%m/%d/%Y, %H:%M:%S")
-                if self.last_seen
-                else None
-            ),
-            "lastInduction": (
-                self.last_induction.strftime("%m/%d/%Y, %H:%M:%S")
-                if self.last_induction
-                else None
-            ),
-            "termsAcceptedAt": (
-                self.terms_accepted_at.strftime("%m/%d/%Y, %H:%M:%S")
-                if self.terms_accepted_at
-                else None
-            ),
+            "lastSeen": to_utc_iso(self.last_seen),
+            "lastInduction": to_utc_iso(self.last_induction),
+            "termsAcceptedAt": to_utc_iso(self.terms_accepted_at),
             "stripe": {
                 "cardExpiry": self.stripe_card_expiry,
                 "last4": self.stripe_card_last_digits,
