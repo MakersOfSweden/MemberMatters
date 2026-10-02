@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install modules
         working-directory: ./src-frontend
-        run: npm i
+        run: npm ci
       - name: Run ESLint
         working-directory: ./src-frontend
-        run: npm run lint
+        run: npm run lint:check
