@@ -543,9 +543,11 @@ class MemberbucksConsumer(AccessDeviceConsumer):
                 subject = (
                     f"Failed to make a ${amount} {config.MEMBERBUCKS_NAME} purchase."
                 )
-                message = f"We just tried to debit ${amount} from your {config.MEMBERBUCKS_NAME} balance but were not "
-                f"successful. You currently have ${profile.memberbucks_balance}. If this wasn't you, please let us know "
-                f"immediately."
+                message = (
+                    f"We just tried to debit ${amount} from your {config.MEMBERBUCKS_NAME} balance but were not "
+                    f"successful. You currently have ${profile.memberbucks_balance}. If this wasn't you, please let us know "
+                    f"immediately."
+                )
 
                 User.objects.get(profile=profile).email_notification(
                     subject, message, language=ENGLISH
@@ -614,9 +616,11 @@ class MemberbucksConsumer(AccessDeviceConsumer):
                 subject = (
                     f"You just made a ${amount} {config.MEMBERBUCKS_NAME} purchase."
                 )
-                message = f"Description: {transaction.description}. Balance Remaining: "
-                f"${profile.memberbucks_balance}. If this wasn't you, or you believe there "
-                f"has been an error, please let us know."
+                message = (
+                    f"Description: {transaction.description}. Balance Remaining: "
+                    f"${profile.memberbucks_balance}. If this wasn't you, or you believe there "
+                    f"has been an error, please let us know."
+                )
 
                 User.objects.get(profile=profile).email_notification(
                     subject, message, language=ENGLISH
