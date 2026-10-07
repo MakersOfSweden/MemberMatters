@@ -36,6 +36,38 @@
   an explicit unlock. Any non-active member can be locked, including a pending
   invoice signup. "Make Member" is disabled while a member is locked.
 
+## Configuration moves from constance to Admin Tools
+
+- Settings edited as raw values under Constance → Config in the Django admin
+  are moving to their own editors in **Admin Tools**. Dashboard Cards is the
+  first; more will follow.
+- **Dashboard Cards**: the Member Resources cards on the dashboard move from
+  the hand-written `HOME_PAGE_CARDS` JSON setting to a `DashboardCard` model,
+  edited under Admin Tools → Dashboard Cards: on/off switch, reordering, a
+  rich-text description, buttons to a website or a portal page, and a live
+  preview. Existing cards are imported on upgrade.
+- Card icons must be Material Design Icons names, descriptions keep only the
+  HTML tags the API allows, and links may be paths on the portal itself. A
+  button is hidden when it leads to a switched-off feature, to Logout, or to a
+  page the member's state can't open.
+- The welcome email now includes the enabled dashboard cards unless
+  `WELCOME_EMAIL_CARDS` is set; its default changed from `[]` to blank.
+
+## Email translations
+
+- Every email is sent in an explicit language. Member emails follow the new
+  `EMAIL_LANGUAGE` setting (`en-AU`, the default, or `sv-SE`); admin,
+  memberbucks purchase and meeting proxy emails stay English, and
+  `MM_LANGUAGE_CODE` doesn't affect emails.
+- The email templates and the account, membership, signup payment and billing
+  emails (invoice paid, payment failed, overdue reminder, cancellation and
+  resume, card added) are translated into Swedish with Django's gettext
+  catalogs. Overdue reminders keep the amount and show it localised, and email
+  messages are escaped exactly once.
+- The Docker image compiles the catalogs, and CI fails when a changed English
+  text has no reviewed Swedish translation, so members get English rather than
+  outdated Swedish.
+
 ## CAPTCHA (Cloudflare Turnstile)
 
 - Register, login, `/api/token/obtain/` and password-reset requests are gated
@@ -86,6 +118,8 @@
   `can_signup`, `state_locked`, the Stripe webhook, pending invoices and CAPTCHA.
   CI runs it on SQLite and Postgres.
 - **Frontend vitest** setup with a PR workflow.
+- CI also fails on formatting: Black pinned to the version in
+  `requirements.txt`, and ESLint/Prettier including fixable errors.
 
 # Smaller edits
 
@@ -108,6 +142,26 @@
   person will not be a member.
 - **Route guard fix**: a failed profile fetch now redirects instead of hanging
   navigation.
+- **Signup steps**: members accept the terms first, before choosing a tier or
+  paying. Both signup steppers are built from one list of steps instead of
+  hard-coded step numbers, and after payment the stepper skips the steps that
+  are already done.
+- **API dates in ISO 8601 UTC**: every point in time the API sends is one
+  format, shown in the viewer's time zone. Before, it mixed US-ordered strings
+  without a zone, server-local `%x %X` and Unix seconds. Fixes admin times off
+  by the UTC offset, email verification links expiring early, and meetings
+  moving on every edit.
+- **Staff can't import or export users** in the Django admin any more. Before,
+  they could download every member's email and RFID, and import a row giving
+  themselves the admin flag; both now need the User model permissions, which in
+  practice means superusers.
+- **Memberbucks and member tools**: device purchase emails send the whole
+  message, and recent swipes and transactions fetch only the newest rows from
+  the database instead of loading every row.
+- **Docker templates**: docker-compose and CapRover set `MM_SECRET_KEY` and
+  `MM_ALLOWED_HOSTS` on the web app, worker and beat (compose reads them from
+  `membermatters.env`), compose no longer publishes Postgres on the host, and it
+  sets `MM_NUM_PROXIES`.
 - **i18n & infra**: expanded Swedish (sv-SE) and en-AU translations; Docker image
   builds retargeted to the fork; Docker base image moved off EOL bullseye to
   trixie, and development standardised on Python 3.12.
