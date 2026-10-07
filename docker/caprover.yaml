@@ -75,6 +75,9 @@ services:
     environment:
       MM_ENV: $$cap_env
       MM_SECRET_KEY: $$cap_mm_secret_key
+      # The root domain and every name under it. Add any custom domain you
+      # connect to the web app, here and on the worker and beat services.
+      MM_ALLOWED_HOSTS: ".$$cap_root_domain"
       MM_REDIS_HOST: "redis://srv-captain--$$cap_appname-mm-redis:6379/0"
       MM_USE_POSTGRES: True
       POSTGRES_DB: $$cap_postgres_db
@@ -95,6 +98,8 @@ services:
     restart: always
     environment:
       MM_ENV: $$cap_env
+      MM_SECRET_KEY: $$cap_mm_secret_key
+      MM_ALLOWED_HOSTS: ".$$cap_root_domain"
       MM_USE_POSTGRES: True
       POSTGRES_DB: $$cap_postgres_db
       POSTGRES_USER: $$cap_postgres_user
@@ -117,6 +122,8 @@ services:
     restart: always
     environment:
       MM_ENV: $$cap_env
+      MM_SECRET_KEY: $$cap_mm_secret_key
+      MM_ALLOWED_HOSTS: ".$$cap_root_domain"
       MM_USE_POSTGRES: True
       POSTGRES_DB: $$cap_postgres_db
       POSTGRES_USER: $$cap_postgres_user

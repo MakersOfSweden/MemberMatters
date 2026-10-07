@@ -38,12 +38,21 @@ MM_NUM_PROXIES=1
 > **Multi-container deployments (docker-compose, Kubernetes, CapRover, etc.):** these
 > two variables must be set on **every** service that runs the MemberMatters image —
 > the web app, the Celery worker, and the Celery beat scheduler — because each one
-> imports Django settings at startup. The example `docker/docker-compose.yml` and
-> `docker/caprover.yaml` set only `MM_SECRET_KEY`, and only on the web app service; if
-> you copy from those templates, add `MM_ALLOWED_HOSTS` and set both variables on the
-> worker and beat services too (a YAML anchor or `env_file:` shared across services
-> keeps it DRY). The `--env-file` quickstart above is single-container and is
-> unaffected.
+> imports Django settings at startup. The example `docker/docker-compose.yml` loads
+> both into all three with `env_file:` from a file named `membermatters.env` next to
+> it, and `docker compose up` stops with an error while that file is missing:
+>
+> ```
+> # membermatters.env, next to docker-compose.yml
+> MM_SECRET_KEY=<generate a long random string, keep it private>
+> MM_ALLOWED_HOSTS=portal.example.org
+> ```
+>
+> Generate the key with the command above: Compose reads a `$` in that file as the
+> start of a variable. `docker/caprover.yaml` gives all three services the secret key
+> CapRover generates at install and allows the CapRover root domain and every name
+> under it; add any custom domain you connect to the web app to `MM_ALLOWED_HOSTS` on
+> all three. The `--env-file` quickstart above is single-container and is unaffected.
 
 > **Set the proxy hop count.** `MM_NUM_PROXIES` is the number of proxies that add an
 > `X-Forwarded-For` entry in front of the application, and rate limiting on signup,

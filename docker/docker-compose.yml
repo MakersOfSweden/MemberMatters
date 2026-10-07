@@ -28,9 +28,10 @@ services:
   mm-webapp:
     image: membermatters/membermatters
     restart: always
+    # MM_SECRET_KEY and MM_ALLOWED_HOSTS, see docs/GETTING_STARTED.md
+    env_file: membermatters.env
     environment:
       MM_ENV: "Production"
-      MM_SECRET_KEY: "CHANGE_ME"
       MM_USE_POSTGRES: True
       MM_REDIS_HOST: "redis://mm-redis:6379/0"
     ports:
@@ -48,6 +49,7 @@ services:
   mm-celery-worker:
     image: membermatters/membermatters
     restart: always
+    env_file: membermatters.env
     environment:
       MM_ENV: "Production"
       MM_USE_POSTGRES: True
@@ -61,6 +63,7 @@ services:
   mm-celery-beat:
     image: membermatters/membermatters
     restart: always
+    env_file: membermatters.env
     environment:
       MM_ENV: "Production"
       MM_USE_POSTGRES: True
