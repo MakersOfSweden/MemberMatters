@@ -29,13 +29,13 @@ class SwipesList(APIView):
     def get(self, request):
         recent_doors = (
             DoorLog.objects.all()
-            .select_related("user__profile")
-            .order_by("date")[::-1][:300]
+            .select_related("door", "user__profile")
+            .order_by("-date")[:300]
         )
         recent_interlocks = (
             InterlockLog.objects.all()
-            .select_related("user_started__profile", "user_ended__profile")
-            .order_by("date_updated")[::-1][:300]
+            .select_related("interlock", "user_started__profile", "user_ended__profile")
+            .order_by("-date_updated")[:300]
         )
 
         doors = []

@@ -35,8 +35,8 @@ class MemberBucksTransactions(APIView):
 
     def get(self, request):
         recent_transactions = MemberBucks.objects.filter(user=request.user).order_by(
-            "date"
-        )[::-1][:100]
+            "-date"
+        )[:100]
 
         def get_transaction(transaction):
             return transaction.get_transaction_display()
