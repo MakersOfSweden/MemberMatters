@@ -8,7 +8,7 @@ VOLUME /usr/src/logs/
 
 RUN mkdir -p /usr/src/app/frontend && mkdir /usr/src/logs && mkdir /usr/src/data
 
-# daphne is not installed here: channels pulls it in via requirements.txt, and
+# daphne is not installed here: requirements.txt declares it, and
 # pip's /usr/local/bin copy already shadowed the apt one on PATH.
 # gettext provides msgfmt for compilemessages below.
 RUN apt-get update -y && apt-get install -y nginx curl gettext

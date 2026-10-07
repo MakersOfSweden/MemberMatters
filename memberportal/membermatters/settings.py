@@ -42,11 +42,21 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # this allows the frontend dev server to talk to the dev server
 CORS_ALLOW_ALL_ORIGINS = True
 
+# The frontend dev server proxies /admin and /openid with changeOrigin, so the
+# Host Django sees is not the browser's Origin and CSRF would reject the POST.
+CSRF_TRUSTED_ORIGINS = ["http://localhost:8080", "http://127.0.0.1:8080"]
+
 if os.environ.get("MM_ENV") == "Production":
     from django.core.exceptions import ImproperlyConfigured
 
     ENVIRONMENT = "Production"
     CORS_ALLOW_ALL_ORIGINS = False
+    # No extra trusted origins in production, and deliberately no
+    # MM_CSRF_TRUSTED_ORIGINS to add some. Django checks each POST's Origin
+    # against the scheme and host it is serving, so a reverse proxy has to
+    # forward the Host header (with any port) and X-Forwarded-Proto instead.
+    # See docs/UPGRADING.md.
+    CSRF_TRUSTED_ORIGINS = []
     DEBUG = False
 
     # Refuse to boot in production with the bundled dev SECRET_KEY. JWTs
@@ -68,8 +78,9 @@ if os.environ.get("MM_ENV") == "Production":
 
 # Application definition
 INSTALLED_APPS = [
+    # Provides the ASGI runserver, and has to come before staticfiles.
+    "daphne",
     "constance",
-    "constance.backends.database",
     "django_prometheus",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -418,7 +429,6 @@ LANGUAGE_CODE = os.getenv("MM_LANGUAGE_CODE", "en-au")
 
 TIME_ZONE = os.getenv("MM_TIME_ZONE", "Australia/Brisbane")
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
 # Only emails are translated by the project itself; see services/email_i18n.py.
@@ -443,7 +453,10 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BROKER_URL = os.getenv("MM_REDIS_HOST")
 
 # Django constance configuration
-CONSTANCE_BACKEND = "membermatters.constance_backend.DatabaseBackend"
+# Until 4.0 this backend treated a failed read as a missing setting, so the
+# portal stored the default over the real value (jazzband/django-constance#348).
+# MemberMatters had its own copy with that fixed, which is no longer needed.
+CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = CONSTANCE_CONFIG
 CONSTANCE_CONFIG_FIELDSETS = CONSTANCE_CONFIG_FIELDSETS
 CONSTANCE_ADDITIONAL_FIELDS = CONSTANCE_ADDITIONAL_FIELDS

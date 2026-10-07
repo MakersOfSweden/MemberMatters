@@ -39,10 +39,11 @@ MM_NUM_PROXIES=1
 > two variables must be set on **every** service that runs the MemberMatters image —
 > the web app, the Celery worker, and the Celery beat scheduler — because each one
 > imports Django settings at startup. The example `docker/docker-compose.yml` and
-> `docker/caprover.yaml` only declare them on the web app service; if you copy from
-> those templates, propagate the variables to the worker and beat services too (a YAML
-> anchor or `env_file:` shared across services keeps it DRY). The `--env-file` quickstart
-> above is single-container and is unaffected.
+> `docker/caprover.yaml` set only `MM_SECRET_KEY`, and only on the web app service; if
+> you copy from those templates, add `MM_ALLOWED_HOSTS` and set both variables on the
+> worker and beat services too (a YAML anchor or `env_file:` shared across services
+> keeps it DRY). The `--env-file` quickstart above is single-container and is
+> unaffected.
 
 > **Set the proxy hop count.** `MM_NUM_PROXIES` is the number of proxies that add an
 > `X-Forwarded-For` entry in front of the application, and rate limiting on signup,
@@ -122,7 +123,7 @@ docker stop membermatters
 echo "Removing the old docker container"
 docker rm membermatters
 echo "Creating new docker container"
-docker create -p 8000:8000 --name membermatters --restart always --detach --env-file /usr/app/env.list -v /usr/app/:/usr/src/data membermatters/membermatters
+docker create -p 8000:8000 --name membermatters --restart always --env-file /usr/app/env.list -v /usr/app/:/usr/src/data membermatters/membermatters
 echo "Running new docker container"
 docker start membermatters
 ```

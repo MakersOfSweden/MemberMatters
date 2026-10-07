@@ -14,7 +14,7 @@ SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 # (connect, read) seconds. NOT settings.REQUEST_TIMEOUT (0.05s) — a siteverify
 # round-trip can't finish in 50ms, so reusing it would fail closed every time.
 # Kept as tight as the round-trip allows, because this blocks the one thread the
-# whole process shares: under ASGI, Django 3.2 runs every sync view and Channels
+# whole process shares: under ASGI, Django runs every sync view and Channels
 # runs every sync consumer handler on asgiref's single thread-sensitive executor,
 # so a stalled verify also delays unrelated requests and door swipes.
 VERIFY_TIMEOUT = (1, 2)

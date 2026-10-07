@@ -49,6 +49,36 @@
   `MM_THROTTLE_TOKEN_OBTAIN`) and members see a rate-limit message. Operator
   docs cover setup and setting `MM_NUM_PROXIES` correctly.
 
+## Django 5.2 LTS upgrade
+
+- **Django 3.2 → 5.2 LTS**, by way of 4.2, with the libraries that follow it:
+  Django REST framework 3.18, Channels 4 with daphne 4.2 and channels_redis 4.3,
+  django-constance 4.3, django-import-export 4.4, django-oidc-provider 0.9, and
+  newer celery-beat, celery-results, cors-headers, prometheus, pwned-passwords,
+  simplejwt and api-key releases. django-csp (never configured),
+  django-picklefield and pytz are removed.
+- **Settings storage**: constance 4 keeps the Django-admin settings in a new
+  table and as JSON instead of pickle. The migrations copy every saved value,
+  delete empty ones so they fall back to their defaults, and import the old
+  `HOME_PAGE_CARDS` into Dashboard Cards in whichever order they run. The
+  project's own constance backend, a workaround for a constance bug, is gone.
+- **Databases**: Django 5.2 needs PostgreSQL 14, MySQL 8.0.11 or MariaDB 10.5.
+  UUID columns stay `char(32)` on MySQL and MariaDB (`Char32UUIDField`), so
+  existing rows keep matching; migrations convert the native `uuid` columns a
+  fresh MariaDB 10.7+ install would get.
+- **CSRF Origin check**: since Django 4, every change sent with a session has
+  to come from the portal's own address, so a reverse proxy must forward `Host`
+  and `X-Forwarded-Proto`. The container's nginx forwards non-standard ports and
+  drops `:443` and `:80`. The frontend dev server's origins are trusted in
+  development only.
+- **New `docs/UPGRADING.md`**: backing up, keeping the previous image and going
+  back, plus a check for each change that can affect an existing install: the
+  required `MM_SECRET_KEY` and `MM_ALLOWED_HOSTS`, OIDC signing keys, lowercase
+  Redis TLS options, database versions, proxy headers and Cloudflare.
+- **Tests**: websocket tests for door, interlock and memberbucks devices (also
+  on channels_redis), OIDC sign-in, CSRF origins, member import and export, and
+  a migration test that upgrades a database shaped like v3.8.0.
+
 ## Test suites & CI
 
 - **Backend pytest suite** (`memberportal/pytest.ini`, `requirements-dev.txt`,

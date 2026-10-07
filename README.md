@@ -41,7 +41,7 @@ MemberMatters is an open source membership, billing and access control solution 
 
 ## Getting Started
 
-See the [getting started](/docs/GETTING_STARTED.md) instructions for how to run the MemberMatters software for your organisation. Once you've finished installing MemberMatters, your should read the [post installation steps](/docs/POST_INSTALL_STEPS.md) for important instructions on setting up and configuring your instance.
+See the [getting started](/docs/GETTING_STARTED.md) instructions for how to run the MemberMatters software for your organisation. Once you've finished installing MemberMatters, your should read the [post installation steps](/docs/POST_INSTALL_STEPS.md) for important instructions on setting up and configuring your instance. If you are upgrading an existing instance, read the [upgrade notes](/docs/UPGRADING.md) first.
 
 MemberMatters is production quality software and has been used by several makerspaces for over 5 years. However, as an open source project, we focus our limited resources on features and bug fixes so our documentation can always be improved. Please open an issue if you have any suggestions to make it better.
 

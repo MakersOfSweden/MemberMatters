@@ -89,20 +89,23 @@ class UserResource(resources.ModelResource):
     class Meta:
         model = User
         import_id_fields = ["email"]
+        # import-export 4 exports only these, in this order. It's the column
+        # order version 3 produced: the declared Profile columns, then User's.
         fields = (
-            "email",
-            "staff",
-            "admin",
             "first_name",
             "last_name",
             "screen_name",
             "rfid",
+            "state",
+            "email",
+            "staff",
+            "admin",
         )
 
 
 @admin.register(User)
 class AdminLogAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    resource_class = UserResource
+    resource_classes = [UserResource]
     pass
 
 

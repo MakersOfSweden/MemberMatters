@@ -655,8 +655,8 @@ class TestSubscriptionDeleted:
         # Stripe's past-due rule deleting the subscription of a member whose
         # first invoice was never paid. The member's own "signup has lapsed"
         # email is registered by complete_cancel from inside an on_commit
-        # callback that is already running, which Django 3.2's capture never
-        # executes, so that email is pinned in profile/tests instead.
+        # callback that is already running, and Django 4.0 onwards runs those
+        # nested registrations, so both emails land in this capture.
         profile = ProfileFactory(
             subscription_pending=True,
             billing_method="invoice",
@@ -680,7 +680,8 @@ class TestSubscriptionDeleted:
         assert profile.subscription_status == "inactive"
         assert profile.stripe_subscription_id is None
         assert subjects(outbox) == [
-            f"The membership or pending signup for {full_name} has ended"
+            f"The membership or pending signup for {full_name} has ended",
+            "Your membership signup has lapsed",
         ]
         assert "turned off" not in outbox[0]["HtmlBody"]
 

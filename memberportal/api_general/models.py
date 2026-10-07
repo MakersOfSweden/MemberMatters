@@ -3,12 +3,10 @@ from datetime import timedelta
 from urllib.parse import urljoin
 from constance import config
 from django.utils import timezone
-import pytz
 from django.conf import settings
 from uuid import uuid4
 from django_prometheus.models import ExportModelOperationsMixin
-
-utc = pytz.UTC
+from membermatters.fields import Char32UUIDField
 
 
 class Kiosk(ExportModelOperationsMixin("kiosk"), models.Model):
@@ -105,4 +103,4 @@ class EmailVerificationToken(
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     creation_date = models.DateTimeField(default=timezone.now)
-    verification_token = models.UUIDField(default=uuid4)
+    verification_token = Char32UUIDField(default=uuid4)

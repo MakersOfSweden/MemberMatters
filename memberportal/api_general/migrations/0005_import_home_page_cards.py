@@ -1,5 +1,7 @@
 import json
+import pickle
 import re
+from base64 import b64decode
 
 from django.db import migrations
 
@@ -34,7 +36,14 @@ def legacy_links(card):
 
 
 def import_home_page_cards(apps, schema_editor):
-    Constance = apps.get_model("database", "Constance")
+    try:
+        Constance = apps.get_model("constance", "Constance")
+    except LookupError:
+        # constance's own migrations have not run yet, so HOME_PAGE_CARDS cannot
+        # be read from this state. A new install has nothing to import, and an
+        # upgrade still has the setting to recreate the cards from.
+        return
+
     DashboardCard = apps.get_model("api_general", "DashboardCard")
 
     home_page_cards = Constance.objects.filter(key="HOME_PAGE_CARDS").first()
@@ -43,7 +52,10 @@ def import_home_page_cards(apps, schema_editor):
         return
 
     try:
-        cards = json.loads(home_page_cards.value)
+        # Still pickled, as constance kept every setting until its 0003
+        # migration, and since constance 4 its model doesn't unpickle them.
+        # 0008 runs before 0003 to keep it that way.
+        cards = json.loads(pickle.loads(b64decode(home_page_cards.value)))
     except (TypeError, ValueError):
         cards = None
 
@@ -75,9 +87,11 @@ def delete_dashboard_cards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # No dependency on constance: this migration is already applied on
+    # installs where constance's own migrations are not, and Django rejects
+    # that history as inconsistent.
     dependencies = [
         ("api_general", "0004_dashboardcard"),
-        ("database", "0002_auto_20190129_2304"),
     ]
 
     operations = [

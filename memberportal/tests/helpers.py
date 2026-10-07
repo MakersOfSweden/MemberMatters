@@ -5,6 +5,9 @@ and the alternative — a private copy per file — had already produced four
 byte-identical definitions of `subjects_to`.
 """
 
+import pickle
+from base64 import b64encode
+
 import pytest
 
 from tests.factories import DoorFactory, ProfileFactory
@@ -40,3 +43,8 @@ def member_with_a_door(**kwargs):
     profile = ProfileFactory(with_rfid=True, **kwargs)
     profile.add_default_access()
     return profile, door
+
+
+def pickled_setting(value):
+    """A setting as django-constance stored it until its 0003 migration."""
+    return b64encode(pickle.dumps(value)).decode()

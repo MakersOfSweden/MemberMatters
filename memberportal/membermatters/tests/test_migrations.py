@@ -10,6 +10,7 @@ import io
 import pytest
 from django.core.management import call_command
 from django.db import connection
+from django.db.migrations.recorder import MigrationRecorder
 
 
 @pytest.mark.django_db
@@ -63,13 +64,18 @@ def test_screen_name_lower_index_follows_the_backend_and_the_migration_flag():
     fixed by expressing the constraint on the model, this test is what will
     fail and point at itself.
     """
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT COUNT(*) FROM django_migrations "
-            "WHERE app = 'profile' AND name = '0022_screen_name_unique'"
-        )
-        migrations_ran = cursor.fetchone()[0] > 0
+    # Read the applied set through the recorder rather than the table: since
+    # Django 4.1 django_migrations is only created once something is recorded,
+    # so under --no-migrations the table itself is absent.
+    recorder = MigrationRecorder(connection)
+    migrations_ran = (
+        recorder.has_table()
+        and recorder.migration_qs.filter(
+            app="profile", name="0022_screen_name_unique"
+        ).exists()
+    )
 
+    with connection.cursor() as cursor:
         if connection.vendor == "postgresql":
             cursor.execute(
                 "SELECT indexname FROM pg_indexes WHERE tablename='profile_profile' "

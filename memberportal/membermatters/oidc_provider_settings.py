@@ -1,6 +1,6 @@
 import json
 import logging
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from oidc_provider.lib.claims import ScopeClaims
 from constance import config
 
