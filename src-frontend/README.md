@@ -2,8 +2,8 @@
 
 The new MemberMatters frontend. You'll need the backend API to use this UI. Please check the [memberportal](/memberportal) folder for instructions.
 
-The frontend software is a modern JavaScript SPA. It utilises Vue.js, Webpack, NPM, Capacitor and Electron. It also uses eslint for code formatting and linting.
-The frontend can be built into a normal SPA web app, a semi native iOS and Android app, and a desktop "kiosk" mode.
+The frontend software is a modern JavaScript SPA. It uses Vue.js, Quasar, Vite, NPM and Electron. It also uses eslint for code formatting and linting.
+The frontend can be built into a normal SPA web app and a desktop "kiosk" app.
 
 > **Note**
 >
@@ -13,17 +13,7 @@ The frontend can be built into a normal SPA web app, a semi native iOS and Andro
 
 ### Node
 
-Ensure you have [nvm](https://github.com/nvm-sh/nvm) (node version manager) installed. Once you've installed nvm, you should install node 18 with `nvm install 18`.
-
-### Linux Tips (skip if not using Linux)
-
-If you're using Ubuntu, you may need:
-
-`sudo apt install libpng-dev`
-
-If using Fedora, you may need:
-
-`sudo dnf install libpng-devel`
+Ensure you have [nvm](https://github.com/nvm-sh/nvm) (node version manager) installed. Once you've installed nvm, you should install node 26 with `nvm install 26`.
 
 ## Install the dependencies
 
@@ -49,18 +39,10 @@ npm run build
 
 ### Generate app icons
 
-This will generate the app icons for every supported target of the MemberMatters portal (web, iOS, Android and Electron).
-
-With the icon overlayed on a plain white splashscreen.
+This will generate the app icons for every supported target of the MemberMatters portal (web and Electron).
 
 ```bash
 npm run icons
-```
-
-With the icon overlayed on a gradient background for the splashscreen.
-
-```bash
-npm run icons:bg
 ```
 
 ## Linter

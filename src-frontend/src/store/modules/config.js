@@ -1,6 +1,9 @@
 import address from 'address';
 import sha256 from 'crypto-js/sha256';
 import CryptoJS from 'crypto-js';
+// Sentry is disabled and not installed. The commented-out Sentry.init in
+// getSiteConfig is written for SDK v6, so re-enabling it means
+// `npm i @sentry/vue` and porting that block to the current API.
 // import router from "../../router";
 // import * as Sentry from "@sentry/vue";
 // import { Integrations } from "@sentry/tracing";

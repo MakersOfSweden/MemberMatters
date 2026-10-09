@@ -89,7 +89,9 @@ See the [screenshots](screenshots) folder for more screenshots.
 
 We use husky and lint-staged to manage pre commit hooks. The first thing you should do is run `npm install` in this
 directory. This installs and configures the pre commit hooks automatically. After doing this, you should see them run
-when you try to commit a file (for example, with `git commit -m "update thing"`).
+when you try to commit a file (for example, with `git commit -m "update thing"`). The hooks need Node 22.22.1 or newer
+on your PATH when you commit, so the frontend's Node (26, or a recent 22 or 24) works. On Node 18, every commit fails
+with `TypeError: util.styleText is not a function`.
 
 ### Development tip (dev server proxy)
 

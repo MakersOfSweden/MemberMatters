@@ -1,6 +1,6 @@
 <template>
   <div class="q-gutter-md">
-    <div class="text-h5 text-center">{{ $tc('tiers.becomeMember') }}</div>
+    <div class="text-h5 text-center">{{ $t('tiers.becomeMember') }}</div>
 
     <div class="column flex content-start justify-center">
       <q-banner
@@ -32,7 +32,7 @@
       <q-step
         v-if="steps.includes('terms')"
         :name="stepIndex('terms')"
-        :title="$tc('signup.termsAcceptance')"
+        :title="$t('signup.termsAcceptance')"
         :icon="icons.terms"
         :done="step > stepIndex('terms')"
       >
@@ -45,18 +45,18 @@
       <q-step
         v-if="steps.includes('tier')"
         :name="stepIndex('tier')"
-        :title="$tc('tiers.select')"
+        :title="$t('tiers.select')"
         :icon="icons.plans"
         :done="step > stepIndex('tier')"
       >
         <template v-if="tiers.length === 0">
           <div class="text-center text-h6">
-            {{ $tc('tiers.noTiers') }}
+            {{ $t('tiers.noTiers') }}
           </div>
         </template>
         <template v-else>
           <div class="text-h6 q-py-md">
-            {{ $tc('tiers.selectToContinue') }}
+            {{ $t('tiers.selectToContinue') }}
           </div>
           <div class="row items-stretch">
             <tier-card
@@ -73,7 +73,7 @@
 
       <q-step
         :name="stepIndex('plan')"
-        :title="$tc('paymentPlans.select')"
+        :title="$t('paymentPlans.select')"
         :icon="icons.dollar"
         :done="step > stepIndex('plan')"
       >
@@ -83,7 +83,7 @@
               <div class="row items-center no-wrap">
                 <q-icon :name="icons.plans" size="sm" class="q-mr-md" />
                 <div>
-                  <div class="text-caption">{{ $tc('tiers.selected') }}</div>
+                  <div class="text-caption">{{ $t('tiers.selected') }}</div>
                   <div class="text-h6">{{ selectedTier.name }}</div>
                   <div v-if="selectedTier.description" class="text-subtitle2">
                     {{ selectedTier.description }}
@@ -96,12 +96,12 @@
 
         <template v-if="selectedTier.plans && selectedTier.plans.length === 0">
           <div class="text-center text-h6">
-            {{ $tc('paymentPlans.noPlans') }}
+            {{ $t('paymentPlans.noPlans') }}
           </div>
         </template>
         <template v-else>
           <div class="text-h6 q-py-md">
-            {{ $tc('paymentPlans.selectToContinue') }}
+            {{ $t('paymentPlans.selectToContinue') }}
           </div>
 
           <div class="row items-stretch">
@@ -120,7 +120,7 @@
               class="q-mt-md"
               @click="backToTiers"
               flat
-              :label="$tc('button.back')"
+              :label="$t('button.back')"
             />
           </div>
         </template>
@@ -129,12 +129,12 @@
       <q-step
         class="flex flex-center"
         :name="stepIndex('billing')"
-        :title="$tc('menuLink.billing')"
+        :title="$t('menuLink.billing')"
         :icon="icons.billing"
         :done="step > stepIndex('billing')"
       >
         <div class="text-h6 q-py-md">
-          {{ $tc('memberbucks.selectToContinue') }}
+          {{ $t('memberbucks.selectToContinue') }}
         </div>
 
         <div
@@ -220,30 +220,30 @@
         />
 
         <div class="row justify-start q-mt-md">
-          <q-btn @click="backToPlans" flat :label="$tc('button.back')" />
+          <q-btn @click="backToPlans" flat :label="$t('button.back')" />
           <q-space />
           <q-btn
             :disabled="!canContinueBilling"
             @click="selectedBillingMethodEvent"
             color="primary"
-            :label="$tc('button.continue')"
+            :label="$t('button.continue')"
           />
         </div>
       </q-step>
 
       <q-step
         :name="stepIndex('confirm')"
-        :title="$tc('paymentPlans.confirmSelection')"
+        :title="$t('paymentPlans.confirmSelection')"
         :icon="icons.success"
         :done="step > stepIndex('confirm')"
       >
         <div class="row">
           <div class="row col-xs-12 col-sm-6">
-            <div class="text-h6 col-12">{{ $tc('tiers.selected') }}</div>
+            <div class="text-h6 col-12">{{ $t('tiers.selected') }}</div>
             <tier-card class="col-12" :tier="selectedTier" selected />
           </div>
           <div class="row col-xs-12 col-sm-6">
-            <div class="text-h6 col-12">{{ $tc('paymentPlans.selected') }}</div>
+            <div class="text-h6 col-12">{{ $t('paymentPlans.selected') }}</div>
             <plan-card class="col-12" :plan="selectedPlan" selected />
           </div>
         </div>
@@ -283,9 +283,9 @@
                   'currency',
                   siteLocaleCurrency
                 ),
-                interval: $tc(
+                interval: $t(
                   `paymentPlans.interval.${selectedPlan.interval.toLowerCase()}`,
-                  selectedPlan.intervalCount
+                  selectedPlan.intervalAmount
                 ),
               }),
             })
@@ -298,12 +298,12 @@
 
         <div v-if="finishSuccess" class="row">
           <q-banner class="bg-success text-white">
-            <div class="text-h5">{{ $tc('paymentPlans.signupSuccess') }}</div>
+            <div class="text-h5">{{ $t('paymentPlans.signupSuccess') }}</div>
             <p>
               {{
                 selectedBillingMethod === 'invoice'
-                  ? $tc('paymentPlans.signupSuccessInvoiceDescription')
-                  : $tc('paymentPlans.signupSuccessDescription')
+                  ? $t('paymentPlans.signupSuccessInvoiceDescription')
+                  : $t('paymentPlans.signupSuccessDescription')
               }}
             </p>
           </q-banner>
@@ -314,7 +314,7 @@
             flat
             :disable="disableFinish || loading"
             @click="backToBilling"
-            :label="$tc('button.back')"
+            :label="$t('button.back')"
           />
           <q-space />
           <q-btn
@@ -324,8 +324,8 @@
             color="primary"
             :label="
               selectedBillingMethod === 'invoice'
-                ? $tc('tiers.finishInvoice')
-                : $tc('tiers.finish')
+                ? $t('tiers.finishInvoice')
+                : $t('tiers.finish')
             "
           />
         </div>

@@ -129,18 +129,13 @@ to get your keys.
   * "CAPTCHA_SECRET_KEY" - the private secret key, used only for server-side verification. Treat it like a password.
   * "CAPTCHA_ALLOWED_HOSTNAMES" - optional comma-separated list of hostnames a challenge may be solved on, e.g.
     `portal.example.org`. Your site key is public, so without this someone can embed it on their own page and farm
-    valid tokens. Leave it **empty** if members use the mobile app, whose challenges are solved on a `localhost`
-    origin that won't match your domain.
+    valid tokens.
 
 Add every hostname your portal answers on to the widget's domain list in the Cloudflare dashboard, or the challenge
 won't load for your members.
 
 Some things to know before you turn this on:
 
-  * **Test it from a phone before rolling it out**, if your members use the mobile app. The app is not served from
-    your domain, and a Cloudflare widget will only run on origins it recognises. If the challenge can't load, the
-    login form shows an error with a retry button rather than letting anyone in — the server requires a solved
-    challenge no matter which app is asking.
   * **Kiosks should be signed in with an RFID card.** Kiosk card readers are unaffected, but the password form on a
     kiosk built as a desktop app can't run the challenge at all.
   * **If Cloudflare is unreachable, signup, login and password resets stop working** — a challenge that can't be

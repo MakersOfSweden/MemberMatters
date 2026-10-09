@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 /*
  * This file runs in a Node context (it's NOT transpiled by Babel), so use only
  * the ES6 features that are supported by your Node version. https://node.green/
@@ -8,36 +6,34 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js
 
-const { configure } = require('quasar/wrappers');
-const path = require('path');
+import { defineConfig } from '#q-app';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const inject = require('@rollup/plugin-inject');
-const esbuildShim = require.resolve('node-stdlib-browser/helpers/esbuild/shim');
+const esbuildShim = fileURLToPath(
+  import.meta.resolve('node-stdlib-browser/helpers/esbuild/shim')
+);
+const emptyModule = fileURLToPath(
+  import.meta.resolve('node-stdlib-browser/mock/empty')
+);
 
-const tsconfigPaths = require('vite-tsconfig-paths');
-
-module.exports = configure(async function (ctx) {
+export default defineConfig(async function () {
   const { default: stdLibBrowser } = await import('node-stdlib-browser');
   return {
-    eslint: {
-      warnings: true,
-      errors: true,
-    },
-
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
     // preFetch: true,
 
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
-    boot: ['sentry', 'i18n', 'axios', 'routeGuards', 'capacitor', 'apexcharts'],
+    boot: ['store', 'i18n', 'axios', 'routeGuards', 'apexcharts'],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#css
     css: ['app.scss'],
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
     extras: [
-      'mdi-v5',
+      'mdi-v7',
       'roboto-font', // optional, you are not bound to it
     ],
 
@@ -45,47 +41,67 @@ module.exports = configure(async function (ctx) {
     build: {
       target: {
         browser: ['es2019', 'edge88', 'firefox78', 'chrome87', 'safari13.1'],
-        node: 'node18',
+        node: 'node24',
       },
 
-      htmlFilename: 'index.html',
-
-      env: {
-        // When running with capacitor this value is used for the base URL for all API requests
+      defineEnv: {
+        // Base URL for API requests when the app is not served by the portal itself (the Electron kiosk)
         apiBaseUrl: process.env.API_BASE_URL,
-        vueRouterMode: 'history',
       },
 
       vueRouterMode: 'history', // available values: 'hash', 'history'
       // vueRouterBase,
       // vueDevtools,
-      polyfillModulePreload: true,
       vueOptionsAPI: true,
 
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
-      showProgress: true,
       minify: true,
 
       extendViteConf(viteConf, {}) {
-        viteConf.plugins.push(tsconfigPaths.default());
+        // The Node polyfills are for the page only. @quasar/app-vite 3 also
+        // applies `alias` to the kiosk's main process and preload, which need
+        // the real Node modules.
+        viteConf.resolve.alias = {
+          ...viteConf.resolve.alias,
+          ...stdLibBrowser,
+          // crypto-js only falls back to Node's crypto when the browser has
+          // none, so the old build never bundled it. Rolldown follows that
+          // guarded require and would put crypto-browserify (about 600 KB)
+          // into every page.
+          crypto: emptyModule,
+        };
 
-        viteConf.plugins.push({
-          ...inject({
-            global: [esbuildShim, 'global'],
-            process: [esbuildShim, 'process'],
-            Buffer: [esbuildShim, 'Buffer'],
-          }),
-          enforce: 'post',
-        });
-
-        viteConf.optimizeDeps.esbuildOptions = {
-          ...viteConf.optimizeDeps.esbuildOptions,
-          define: {
-            global: 'globalThis',
+        // Rolldown's own inject rather than @rollup/plugin-inject: Vite 8
+        // replaces process.env.NODE_ENV in that same native pass, before
+        // `process` becomes the polyfill. Through the plugin, libraries read
+        // the polyfill's empty env and run their development code.
+        viteConf.build.rolldownOptions = {
+          ...viteConf.build.rolldownOptions,
+          transform: {
+            ...viteConf.build.rolldownOptions?.transform,
+            inject: {
+              global: [esbuildShim, 'global'],
+              process: [esbuildShim, 'process'],
+              Buffer: [esbuildShim, 'Buffer'],
+            },
           },
-          // Enable esbuild polyfill plugins
-          plugins: [],
+        };
+
+        viteConf.optimizeDeps.rolldownOptions = {
+          ...viteConf.optimizeDeps.rolldownOptions,
+          transform: {
+            ...viteConf.optimizeDeps.rolldownOptions?.transform,
+            define: {
+              global: 'globalThis',
+            },
+            // The dev server serves dependencies pre-bundled, so they need
+            // the polyfills injected here as well.
+            inject: {
+              process: [esbuildShim, 'process'],
+              Buffer: [esbuildShim, 'Buffer'],
+            },
+          },
         };
 
         viteConf.optimizeDeps.include = ['buffer', 'process'];
@@ -93,27 +109,34 @@ module.exports = configure(async function (ctx) {
       viteVuePluginOptions: {},
 
       alias: {
+        // Every import prefix the code uses. @quasar/app-vite 3 only adds `@`
+        // by itself, so the ones version 1 added that the code needs are
+        // listed here, plus `types`, which came from tsconfig.json through
+        // vite-tsconfig-paths.
+        src: path.join(__dirname, 'src'),
+        app: __dirname,
+        components: path.join(__dirname, 'src/components'),
+        layouts: path.join(__dirname, 'src/layouts'),
+        pages: path.join(__dirname, 'src/pages'),
+        boot: path.join(__dirname, 'src/boot'),
+        types: path.join(__dirname, 'src/types'),
         '@components': path.join(__dirname, 'src/components/'),
         '@icons': path.join(__dirname, 'src/icons/'),
         '@store': path.join(__dirname, 'src/store/'),
         '@mixins': path.join(__dirname, 'src/mixins/'),
         '@assets': path.join(__dirname, 'src/assets/'),
-        ...stdLibBrowser,
       },
 
       vitePlugins: [
         [
-          '@intlify/vite-plugin-vue-i18n',
+          'vite-plugin-checker',
           {
-            // if you want to use Vue I18n Legacy API, you need to set `compositionOnly: false`
-            compositionOnly: false,
-
-            // if you want to use named tokens in your Vue I18n messages, such as 'Hello {name}',
-            // you need to set `runtimeOnly: false`
-            runtimeOnly: false,
-
-            // you need to set i18n resource including paths !
-            include: path.join(__dirname, './src/i18n/**'),
+            // Lints in dev and on build, and a lint error fails the build,
+            // like the ESLint support built into @quasar/app-vite 1 did.
+            eslint: { lintCommand: 'eslint --ext .js,.ts,.vue ./' },
+            // Warnings stay in the terminal, as before; only errors cover
+            // the page.
+            overlay: { initialIsOpen: 'error' },
           },
         ],
       ],
@@ -157,7 +180,7 @@ module.exports = configure(async function (ctx) {
       iconSet: 'mdi-v7',
       config: {
         dark: 'auto', // or Boolean true/false
-        loadingBar: { color: 'accent', skipHijack: ctx.mode.capacitor },
+        loadingBar: { color: 'accent' },
         iconSet: 'mdi-v7', // Quasar icon set
 
         // For special cases outside of where the auto-import strategy can have an impact
@@ -179,52 +202,9 @@ module.exports = configure(async function (ctx) {
       //   rootComponent: 'src/App.vue',
       //   router: 'src/router/index',
       //   store: 'src/store/index',
-      //   registerServiceWorker: 'src-pwa/register-service-worker',
-      //   serviceWorker: 'src-pwa/custom-service-worker',
-      //   pwaManifestFile: 'src-pwa/manifest.json',
       //   electronMain: 'src-electron/electron-main',
       //   electronPreload: 'src-electron/electron-preload'
       // },
-    },
-    // https://v2.quasar.dev/quasar-cli-vite/developing-ssr/configuring-ssr
-    ssr: {
-      // ssrPwaHtmlFilename: 'offline.html', // do NOT use index.html as name!
-      // will mess up SSR
-
-      // extendSSRWebserverConf (esbuildConf) {},
-      // extendPackageJson (json) {},
-
-      pwa: false,
-
-      // manualStoreHydration: true,
-      // manualPostHydrationTrigger: true,
-
-      prodPort: 3000, // The default port that the production server should use
-      // (gets superseded if process.env.PORT is specified at runtime)
-
-      middlewares: [
-        'render', // keep this as last one
-      ],
-    },
-
-    // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
-    pwa: {
-      workboxMode: 'generateSW', // or 'injectManifest'
-      injectPwaMetaTags: true,
-      swFilename: 'sw.js',
-      manifestFilename: 'manifest.json',
-      useCredentialsForManifestTag: false,
-    },
-
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-cordova-apps/configuring-cordova
-    cordova: {
-      // noIosLegacyBuildFlag: true, // uncomment only if you know what you are doing
-    },
-
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-capacitor-apps/configuring-capacitor
-    capacitor: {
-      hideSplashscreen: false,
-      iosStatusBarPadding: true,
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-electron-apps/configuring-electron
@@ -237,7 +217,7 @@ module.exports = configure(async function (ctx) {
       bundler: 'packager', // 'packager' or 'builder'
 
       packager: {
-        // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
+        // https://electron.github.io/packager/main/
         // OS X / Mac App Store
         // appBundleId: '',
         // appCategoryType: '',
@@ -252,17 +232,6 @@ module.exports = configure(async function (ctx) {
 
         appId: 'membermatters',
       },
-
-      nodeIntegration: true,
-    },
-
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-browser-extensions/configuring-bex
-    bex: {
-      // contentScripts: [
-      //   'my-content-script'
-      // ],
-      // extendBexScriptsConf (esbuildConf) {}
-      // extendBexManifestJson (json) {}
     },
   };
 });

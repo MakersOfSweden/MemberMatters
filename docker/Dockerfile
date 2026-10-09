@@ -14,7 +14,7 @@ RUN mkdir -p /usr/src/app/frontend && mkdir /usr/src/logs && mkdir /usr/src/data
 RUN apt-get update -y && apt-get install -y nginx curl gettext
 
 # Install Node
-ENV NODE_VERSION=22.2.0
+ENV NODE_VERSION=26.10.0
 SHELL ["/bin/bash", "--login", "-c"]
 
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash
@@ -40,9 +40,6 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Build our frontend
 WORKDIR /usr/src/app/frontend/
 RUN npm run build
-
-# Remove our .npmrc
-RUN rm -rf .npmrc
 
 # collect static files from Django and add the backend source code
 ADD memberportal /usr/src/app/memberportal

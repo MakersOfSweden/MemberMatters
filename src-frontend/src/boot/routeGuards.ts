@@ -1,5 +1,6 @@
 import { Platform } from 'quasar';
-import { boot } from 'quasar/wrappers';
+import { defineBoot } from '#q-app';
+import store from 'src/store';
 import type { MemberState } from '../pages/pageAndRouteConfig';
 
 // Signup stages FORCE_SIGNUP_COMPLETION redirects out of. 'awaiting_payment' is
@@ -13,7 +14,7 @@ const FORCED_SIGNUP_STAGES = ['needs_plan', 'needs_requirements'];
 // trapped in the portal.
 const FORCED_SIGNUP_ROUTES = ['membershipPlan', 'profile', 'billing', 'logout'];
 
-export default boot(({ router, store }) => {
+export default defineBoot(({ router }) => {
   router.beforeEach(async (to, from, next) => {
     // if we're in kiosk mode disallow certain pages
     if (Platform.is.electron) {

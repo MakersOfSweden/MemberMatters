@@ -43,10 +43,8 @@ export default defineComponent({
   },
   methods: {
     ...mapMutations('profile', ['setLoggedIn', 'resetState']),
-    ...mapMutations('auth', ['setAuth']),
     completeLogout() {
       this.resetState();
-      this.setAuth({ access: '', refresh: '' });
       this.setLoggedIn(false);
       this.error = false;
       this.spinner = false;

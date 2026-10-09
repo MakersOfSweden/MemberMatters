@@ -3,6 +3,7 @@ venv
 src-frontend/node_modules
 src-frontend/dist
 src-frontend/src-*
+src-frontend/.quasar
 **/*.sqlite3
 **/*.log
 # Compiled translations are built inside the image, never copied in

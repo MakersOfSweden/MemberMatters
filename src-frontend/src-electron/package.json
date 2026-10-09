@@ -1,0 +1,10 @@
+{
+  "name": "frontend-kiosk",
+  "description": "The packages the MemberMatters kiosk app is built with",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.5.1"
+  }
+}

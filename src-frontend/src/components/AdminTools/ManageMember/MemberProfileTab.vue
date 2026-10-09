@@ -42,8 +42,8 @@
           selectedMember.stateLocked
             ? 'positive'
             : canLockState
-            ? 'warning'
-            : 'grey-7'
+              ? 'warning'
+              : 'grey-7'
         "
         :label="
           selectedMember.stateLocked

@@ -15,7 +15,7 @@
       <div class="col-12 col-md-6">
         <q-list bordered padding class="rounded-borders">
           <q-item-label header>
-            {{ $tc('access.door', 2) }}
+            {{ $t('access.door', 2) }}
           </q-item-label>
 
           <div class="q-pa-md" v-if="!doors.length">
@@ -68,7 +68,7 @@
       <div class="col-12 col-md-6">
         <q-list bordered padding class="col-12 col-md-6 rounded-borders">
           <q-item-label header>
-            {{ $tc('access.interlock', 2) }}
+            {{ $t('access.interlock', 2) }}
           </q-item-label>
 
           <q-item-label class="q-pa-md" v-if="!interlocks.length">
@@ -92,8 +92,8 @@
                     interlock.locked_out
                       ? 'orange'
                       : interlock.access
-                      ? 'green'
-                      : 'red'
+                        ? 'green'
+                        : 'red'
                   "
                   text-color="white"
                 />

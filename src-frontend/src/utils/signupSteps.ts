@@ -21,11 +21,7 @@ export type PreSignupStep = 'terms' | 'tier' | 'plan' | 'billing' | 'confirm';
 // The post-payment stepper (SignupRequiredSteps) shows 'payment' as a done
 // breadcrumb and ends on a terminal confirmation.
 export type PostSignupStep =
-  | 'billing'
-  | 'terms'
-  | 'induction'
-  | 'accessCard'
-  | 'confirm';
+  'billing' | 'terms' | 'induction' | 'accessCard' | 'confirm';
 
 export interface SignupStepState {
   complete: boolean;

@@ -310,10 +310,10 @@ export default defineComponent({
 
       // Normalise to E.164 before posting; the backend re-validates.
       const mobile = this.form.mobile
-        ? parsePhoneNumberFromString(
+        ? (parsePhoneNumberFromString(
             this.form.mobile,
             this.phoneRegion as CountryCode
-          )?.format('E.164') ?? this.form.mobile
+          )?.format('E.164') ?? this.form.mobile)
         : this.form.mobile;
 
       this.$axios

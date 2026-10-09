@@ -4,7 +4,13 @@ jobs:
   lint-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same Node as the Docker image; package.json engines also allow recent 22 and 24.
+          node-version: 26
+          cache: npm
+          cache-dependency-path: src-frontend/package-lock.json
       - name: Install modules
         working-directory: ./src-frontend
         run: npm ci

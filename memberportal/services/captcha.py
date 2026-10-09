@@ -69,7 +69,6 @@ def _client_ip(request):
 
 
 def _allowed_hostnames() -> set:
-    # Empty default skips the check, so native WebView origins keep working.
     raw = (config.CAPTCHA_ALLOWED_HOSTNAMES or "").strip()
     return {h.strip().lower() for h in raw.split(",") if h.strip()}
 

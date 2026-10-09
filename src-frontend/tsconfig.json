@@ -1,16 +1,8 @@
 {
-  "extends": "@quasar/app-vite/tsconfig-preset",
+  "extends": "./.quasar/tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@components/*": ["src/components/*"],
-      "@icons/*": ["src/icons/*"],
-      "@store/*": ["src/store/*"],
-      "@mixins/*": ["src/mixins/*"],
-      "@assets/*": ["src/assets/*"],
-      "types/*": ["src/types/*"],
-      "boot/*": ["src/boot/*"]
-    }
-  },
-  "moduleResolution": "node"
+    // TypeScript 6 turns strict on when a project doesn't set it, and the
+    // code was written without it.
+    "strict": false
+  }
 }

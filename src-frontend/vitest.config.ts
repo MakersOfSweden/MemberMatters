@@ -2,19 +2,19 @@ import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 // Standalone from quasar.config.js: Quasar builds its Vite config through the
-// CLI, and Vitest ships its own Vite. Only the aliases that pure `src/` modules
+// CLI, so Vitest can't load it. Only the aliases that pure `src/` modules
 // actually import need mirroring here — keep this in sync with the `alias`
-// block in quasar.config.js and the `paths` in tsconfig.json.
+// block in quasar.config.js, from which Quasar also generates tsconfig paths.
 export default defineConfig({
   resolve: {
     alias: {
-      '@components': path.join(__dirname, 'src/components'),
-      '@icons': path.join(__dirname, 'src/icons'),
-      '@store': path.join(__dirname, 'src/store'),
-      '@mixins': path.join(__dirname, 'src/mixins'),
-      '@assets': path.join(__dirname, 'src/assets'),
-      types: path.join(__dirname, 'src/types'),
-      src: path.join(__dirname, 'src'),
+      '@components': path.join(import.meta.dirname, 'src/components'),
+      '@icons': path.join(import.meta.dirname, 'src/icons'),
+      '@store': path.join(import.meta.dirname, 'src/store'),
+      '@mixins': path.join(import.meta.dirname, 'src/mixins'),
+      '@assets': path.join(import.meta.dirname, 'src/assets'),
+      types: path.join(import.meta.dirname, 'src/types'),
+      src: path.join(import.meta.dirname, 'src'),
     },
   },
   test: {

@@ -117,7 +117,7 @@ CONSTANCE_CONFIG = {
     ),
     "CAPTCHA_ALLOWED_HOSTNAMES": (
         "",
-        "[Optional] Comma-separated hostnames the CAPTCHA token may be solved on (e.g. 'portal.example.org'). Leave EMPTY to skip hostname checking — needed so native builds whose WebView origin is 'localhost' keep working. When set, a token whose verified hostname isn't listed is rejected, blocking tokens farmed on a clone site that embeds your public site key.",
+        "[Optional] Comma-separated hostnames the CAPTCHA token may be solved on (e.g. 'portal.example.org'). When set, a token whose verified hostname isn't listed is rejected, blocking tokens farmed on a clone site that embeds your public site key. Leave empty to skip hostname checking.",
     ),
     # Stripe config
     "ENABLE_STRIPE": (True, "Enable use of Stripe for payments."),

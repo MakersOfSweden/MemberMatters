@@ -203,3 +203,47 @@ The first count leaves out settings stored without a value. The upgrade deletes 
 Older versions configured the member dashboard through a setting named `HOME_PAGE_CARDS`. It is replaced by the Dashboard Cards editor under Admin Tools, and the upgrade creates a card for each entry in your old setting, so your dashboard looks the same afterwards.
 
 If the setting isn't valid JSON, no cards are imported and the container log says so. Enter them under Admin Tools → Dashboard Cards instead.
+
+### Check the icons on your cards (Material Design Icons 7)
+
+The portal now uses Material Design Icons 7.4 instead of version 5. Version 7 removes 105 icons, including brand logos such as Discord and Telegram, and a dashboard card that uses one of them shows no icon. After upgrading, open Admin Tools → Dashboard Cards and give a new icon to any card that shows none. The [Pictogrammers library](https://pictogrammers.com/library/mdi/) lists the icons you can use, including about 1,600 added since version 5, which didn't show before.
+
+| Removed icon | Use instead |
+| --- | --- |
+| `mdi-discord`, `mdi-telegram` | No replacement. Try `mdi-chat` or `mdi-forum` |
+| `mdi-cash-usd` | `mdi-cash` |
+| `mdi-file-pdf` | `mdi-file-pdf-box` |
+| `mdi-face`, `mdi-face-outline` | `mdi-face-man`, `mdi-face-man-outline` |
+| `mdi-hand` | `mdi-hand-front-right` |
+| `mdi-email-send`, `mdi-email-receive` | `mdi-email-arrow-right`, `mdi-email-arrow-left` |
+| `mdi-check-box-outline` | `mdi-checkbox-outline` |
+| `mdi-desktop-mac` | `mdi-monitor` |
+| `mdi-laptop-mac`, `mdi-laptop-windows` | `mdi-laptop` |
+| `mdi-cellphone-android`, `mdi-cellphone-iphone` | `mdi-cellphone` |
+| `mdi-tablet-android`, `mdi-tablet-ipad` | `mdi-tablet` |
+
+<details>
+<summary>All 105 removed icons</summary>
+
+`mdi-adobe`, `mdi-adobe-acrobat`, `mdi-amazon`, `mdi-amazon-alexa`, `mdi-android-auto`, `mdi-android-debug-bridge`, `mdi-android-messages`, `mdi-apple-airplay`, `mdi-bandcamp`, `mdi-battlenet`, `mdi-blogger`, `mdi-bolnisi-cross`, `mdi-book-variant-multiple`, `mdi-boom-gate-down`, `mdi-boom-gate-down-outline`, `mdi-buddhism`, `mdi-buffer`, `mdi-cash-usd`, `mdi-cash-usd-outline`, `mdi-cellphone-android`, `mdi-cellphone-erase`, `mdi-cellphone-iphone`, `mdi-celtic-cross`, `mdi-check-box-multiple-outline`, `mdi-check-box-outline`, `mdi-christianity`, `mdi-christianity-outline`, `mdi-concourse-ci`, `mdi-currency-usd-circle`, `mdi-currency-usd-circle-outline`, `mdi-desktop-mac`, `mdi-desktop-mac-dashboard`, `mdi-discord`, `mdi-do-not-disturb`, `mdi-do-not-disturb-off`, `mdi-douban`, `mdi-email-receive`, `mdi-email-receive-outline`, `mdi-email-send`, `mdi-email-send-outline`, `mdi-face`, `mdi-face-outline`, `mdi-face-profile`, `mdi-face-profile-woman`, `mdi-face-shimmer`, `mdi-face-shimmer-outline`, `mdi-file-pdf`, `mdi-file-pdf-box-outline`, `mdi-file-pdf-outline`, `mdi-flash-circle`, `mdi-floor-lamp-variant`, `mdi-format-textdirection-l-to-r`, `mdi-format-textdirection-r-to-l`, `mdi-gif`, `mdi-google-controller`, `mdi-google-controller-off`, `mdi-google-home`, `mdi-google-photos`, `mdi-gradient`, `mdi-hand`, `mdi-hand-left`, `mdi-hand-right`, `mdi-hinduism`, `mdi-home-currency-usd`, `mdi-iframe`, `mdi-iframe-array`, `mdi-iframe-array-outline`, `mdi-iframe-braces`, `mdi-iframe-braces-outline`, `mdi-iframe-outline`, `mdi-iframe-parentheses`, `mdi-iframe-parentheses-outline`, `mdi-iframe-variable`, `mdi-iframe-variable-outline`, `mdi-islam`, `mdi-judaism`, `mdi-laptop-chromebook`, `mdi-laptop-mac`, `mdi-laptop-windows`, `mdi-microsoft-edge-legacy`, `mdi-microsoft-yammer`, `mdi-monitor-clean`, `mdi-pdf-box`, `mdi-pharmacy`, `mdi-plus-one`, `mdi-poll-box`, `mdi-poll-box-outline`, `mdi-sparkles`, `mdi-tablet-android`, `mdi-tablet-ipad`, `mdi-teach`, `mdi-telegram`, `mdi-television-clean`, `mdi-text-subject`, `mdi-text-to-speech`, `mdi-text-to-speech-off`, `mdi-timeline-help`, `mdi-timeline-help-outline`, `mdi-twitter-retweet`, `mdi-untappd`, `mdi-vk`, `mdi-voice-off`, `mdi-xamarin-outline`, `mdi-xing`, `mdi-y-combinator`
+
+</details>
+
+### The phone app and the installable web app are removed
+
+This release removes the iOS and Android app (built with Capacitor), whose project files had not been updated since 2023, and the installable web app (PWA) mode, which could not be built. Members keep using the portal in their phone's browser. If your members use a browser or a kiosk, there is nothing to do.
+
+If your makerspace published its own MemberMatters app, it can no longer be built from this release. The server still accepts its sign-ins, but not once you turn on CAPTCHA, so plan to retire the app. If you left the `CAPTCHA_ALLOWED_HOSTNAMES` setting empty because of the app, you can now set it to your portal's hostname; [Post Installation Steps](/docs/POST_INSTALL_STEPS.md) explains what it protects against.
+
+### Kiosks need a 64-bit system (Electron 44)
+
+The kiosk app ([Kiosk Mode](/docs/GETTING_STARTED.md#kiosk-mode)) moves from Electron 26, which stopped getting security fixes in February 2024, to Electron 44. If you have no kiosk, there is nothing to do. Otherwise, build your kiosks again, and note:
+
+- Electron 44 needs a 64-bit system, and on a Mac, macOS 13 or later. A kiosk on 32-bit Raspberry Pi OS or 32-bit Windows can't run it; on a Raspberry Pi 3 or later, install the 64-bit Raspberry Pi OS first.
+- Building needs Node 26 (`nvm install 26`). Node 22.22.2 or later and 24.15 or later also work, for example on a Mac older than macOS 13.5, which Node 26 doesn't support.
+- On a Wayland desktop, such as Raspberry Pi OS since Bookworm, the kiosk runs as a native Wayland app, so X11 tools in its startup script, such as `unclutter` or `xdotool`, no longer reach its window. Start it with `--ozone-platform=x11` to keep the old behaviour.
+- The packaged kiosk keeps its files in `resources/app.asar` instead of a `resources/app` folder. Make any change to them in the source and build again.
+
+### Members need a browser from 2022 or later
+
+The portal's interface library, Quasar, now uses browser features that older browsers lack, so the portal, including its login page, no longer works in Chrome or Edge before version 93, Firefox before 92, or Safari before 15.4 (iPhones and iPads not updated to iOS 15.4). Chrome, Edge and Firefox update themselves, and every device that runs iOS 15 can install 15.4, so few members should notice. A member who can't log in should update their browser or device. Before Chrome 111, Firefox 113 and Safari 16.2, shadows look flat, but everything else works. Kiosks bring their own browser.

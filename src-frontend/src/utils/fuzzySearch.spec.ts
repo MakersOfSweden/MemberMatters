@@ -26,7 +26,7 @@ const member = (
     state: 'active',
     subscriptionStatus: 'active',
     ...extra,
-  } as unknown as MemberProfile);
+  }) as unknown as MemberProfile;
 
 const MEMBERS = [
   member(42, 'José', "O'Brien", { phone: '+61400123456', rfid: '0004291' }),

@@ -342,11 +342,11 @@ export default defineComponent({
         .then(() => {
           this.$q.dialog({
             dark: true,
-            title: this.$tc(
+            title: this.$t(
               'adminTools.copyEmailListSuccess',
               this.displayMemberList.length
             ),
-            message: this.$tc(
+            message: this.$t(
               'adminTools.copyEmailListSuccessDescription',
               this.displayMemberList.length -
                 this.displayMemberList.filter(

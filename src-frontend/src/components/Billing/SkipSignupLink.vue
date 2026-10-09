@@ -4,7 +4,7 @@
       @click="confirmSkipSignup"
       style="text-decoration: underline; cursor: pointer"
     >
-      {{ $tc('tiers.skipSignup') }}
+      {{ $t('tiers.skipSignup') }}
     </p>
   </div>
 </template>

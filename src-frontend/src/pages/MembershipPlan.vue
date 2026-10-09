@@ -62,7 +62,7 @@
             flat
             no-caps
             text-color="white"
-            :label="$tc('billing.viewInvoice')"
+            :label="$t('billing.viewInvoice')"
             :href="subscriptionInfo.invoiceUrl"
             target="_blank"
             icon="mdi-open-in-new"
@@ -72,14 +72,14 @@
 
       <div v-if="cancelSuccess" class="row q-mb-md">
         <q-banner class="bg-success text-white">
-          <div class="text-h5">{{ $tc('actionSuccess') }}</div>
-          <p>{{ $tc('paymentPlans.cancelSuccessDescription') }}</p>
+          <div class="text-h5">{{ $t('actionSuccess') }}</div>
+          <p>{{ $t('paymentPlans.cancelSuccessDescription') }}</p>
         </q-banner>
       </div>
 
       <div v-if="subscriptionStatus === 'cancelling'" class="row q-mb-md">
         <q-banner class="bg-error text-white">
-          <div class="text-h5">{{ $tc('paymentPlans.cancelling') }}</div>
+          <div class="text-h5">{{ $t('paymentPlans.cancelling') }}</div>
           <p>
             {{
               $t('paymentPlans.cancellingDescription', { date: cancelAtDate })
@@ -118,7 +118,7 @@
               <q-item-section>
                 <q-item-label>{{ paymentMethodLabel }}</q-item-label>
                 <q-item-label caption>{{
-                  $tc('paymentPlans.paymentMethod')
+                  $t('paymentPlans.paymentMethod')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
@@ -126,7 +126,7 @@
               <q-item-section>
                 <q-item-label>{{ currentPeriodEnd }}</q-item-label>
                 <q-item-label caption>{{
-                  $tc('paymentPlans.renewalDate')
+                  $t('paymentPlans.renewalDate')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
@@ -134,7 +134,7 @@
               <q-item-section>
                 <q-item-label>{{ signupDate }}</q-item-label>
                 <q-item-label caption>{{
-                  $tc('paymentPlans.signupDate')
+                  $t('paymentPlans.signupDate')
                 }}</q-item-label>
               </q-item-section>
             </q-item>
@@ -150,7 +150,7 @@
         :loading="loadingButton"
         @click="cancelPlan"
         color="error"
-        :label="$tc('paymentPlans.cancelButton')"
+        :label="$t('paymentPlans.cancelButton')"
       />
       <member-bucks-manage-billing
         v-else-if="!cardExists && billingMethod !== 'invoice'"
@@ -161,7 +161,7 @@
         :loading="loadingButton"
         @click="resumePlan"
         color="success"
-        :label="$tc('paymentPlans.resumeButton')"
+        :label="$t('paymentPlans.resumeButton')"
       />
     </template>
   </q-page>

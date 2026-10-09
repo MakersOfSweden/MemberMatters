@@ -41,4 +41,4 @@ export default {
       currencyDisplay: 'symbol',
     },
   },
-};
+} as const;

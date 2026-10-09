@@ -1,6 +1,6 @@
 import { Store } from 'vuex';
 
-declare module '@vue/runtime-core' {
+declare module 'vue' {
   // Declare your own store states.
   interface State {
     count: number;

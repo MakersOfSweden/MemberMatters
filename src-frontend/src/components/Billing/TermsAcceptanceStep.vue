@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="text-h6 q-py-md">{{ $tc('signup.acceptTerms') }}</div>
+    <div class="text-h6 q-py-md">{{ $t('signup.acceptTerms') }}</div>
     <div class="row">
       <terms-acceptance-card
         v-for="(card, i) in cards"
@@ -21,7 +21,7 @@
         :loading="submitting"
         @click="submit"
         color="primary"
-        :label="$tc('button.continue')"
+        :label="$t('button.continue')"
       />
     </div>
   </div>
@@ -67,8 +67,8 @@ export default defineComponent({
         this.$emit('accepted');
       } catch {
         this.$q.dialog({
-          title: this.$tc('error.error'),
-          message: this.$tc('signup.termsAcceptError'),
+          title: this.$t('error.error'),
+          message: this.$t('signup.termsAcceptError'),
         });
       } finally {
         this.submitting = false;

@@ -257,7 +257,6 @@
 import { mapMutations, mapGetters, mapActions } from 'vuex';
 import { Loading } from 'quasar';
 import formMixin from '../mixins/formMixin';
-import { SplashScreen } from '@capacitor/splash-screen';
 import { LocationQuery } from 'vue-router';
 import { defineComponent } from 'vue';
 import CaptchaWidget from './CaptchaWidget.vue';
@@ -312,14 +311,12 @@ export default defineComponent({
     }
 
     // check if we're logged in and our session is still valid
-    await this.retrieveAuth();
     await this.getLoggedIn();
 
     // if we're logged in then open the app straight away, then
     if (this.loggedIn) {
       this.redirectLoggedIn(false);
     } else {
-      await SplashScreen.hide();
       this.showCard = true;
     }
 
@@ -339,9 +336,7 @@ export default defineComponent({
   },
   methods: {
     ...mapActions('profile', ['getLoggedIn']),
-    ...mapActions('auth', ['retrieveAuth']),
     ...mapMutations('profile', ['setLoggedIn']),
-    ...mapMutations('auth', ['setAuth']),
     onRegisterClick(event) {
       if (this.features?.enableRegistration === false) {
         event.preventDefault();
@@ -380,11 +375,9 @@ export default defineComponent({
         setTimeout(() => {
           this.setLoggedIn(true);
           this.$router.push({ name: 'dashboard' });
-          setTimeout(SplashScreen.hide, 500);
         }, 1000);
       } else {
         this.$router.push({ name: 'dashboard' });
-        setTimeout(SplashScreen.hide, 500);
       }
     },
     onReset() {
@@ -422,41 +415,6 @@ export default defineComponent({
             this.loginComplete = true;
 
             window.location = response.data.redirect;
-          })
-          .catch((error) => {
-            // Backend verifies (and spends) the token before authenticate(),
-            // so 401/403 consume it too — reset for a fresh retry.
-            this.resetCaptcha('loginCaptcha');
-            if (error.response?.data?.message === 'error.captchaFailed') {
-              this.errorKey = 'error.captchaFailed';
-            } else if (error.response?.status === 429) {
-              this.errorKey = 'error.tooManyRequests';
-            } else if (error.response.status === 401) {
-              this.loginFailed = true;
-              this.unverifiedEmail = false;
-            } else if (error.response.status === 403) {
-              this.unverifiedEmail = true;
-              this.loginFailed = false;
-              throw error;
-            } else {
-              this.loginError = true;
-              this.unverifiedEmail = false;
-              throw error;
-            }
-          })
-          .finally(() => {
-            this.buttonLoading = false;
-          });
-      } else if (this.$q.platform.is.capacitor) {
-        this.$axios
-          .post('/api/token/obtain/', {
-            email: this.email,
-            password: this.password,
-            captchaToken: this.captchaToken,
-          })
-          .then((response) => {
-            this.setAuth(response.data);
-            this.redirectLoggedIn();
           })
           .catch((error) => {
             // Backend verifies (and spends) the token before authenticate(),

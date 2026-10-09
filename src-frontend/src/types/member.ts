@@ -55,7 +55,7 @@ export enum MemberTransactionType {
   card = 'Membership Card',
   other = 'Other',
 }
-export const MemberTransactionTypeSchema = z.nativeEnum(MemberTransactionType);
+export const MemberTransactionTypeSchema = z.enum(MemberTransactionType);
 
 export const MemberbucksTransactionSchema = z.object({
   amount: z.number(),

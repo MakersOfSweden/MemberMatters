@@ -70,7 +70,7 @@
                       'currency',
                       siteLocaleCurrency
                     ),
-                    interval: $tc(
+                    interval: $t(
                       `paymentPlans.interval.${subscription.membershipPlan.interval.toLowerCase()}`,
                       subscription.membershipPlan.intervalAmount
                     ),
@@ -204,7 +204,7 @@
           color="primary"
           class="self-start"
           icon="mdi-open-in-new"
-          :label="$tc('billing.viewInvoice')"
+          :label="$t('billing.viewInvoice')"
           :href="subscription.invoiceUrl"
           target="_blank"
         />

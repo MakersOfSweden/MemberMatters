@@ -1048,9 +1048,9 @@ def _subscribe_to_mailchimp(new_user, profile):
 
 class CaptchaTokenObtainPairView(TokenObtainPairView):
     """
-    Gated /api/token/obtain/ (mobile login). Ungated it would let an attacker
-    credential-stuff here and bypass the /api/login/ CAPTCHA; shares the "login"
-    action since it's the same form on mobile.
+    Gated /api/token/obtain/ (the retired phone app's login). Ungated it would
+    let an attacker credential-stuff here and bypass the /api/login/ CAPTCHA;
+    shares the "login" action since the app used the same login form.
     """
 
     throttle_classes = (ScopedRateThrottle,)

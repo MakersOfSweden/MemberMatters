@@ -14,7 +14,7 @@
                     'currency',
                     siteLocaleCurrency
                   ),
-                  interval: $tc(
+                  interval: $t(
                     `paymentPlans.interval.${minPrice.interval.toLowerCase()}`,
                     minPrice.intervalAmount
                   ),
@@ -35,7 +35,7 @@
               <q-btn
                 @click="selectTier"
                 color="primary"
-                :label="$tc('button.select')"
+                :label="$t('button.select')"
               />
             </div>
           </q-card-section>
