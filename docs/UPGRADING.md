@@ -75,24 +75,7 @@ If the new version doesn't work for you, go back to the image you kept in step 3
 
 - **A database server you run yourself**: restore the backup with its own tool, then move your services back to the previous image.
 
-## Upgrading from 3.8 or earlier
-
-### Set MM_SECRET_KEY and MM_ALLOWED_HOSTS
-
-With `MM_ENV=Production`, the portal now refuses to start unless both are set. Older versions fell back to a secret key that is published with the source code, and answered on any hostname. The getting started instructions for 3.8 didn't mention either variable, so check yours before you upgrade. A container missing either one keeps restarting, and its log ends with an error like this:
-
-```
-django.core.exceptions.ImproperlyConfigured: MM_SECRET_KEY must be set when MM_ENV=Production.
-```
-
-Once `MM_SECRET_KEY` is set, the same error names `MM_ALLOWED_HOSTS` if that is still missing.
-
-- `MM_SECRET_KEY`: if you already set one, keep it. Otherwise generate a long random value, for example with `python3 -c "import secrets; print(secrets.token_urlsafe(64))"`, and keep it private. The new key signs everyone out once, in the browser and in the mobile app.
-- `MM_ALLOWED_HOSTS`: every hostname the portal is reached by, separated by commas, such as `portal.example.org`. Leave out `https://` and any port. A request for a name that isn't listed gets `400 Bad Request`, so include any local name or IP address that kiosks or a monitoring service use.
-
-For a single container, add both to your `env.list`. Under docker compose, CapRover or Kubernetes, set them on the web app, the Celery worker and the Celery beat scheduler: each one reads the settings, so each one stops without them. Give all three the same `MM_SECRET_KEY`, and replace a placeholder such as the `CHANGE_ME` that older copies of the example docker-compose.yml carried. The current [docker-compose.yml](/docker/docker-compose.yml) shows one way: all three read both from a file named `membermatters.env` next to it, through `env_file:`.
-
-While you are there, consider setting `MM_NUM_PROXIES` too. Rate limiting on sign-up, login and password reset, new in this release, needs it to tell visitors apart. See [Getting Started](/docs/GETTING_STARTED.md) for the value.
+## Upgrading from 4.0
 
 ### Check the key the portal signs sign-ins with (django-oidc-provider 0.9)
 
@@ -198,12 +181,6 @@ The second number should be at least the first. It can be higher, because the po
 
 The first count leaves out settings stored without a value. The upgrade deletes those, and the portal saves their default the next time it reads them.
 
-### Dashboard cards move to Admin Tools
-
-Older versions configured the member dashboard through a setting named `HOME_PAGE_CARDS`. It is replaced by the Dashboard Cards editor under Admin Tools, and the upgrade creates a card for each entry in your old setting, so your dashboard looks the same afterwards.
-
-If the setting isn't valid JSON, no cards are imported and the container log says so. Enter them under Admin Tools → Dashboard Cards instead.
-
 ### Check the icons on your cards (Material Design Icons 7)
 
 The portal now uses Material Design Icons 7.4 instead of version 5. Version 7 removes 105 icons, including brand logos such as Discord and Telegram, and a dashboard card that uses one of them shows no icon. After upgrading, open Admin Tools → Dashboard Cards and give a new icon to any card that shows none. The [Pictogrammers library](https://pictogrammers.com/library/mdi/) lists the icons you can use, including about 1,600 added since version 5, which didn't show before.
@@ -247,3 +224,40 @@ The kiosk app ([Kiosk Mode](/docs/GETTING_STARTED.md#kiosk-mode)) moves from Ele
 ### Members need a browser from 2022 or later
 
 The portal's interface library, Quasar, now uses browser features that older browsers lack, so the portal, including its login page, no longer works in Chrome or Edge before version 93, Firefox before 92, or Safari before 15.4 (iPhones and iPads not updated to iOS 15.4). Chrome, Edge and Firefox update themselves, and every device that runs iOS 15 can install 15.4, so few members should notice. A member who can't log in should update their browser or device. Before Chrome 111, Firefox 113 and Safari 16.2, shadows look flat, but everything else works. Kiosks bring their own browser.
+
+## Upgrading from 3.8 or earlier
+
+We strongly recommend upgrading to 4.0 first and checking that it works before you move on to 5.0. Version 4.0 has every change since 3.8 except the move to Django 5.2 and the new frontend, so if something goes wrong you know which step caused it, and you can go back to a 4.0 that worked. Each step needs its own backup. If you upgrade straight to 5.0 anyway, do what this section asks as well as everything under Upgrading from 4.0.
+
+### Set MM_SECRET_KEY and MM_ALLOWED_HOSTS
+
+With `MM_ENV=Production`, the portal now refuses to start unless both are set. Older versions fell back to a secret key that is published with the source code, and answered on any hostname. The getting started instructions for 3.8 didn't mention either variable, so check yours before you upgrade. A container missing either one keeps restarting, and its log ends with an error like this:
+
+```
+django.core.exceptions.ImproperlyConfigured: MM_SECRET_KEY must be set when MM_ENV=Production.
+```
+
+Once `MM_SECRET_KEY` is set, the same error names `MM_ALLOWED_HOSTS` if that is still missing.
+
+- `MM_SECRET_KEY`: if you already set one, keep it. Otherwise generate a long random value, for example with `python3 -c "import secrets; print(secrets.token_urlsafe(64))"`, and keep it private. The new key signs everyone out once, in the browser and in the mobile app.
+- `MM_ALLOWED_HOSTS`: every hostname the portal is reached by, separated by commas, such as `portal.example.org`. Leave out `https://` and any port. A request for a name that isn't listed gets `400 Bad Request`, so include any local name or IP address that kiosks or a monitoring service use.
+
+For a single container, add both to your `env.list`. Under docker compose, CapRover or Kubernetes, set them on the web app, the Celery worker and the Celery beat scheduler: each one reads the settings, so each one stops without them. Give all three the same `MM_SECRET_KEY`, and replace a placeholder such as the `CHANGE_ME` that older copies of the example docker-compose.yml carried. The current [docker-compose.yml](/docker/docker-compose.yml) shows one way: all three read both from a file named `membermatters.env` next to it, through `env_file:`.
+
+Set `MM_NUM_PROXIES` too. Rate limiting on sign-up, login and password reset, new in this release, needs it to tell visitors apart. See [Getting Started](/docs/GETTING_STARTED.md) for the value.
+
+### Check that no two members share a Stripe customer ID
+
+This release lets each Stripe customer belong to only one member. If two members share one, for example because an admin copied it by hand, the upgrade stops: the container keeps restarting, and its log ends with an `IntegrityError` about `stripe_customer_id`. Check before you upgrade, on the version you run now. Under docker compose, replace `docker exec membermatters` with `docker compose exec mm-webapp`:
+
+```bash
+docker exec membermatters python3 manage.py shell -v 0 -c "
+from django.db.models import Count
+from profile.models import Profile
+ids = Profile.objects.exclude(stripe_customer_id__isnull=True).exclude(stripe_customer_id='')
+for row in ids.values('stripe_customer_id').annotate(n=Count('id')).filter(n__gt=1):
+    print(row['stripe_customer_id'], 'is shared by', ', '.join(ids.filter(stripe_customer_id=row['stripe_customer_id']).values_list('user__email', flat=True)))
+"
+```
+
+If it prints nothing, there is nothing to do. Otherwise open each listed member under Profile → Profiles in the Django admin, and clear the Stripe customer ID of the one who isn't that customer in your Stripe dashboard. If the upgrade already stopped there, go back as described in [Going back](#going-back-to-the-previous-version), clear the ID and upgrade again.

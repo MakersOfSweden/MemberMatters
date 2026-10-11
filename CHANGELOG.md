@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v4.0.0] - 2026-10-11
+
+This release gathers the development Linköping Makerspace has done since v3.8.0 into one versioned release, to get back to a proper structure: changes go through `dev`, and each version is released with a changelog entry and upgrade notes. It keeps Django 3.2 and the current frontend, which makes it a checkpoint: upgrade to it, check that everything works, and then move on to the coming v5.0.0, which moves to Django 5.2 and a new frontend toolchain.
+
+Read [docs/UPGRADING.md](/docs/UPGRADING.md) before upgrading: in production the portal no longer starts without `MM_SECRET_KEY` and `MM_ALLOWED_HOSTS`, and the notes list one check to run first.
+
+### Added
+
+- Pay by Invoice billing method, a Pending Invoices admin screen, and invoice renewals with reminders for overdue invoices (add the `customer.subscription.updated` event to your Stripe webhook)
+- Terms & Conditions step and privacy policy consent in signup, an option to make members finish signup, and Signup Progress and Signup Preview admin screens
+- Dashboard Cards editor under Admin Tools, replacing the `HOME_PAGE_CARDS` setting; existing cards are imported
+- Member emails in Swedish, chosen with the `EMAIL_LANGUAGE` setting
+- Cloudflare Turnstile CAPTCHA on registration, login and password reset
+- Rate limiting on registration, login and password reset, which needs `MM_NUM_PROXIES`
+- Fuzzy member search in Admin Tools
+- Settings to turn off registration, new subscriptions, the recent swipes and last seen pages, the report issue card, member editing of email and basic details, the screen name and member-entered access cards
+- Payment plan descriptions and a yearly interval
+- Upgrade notes in docs/UPGRADING.md
+- Backend and frontend test suites in CI
+
+### Updated
+
+- Manage Member is split into Access, Billing, Logs and Profile tabs, with separate state lock, access toggle and cancel membership actions
+- Signup reworked: one signup stage drives every screen, and members accept the terms before they choose a plan
+- Phone numbers are validated and stored in international (E.164) format
+- Screen names are unique and email addresses case-insensitive
+- The API sends times in ISO 8601 UTC, and the portal shows them in the viewer's time zone
+- Stripe webhook handling hardened (idempotency, locking, scoping to the member's subscription)
+- Docker image on Debian trixie and Python 3.12; the compose and CapRover templates set the required settings on every service, and compose no longer publishes Postgres on the host
+
+### Fixed
+
+- Admin times off by the UTC offset, email verification links expiring early, and meetings moving on every edit
+- Staff could import and export users in the Django admin, and give themselves the admin flag
+- Navigation hung when the profile failed to load
+- Device purchase emails sent only their first line
+- Recent swipes and transactions loaded every row
+- When a database migration failed, the portal kept running on a half-migrated database; the container now stops and logs the error
+
 ## [v3.8.0] - 2025-03-08
 
 ### Added
