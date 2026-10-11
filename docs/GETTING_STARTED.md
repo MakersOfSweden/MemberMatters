@@ -60,7 +60,9 @@ MM_NUM_PROXIES=1
 > own nginx in front of the app, so that hop always counts, which is the `1` above. Add one
 > for every layer you put in front of the container: the nginx reverse proxy in
 > [Post Installation Steps](POST_INSTALL_STEPS.md) brings it to `2`, and putting
-> Cloudflare in front of that brings it to `3`.
+> Cloudflare in front of that brings it to `3`. The example `docker/docker-compose.yml`
+> sets it to `1` on the web app; change it there, because a value in
+> `membermatters.env` is overridden by the one in docker-compose.yml.
 >
 > - **Left unset**, MemberMatters can't tell which entry in the forwarded chain is the
 >   client, so it uses the whole chain. A caller can put anything in that header, so they

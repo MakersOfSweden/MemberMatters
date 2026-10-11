@@ -7,8 +7,6 @@ services:
       - POSTGRES_USER=membermatters
       - POSTGRES_PASSWORD=membermatters
       - POSTGRES_DB=membermatters
-    ports:
-      - "5432:5432"
     volumes:
       - mm-postgres-volume:/var/lib/postgresql/data
     healthcheck:
@@ -34,6 +32,9 @@ services:
       MM_ENV: "Production"
       MM_USE_POSTGRES: True
       MM_REDIS_HOST: "redis://mm-redis:6379/0"
+      # The container's own nginx. Add one for each proxy you put in front of
+      # it, see docs/GETTING_STARTED.md.
+      MM_NUM_PROXIES: 1
     ports:
       - "8000:8000"
     depends_on:
