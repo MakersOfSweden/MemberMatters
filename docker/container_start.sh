@@ -16,7 +16,7 @@ else
   nginx
 
   # We should migrate on startup in case there's been any db changes
-  python3 manage.py migrate
+  python3 manage.py migrate || exit 1
 
   exec daphne -b 0.0.0.0 -p 8001 membermatters.asgi:application
 fi
