@@ -134,7 +134,7 @@ docker stop membermatters
 echo "Removing the old docker container"
 docker rm membermatters
 echo "Creating new docker container"
-docker create -p 8000:8000 --name membermatters --restart always --detach --env-file /usr/app/env.list -v /usr/app/:/usr/src/data membermatters/membermatters
+docker create -p 8000:8000 --name membermatters --restart always --env-file /usr/app/env.list -v /usr/app/:/usr/src/data membermatters/membermatters
 echo "Running new docker container"
 docker start membermatters
 ```
