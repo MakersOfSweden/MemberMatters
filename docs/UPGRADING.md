@@ -93,3 +93,19 @@ Once `MM_SECRET_KEY` is set, the same error names `MM_ALLOWED_HOSTS` if that is 
 For a single container, add both to your `env.list`. Under docker compose, CapRover or Kubernetes, set them on the web app, the Celery worker and the Celery beat scheduler: each one reads the settings, so each one stops without them. Give all three the same `MM_SECRET_KEY`, and replace a placeholder such as the `CHANGE_ME` that older copies of the example docker-compose.yml carried. The current [docker-compose.yml](/docker/docker-compose.yml) shows one way: all three read both from a file named `membermatters.env` next to it, through `env_file:`.
 
 Set `MM_NUM_PROXIES` too. Rate limiting on sign-up, login and password reset, new in this release, needs it to tell visitors apart. See [Getting Started](/docs/GETTING_STARTED.md) for the value.
+
+### Check that no two members share a Stripe customer ID
+
+This release lets each Stripe customer belong to only one member. If two members share one, for example because an admin copied it by hand, the upgrade stops: the container keeps restarting, and its log ends with an `IntegrityError` about `stripe_customer_id`. Check before you upgrade, on the version you run now. Under docker compose, replace `docker exec membermatters` with `docker compose exec mm-webapp`:
+
+```bash
+docker exec membermatters python3 manage.py shell -v 0 -c "
+from django.db.models import Count
+from profile.models import Profile
+ids = Profile.objects.exclude(stripe_customer_id__isnull=True).exclude(stripe_customer_id='')
+for row in ids.values('stripe_customer_id').annotate(n=Count('id')).filter(n__gt=1):
+    print(row['stripe_customer_id'], 'is shared by', ', '.join(ids.filter(stripe_customer_id=row['stripe_customer_id']).values_list('user__email', flat=True)))
+"
+```
+
+If it prints nothing, there is nothing to do. Otherwise open each listed member under Profile → Profiles in the Django admin, and clear the Stripe customer ID of the one who isn't that customer in your Stripe dashboard. If the upgrade already stopped there, go back as described in [Going back](#going-back-to-the-previous-version), clear the ID and upgrade again.
