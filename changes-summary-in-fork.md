@@ -3,13 +3,20 @@
 ## Billing / Stripe hardening & invoicing
 
 - New **"Pay by Invoice"** billing method (`ENABLE_INVOICE_BILLING`, due-days,
-  notes) plus a **Pending Invoices** admin screen with mark-as-paid.
+  notes) plus a **Payment Overview** admin screen (formerly Pending Invoices)
+  whose Stripe Subscription Invoices list has mark-as-paid. It is meant to
+  grow a section per payment method as more are added.
+- Payment Overview opens with a **Stripe setup check**: keys, webhook secret
+  and URL on page load, and a read-only "Test connection" that checks the key,
+  its permissions and the webhook endpoint (URL, status, events, API version).
+  The Stripe API version is now pinned in `STRIPE_API_VERSION`; restricted keys
+  need Webhook Endpoints read access for the webhook check.
 - Extensive webhook hardening: idempotency, race/lock-contention fixes, scoping
   webhooks to the member's own subscription, unique `stripe_customer_id`.
 - `ENABLE_NEW_SUBSCRIPTIONS` kill-switch; payment-plan **descriptions**, "year"
   interval, and interval-casing fixes.
 - **Invoice renewals**: renewal payments are recorded and confirmed by email,
-  renewal invoices can be marked paid in Pending Invoices, and overdue invoices
+  renewal invoices can be marked paid in Payment Overview, and overdue invoices
   trigger a member reminder (existing installs must add the
   `customer.subscription.updated` webhook event). Untracked-subscription and
   locked-member payments alert an admin; billing emails reworded.

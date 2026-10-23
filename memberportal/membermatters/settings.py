@@ -452,6 +452,14 @@ CELERY_RESULT_BACKEND = "django-db"
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BROKER_URL = os.getenv("MM_REDIS_HOST")
 
+# The Stripe API version every Stripe request is sent with (applied in
+# api_billing/apps.py). Pinned here rather than left to the stripe library's
+# default, so a library upgrade can't change the shape of Stripe's responses
+# without anyone noticing. Webhook events aren't covered: Stripe renders them in
+# the webhook endpoint's own version, which the Payment Overview page compares
+# against this one.
+STRIPE_API_VERSION = "2024-04-10"
+
 # Django constance configuration
 # Until 4.0 this backend treated a failed read as a missing setting, so the
 # portal stored the default over the real value (jazzband/django-constance#348).

@@ -28,7 +28,8 @@ export default {
     interlocks: 'Interlocks',
     devices: 'Devices',
     kiosks: 'Kiosks',
-    pendingInvoices: 'Pending Invoices',
+    paymentOverview: 'Payment Overview',
+    pendingInvoices: 'Payment Overview', // old link to the payment overview page
     signupPreview: 'Signup Preview',
     manageDashboard: 'Dashboard Cards',
 
@@ -866,31 +867,5 @@ export default {
       'Membership payments are not set up, so memberships cannot be purchased here. Please contact us to join.',
     stripeError:
       "Something went wrong talking to our payment provider. Please try again in a moment, or contact us if it doesn't clear up.",
-  },
-  pendingInvoices: {
-    title: 'Pending Invoices',
-    description:
-      'Members with an outstanding invoice for their membership subscription. Use this panel to record payments received outside of Stripe (bank transfer, cash, etc.).',
-    invoiceDisabledWarning:
-      'Invoice billing is currently disabled, so new members cannot sign up via invoice. Existing invoice subscriptions are still being billed by Stripe — use this page to record off-Stripe payments for those members.',
-    noInvoices: 'No pending invoices.',
-    columnMember: 'Member',
-    columnEmail: 'Email',
-    columnPlan: 'Plan',
-    columnAmount: 'Amount Due',
-    columnCreated: 'Created',
-    columnDue: 'Due',
-    columnActions: 'Actions',
-    viewInStripe: 'View in Stripe',
-    markPaid: 'Mark as Paid',
-    markPaidTitle: 'Mark Invoice as Paid',
-    markPaidHelp:
-      'This marks the invoice as paid out-of-band in Stripe (no card charge). The subscription will activate via the paid webhook. Add an optional note for the audit trail.',
-    commentLabel: 'Comment (optional)',
-    commentPlaceholder: 'e.g. Paid by bank transfer on 2026-04-10',
-    confirmMarkPaid: 'Mark as Paid',
-    markPaidSuccess: 'Invoice marked as paid.',
-    markPaidError: 'Failed to mark invoice as paid.',
-    fetchError: 'Failed to load pending invoices.',
   },
 };

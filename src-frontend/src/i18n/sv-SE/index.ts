@@ -28,7 +28,6 @@ export default {
     interlocks: 'Lås',
     devices: 'Enheter',
     kiosks: 'Kiosks',
-    pendingInvoices: 'Väntande fakturor',
     signupPreview: 'Signup Preview',
     manageDashboard: 'Dashboard Cards',
 
@@ -851,31 +850,5 @@ export default {
       'Medlemsbetalningar är inte konfigurerade, så medlemskap kan inte köpas här. Kontakta oss för att bli medlem.',
     stripeError:
       'Något gick fel i kommunikationen med vår betalleverantör. Försök igen om en stund eller kontakta oss om det inte löser sig.',
-  },
-  pendingInvoices: {
-    title: 'Väntande fakturor',
-    description:
-      'Medlemmar med en utestående faktura för sitt medlemskapsabonnemang. Använd den här panelen för att registrera betalningar mottagna utanför Stripe (banköverföring, kontanter, etc.).',
-    invoiceDisabledWarning:
-      'Fakturabetalning är för närvarande inaktiverad, så nya medlemmar kan inte registrera sig via faktura. Befintliga fakturaabonnemang debiteras fortfarande av Stripe — använd den här sidan för att registrera betalningar utanför Stripe för dessa medlemmar.',
-    noInvoices: 'Inga väntande fakturor.',
-    columnMember: 'Medlem',
-    columnEmail: 'E-post',
-    columnPlan: 'Plan',
-    columnAmount: 'Belopp att betala',
-    columnCreated: 'Skapad',
-    columnDue: 'Förfaller',
-    columnActions: 'Åtgärder',
-    viewInStripe: 'Visa i Stripe',
-    markPaid: 'Markera som betald',
-    markPaidTitle: 'Markera faktura som betald',
-    markPaidHelp:
-      'Detta markerar fakturan som betald utanför Stripe (ingen kortbetalning). Abonnemanget aktiveras via webhook för betald faktura. Lägg till en valfri notering för granskningsloggen.',
-    commentLabel: 'Kommentar (valfri)',
-    commentPlaceholder: 't.ex. Betald via banköverföring 2026-04-10',
-    confirmMarkPaid: 'Markera som betald',
-    markPaidSuccess: 'Fakturan markerades som betald.',
-    markPaidError: 'Kunde inte markera fakturan som betald.',
-    fetchError: 'Kunde inte ladda väntande fakturor.',
   },
 };

@@ -1,13 +1,30 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="text-h5 q-mb-md">{{ $t('pendingInvoices.title') }}</div>
-    <p class="text-grey-7 q-mb-md">{{ $t('pendingInvoices.description') }}</p>
+    <div class="text-h5 q-mb-lg">Payment Overview</div>
+
+    <div class="row q-col-gutter-md q-mb-lg">
+      <div class="col-12 col-lg-6">
+        <payment-check-card
+          title="Stripe"
+          :icon="icons.billing"
+          checks-url="/api/admin/billing/stripe/checks/"
+          test-url="/api/admin/billing/stripe/connection-test/"
+        />
+      </div>
+    </div>
+
+    <div class="text-h6 q-mb-md">
+      <q-icon :name="icons.pendingInvoices" class="q-mr-sm" />
+      Stripe Subscription Invoices
+    </div>
 
     <q-banner
       v-if="!features.enableInvoiceBilling"
       class="bg-warning text-dark q-mb-md"
     >
-      {{ $t('pendingInvoices.invoiceDisabledWarning') }}
+      Invoice billing is currently disabled, so new members cannot sign up via
+      invoice. Existing invoice subscriptions are still being billed by Stripe —
+      use this page to record off-Stripe payments for those members.
     </q-banner>
 
     <q-table
@@ -15,7 +32,7 @@
       :columns="columns"
       row-key="invoiceId"
       :loading="loading"
-      :no-data-label="$t('pendingInvoices.noInvoices')"
+      no-data-label="No pending invoices."
       flat
       bordered
     >
@@ -44,7 +61,7 @@
             dense
             color="primary"
             :icon="icons.billing"
-            :label="$t('pendingInvoices.viewInStripe')"
+            label="View in Stripe"
             type="a"
             :href="props.row.hostedInvoiceUrl"
             target="_blank"
@@ -55,7 +72,7 @@
             dense
             color="positive"
             :icon="icons.success"
-            :label="$t('pendingInvoices.markPaid')"
+            label="Mark as Paid"
             @click="openMarkPaidDialog(props.row)"
           />
         </q-td>
@@ -65,7 +82,7 @@
     <q-dialog v-model="markPaidDialog">
       <q-card style="min-width: 400px; max-width: 500px">
         <q-card-section>
-          <div class="text-h6">{{ $t('pendingInvoices.markPaidTitle') }}</div>
+          <div class="text-h6">Mark Invoice as Paid</div>
         </q-card-section>
 
         <q-card-section v-if="selectedInvoice" class="q-pt-none">
@@ -77,30 +94,27 @@
             }}
           </div>
           <p class="text-caption text-grey-7 q-mb-md">
-            {{ $t('pendingInvoices.markPaidHelp') }}
+            This marks the invoice as paid out-of-band in Stripe (no card
+            charge). The subscription will activate via the paid webhook. Add an
+            optional note for the audit trail.
           </p>
           <q-input
             v-model="comment"
             type="textarea"
             rows="3"
             outlined
-            :label="$t('pendingInvoices.commentLabel')"
-            :placeholder="$t('pendingInvoices.commentPlaceholder')"
+            label="Comment (optional)"
+            placeholder="e.g. Paid by bank transfer on 2026-04-10"
             maxlength="500"
             counter
           />
         </q-card-section>
 
         <q-card-actions align="right">
-          <q-btn
-            flat
-            :label="$t('button.cancel')"
-            v-close-popup
-            :disable="submitting"
-          />
+          <q-btn flat label="Cancel" v-close-popup :disable="submitting" />
           <q-btn
             color="positive"
-            :label="$t('pendingInvoices.confirmMarkPaid')"
+            label="Mark as Paid"
             :loading="submitting"
             @click="confirmMarkPaid"
           />
@@ -113,9 +127,11 @@
 <script>
 import icons from '@icons';
 import { mapGetters } from 'vuex';
+import PaymentCheckCard from '@components/AdminTools/PaymentCheckCard.vue';
 
 export default {
-  name: 'PendingInvoices',
+  name: 'PaymentOverview',
+  components: { PaymentCheckCard },
   data() {
     return {
       invoices: [],
@@ -135,47 +151,47 @@ export default {
       return [
         {
           name: 'memberName',
-          label: this.$t('pendingInvoices.columnMember'),
+          label: 'Member',
           field: 'memberName',
           align: 'left',
           sortable: true,
         },
         {
           name: 'memberEmail',
-          label: this.$t('pendingInvoices.columnEmail'),
+          label: 'Email',
           field: 'memberEmail',
           align: 'left',
         },
         {
           name: 'planName',
-          label: this.$t('pendingInvoices.columnPlan'),
+          label: 'Plan',
           field: 'planName',
           align: 'left',
         },
         {
           name: 'amount',
-          label: this.$t('pendingInvoices.columnAmount'),
+          label: 'Amount Due',
           field: 'amountDue',
           align: 'right',
           sortable: true,
         },
         {
           name: 'created',
-          label: this.$t('pendingInvoices.columnCreated'),
+          label: 'Created',
           field: 'created',
           align: 'left',
           sortable: true,
         },
         {
           name: 'dueDate',
-          label: this.$t('pendingInvoices.columnDue'),
+          label: 'Due',
           field: 'dueDate',
           align: 'left',
           sortable: true,
         },
         {
           name: 'actions',
-          label: this.$t('pendingInvoices.columnActions'),
+          label: 'Actions',
           field: 'actions',
           align: 'right',
         },
@@ -197,7 +213,7 @@ export default {
           console.log(e);
           this.$q.notify({
             type: 'negative',
-            message: this.$t('pendingInvoices.fetchError'),
+            message: 'Failed to load pending invoices.',
           });
         })
         .finally(() => {
@@ -229,7 +245,7 @@ export default {
         .then(() => {
           this.$q.notify({
             type: 'positive',
-            message: this.$t('pendingInvoices.markPaidSuccess'),
+            message: 'Invoice marked as paid.',
           });
           this.markPaidDialog = false;
           this.fetchInvoices();
@@ -239,8 +255,7 @@ export default {
           this.$q.notify({
             type: 'negative',
             message:
-              e.response?.data?.message ||
-              this.$t('pendingInvoices.markPaidError'),
+              e.response?.data?.message || 'Failed to mark invoice as paid.',
           });
         })
         .finally(() => {

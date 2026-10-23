@@ -15,6 +15,7 @@ export default {
   signupProgress: 'mdi-account-clock-outline',
   meetings: 'mdi-calendar-clock',
   plans: 'mdi-receipt',
+  paymentOverview: 'mdi-cash-multiple',
   pendingInvoices: 'mdi-invoice-text-clock',
   dollar: 'mdi-currency-usd',
   doors: 'mdi-door-closed-lock',

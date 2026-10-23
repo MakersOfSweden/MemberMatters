@@ -124,6 +124,16 @@ urlpatterns = [
         name="MarkInvoicePaid",
     ),
     path(
+        "api/admin/billing/stripe/checks/",
+        views.StripeChecks.as_view(),
+        name="StripeChecks",
+    ),
+    path(
+        "api/admin/billing/stripe/connection-test/",
+        views.StripeConnectionTest.as_view(),
+        name="StripeConnectionTest",
+    ),
+    path(
         "api/admin/settings/",
         views.ManageSettings.as_view(),
         name="ManageSettings",

@@ -128,12 +128,22 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/ManageTier.vue'),
       },
       {
-        icon: icons.pendingInvoices,
+        icon: icons.paymentOverview,
+        to: '/manage/payment-overview',
+        name: 'paymentOverview',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/PaymentOverview.vue'),
+      },
+      {
+        icon: icons.paymentOverview,
         to: '/manage/pending-invoices',
         name: 'pendingInvoices',
         loggedIn: true,
         admin: true,
-        component: () => import('pages/AdminTools/PendingInvoices.vue'),
+        // Now part of the payment overview page; kept so old links still land on it.
+        hiddenMenu: true,
+        component: () => import('pages/AdminTools/PaymentOverview.vue'),
       },
       {
         icon: icons.email,

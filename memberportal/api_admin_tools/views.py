@@ -30,6 +30,7 @@ from sentry_sdk import capture_message
 from access import models
 from access.models import DoorLog, InterlockLog
 from api_general.models import DashboardCard
+from api_billing import stripe_checks
 from api_billing.stripe_utils import invoice_subscription_id
 from api_billing.views import (
     ensure_stripe_customer,
@@ -1547,6 +1548,30 @@ class MarkInvoicePaid(StripeAPIView):
         )
 
         return Response({"success": True})
+
+
+class StripeChecks(APIView):
+    """
+    get: The Stripe checks on the Payment Overview page that only read
+    MemberMatters' settings (keys, webhook secret and URL, API version).
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def get(self, request):
+        return Response(stripe_checks.get_static_checks())
+
+
+class StripeConnectionTest(APIView):
+    """
+    post: Calls Stripe read-only to check the secret key, its permissions and
+    the webhook endpoint for this site.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request):
+        return Response(stripe_checks.run_connection_test())
 
 
 class SignupPreview(APIView):
