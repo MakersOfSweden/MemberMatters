@@ -1,179 +1,102 @@
 <template>
-  <div style="max-width: 100%">
-    <q-table
-      :rows="displayMemberList"
-      :no-data-label="$t('adminTools.noMembers')"
-      :columns="columns"
-      row-key="email"
-      :filter="filter"
-      :filter-method="fuzzyFilter"
-      v-model:pagination="pagination"
-      :loading="loading"
-      :grid="$q.screen.lt.md"
-      class="full-width"
-      @row-click="
-        (evt, row) => {
-          $router.push({
-            name: 'manageMember',
-            params: { memberId: row.id },
-          });
-        }
-      "
-    >
-      <template v-slot:top-left>
-        <div class="row flex items-start">
-          <template v-if="$q.screen.lt.md">
-            <div class="full-width">
-              <q-btn-dropdown
-                class="q-mb-sm"
-                color="primary"
-                :label="$t('adminTools.exportOptions')"
-              >
-                <q-list>
-                  <q-item v-close-popup clickable @click="exportCsv">
-                    <q-item-section>
-                      <q-item-label>{{
-                        $t('adminTools.exportCsv')
-                      }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
+  <member-table-shell
+    v-model:pagination="pagination"
+    :rows="filteredMembers"
+    :columns="columns"
+    :csv-columns="csvColumns"
+    :loading="loading"
+    :grid="grid"
+  >
+    <template v-slot:filters>
+      <q-select
+        v-model="memberState"
+        style="min-width: 140px"
+        outlined
+        emit-value
+        map-options
+        :options="filterOptions"
+        :label="$t('adminTools.filterOptions')"
+        dense
+      />
+    </template>
 
-                  <q-item
-                    v-close-popup
-                    clickable
-                    @click="copyEmailsToClipboard"
-                  >
-                    <q-item-section>
-                      <q-item-label>{{
-                        $t('adminTools.emailAddresses')
-                      }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </q-btn-dropdown>
-            </div>
-            <div class="full-width">
-              <q-select
-                v-model="memberState"
-                class="q-mb-sm"
-                outlined
-                emit-value
-                map-options
-                :options="filterOptions"
-                :label="$t('adminTools.filterOptions')"
-                dense
-              />
-            </div>
-          </template>
-
-          <template v-else>
-            <q-btn
-              class="q-mr-sm q-mb-sm"
-              color="primary"
-              :icon="icons.export"
-              :label="$t('adminTools.exportCsv')"
-              @click="exportCsv"
-            />
-            <q-btn
-              class="q-mr-sm q-mb-sm"
-              color="primary"
-              :icon="icons.email"
-              :label="$t('adminTools.emailAddresses')"
-              @click="copyEmailsToClipboard"
-            />
-          </template>
-        </div>
-      </template>
-      <template v-slot:top-right>
-        <q-select
-          v-if="$q.screen.gt.sm"
-          v-model="memberState"
-          class="q-mr-sm"
-          style="min-width: 100px"
-          outlined
-          emit-value
-          map-options
-          :options="filterOptions"
-          :label="$t('adminTools.filterOptions')"
-          dense
-        />
-
-        <q-input
-          ref="searchInput"
-          v-model="filter"
-          outlined
-          dense
-          clearable
-          :clear-icon="icons.close"
-          debounce="300"
-          :placeholder="$t('adminTools.searchMembers')"
+    <template v-slot:body-cell-status="props">
+      <q-td :props="props">
+        {{ props.value }}
+        <q-icon
+          v-if="props.row.stateLocked"
+          :name="icons.lock"
+          color="warning"
+          size="sm"
+          class="q-ml-xs"
         >
-          <template v-slot:append>
-            <q-icon :name="icons.search" />
-          </template>
-        </q-input>
-      </template>
+          <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
+        </q-icon>
+        <q-icon
+          v-if="props.row.adminDisabledAccess"
+          :name="icons.accessDisabled"
+          color="negative"
+          size="sm"
+          class="q-ml-xs"
+        >
+          <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
+        </q-icon>
+      </q-td>
+    </template>
 
-      <template v-slot:body-cell-status="props">
-        <q-td :props="props">
-          {{ props.value }}
-          <q-icon
-            v-if="props.row.stateLocked"
-            :name="icons.lock"
-            color="warning"
-            size="sm"
-            class="q-ml-xs"
-          >
-            <q-tooltip>{{ $t('adminTools.stateLockedTooltip') }}</q-tooltip>
-          </q-icon>
-          <q-icon
-            v-if="props.row.adminDisabledAccess"
-            :name="icons.accessDisabled"
-            color="negative"
-            size="sm"
-            class="q-ml-xs"
-          >
-            <q-tooltip>{{ $t('adminTools.accessDisabledTooltip') }}</q-tooltip>
-          </q-icon>
-        </q-td>
-      </template>
-    </q-table>
-  </div>
+    <template v-slot:card="props">
+      <div v-if="props.row.rfid" class="text-caption">
+        <q-icon :name="icons.rfid" class="q-mr-xs" />
+        {{ props.row.rfid }}
+      </div>
+      <div
+        v-if="
+          features?.signup?.collectVehicleRegistrationPlate &&
+          props.row.vehicleRegistrationPlate
+        "
+        class="text-caption"
+      >
+        {{ $t('form.vehicleRegistrationPlate') }}:
+        {{ props.row.vehicleRegistrationPlate }}
+      </div>
+    </template>
+  </member-table-shell>
 </template>
 
 <script lang="ts">
-import { copyToClipboard } from 'quasar';
 import icons from '@icons';
 import formatMixin from '@mixins/formatMixin';
-import { exportFile } from 'quasar';
-import { stringify } from 'csv-stringify';
 import { mapGetters } from 'vuex';
+import MemberTableShell from '@components/AdminTools/MemberTableShell.vue';
 import { MemberProfile } from 'types/member';
 import { memberMatchesQuery } from '../../utils/fuzzySearch';
+import { fetchAdminList } from '../../utils/adminFetch';
+import { CsvColumn } from '../../utils/memberExport';
 import { defineComponent } from 'vue';
-import type { QInput } from 'quasar';
 
 export default defineComponent({
   name: 'MembersList',
+  components: { MemberTableShell },
   mixins: [formatMixin],
+  props: {
+    grid: {
+      type: Boolean,
+      default: false,
+    },
+    // Owned by the members page, which shares it with the signup tab.
+    search: {
+      type: String,
+      default: '',
+    },
+  },
   data() {
     return {
-      members: [],
+      members: [] as MemberProfile[],
       loading: false,
     };
   },
   computed: {
     ...mapGetters('config', ['features']),
-    filter: {
-      get(): string {
-        return this.$store.getters['adminTools/membersFilter'];
-      },
-      // The clear button hands back null, but the store (and QTable's filter
-      // prop) expect a string.
-      set(value: string | null) {
-        this.$store.commit('adminTools/setMembersFilter', value ?? '');
-      },
-    },
     memberState: {
       get(): string {
         return this.$store.getters['adminTools/membersState'];
@@ -190,17 +113,14 @@ export default defineComponent({
         this.$store.commit('adminTools/setMembersPagination', value);
       },
     },
-    displayMemberList() {
-      if (this.memberState === 'all') return this.members;
+    // Filtered here rather than through QTable's filter so the exports get
+    // exactly the rows on screen.
+    filteredMembers(): MemberProfile[] {
       return this.members.filter(
-        (member: MemberProfile) => member.state === this.memberState
+        (member: MemberProfile) =>
+          (this.memberState === 'all' || member.state === this.memberState) &&
+          memberMatchesQuery(member, this.search)
       );
-    },
-    memberEmails() {
-      return this.displayMemberList
-        .filter((member: MemberProfile) => !member.excludeFromEmailExport)
-        .map((member: MemberProfile) => member.email)
-        .join(',');
     },
     icons() {
       return icons;
@@ -212,6 +132,36 @@ export default defineComponent({
         { label: this.$t('adminTools.inactive'), value: 'inactive' },
         { label: this.$t('adminTools.new'), value: 'noob' },
         { label: this.$t('adminTools.accountOnly'), value: 'accountonly' },
+      ];
+    },
+    csvColumns(): CsvColumn<MemberProfile>[] {
+      return [
+        { header: this.$t('tableHeading.name'), value: (m) => m.name.full },
+        {
+          header: this.$t('tableHeading.screenName'),
+          value: (m) => m.screenName,
+        },
+        { header: this.$t('tableHeading.email'), value: (m) => m.email },
+        { header: this.$t('tableHeading.rfid'), value: (m) => m.rfid },
+        ...(this.features?.signup?.collectVehicleRegistrationPlate
+          ? [
+              {
+                header: this.$t('form.vehicleRegistrationPlate'),
+                value: (m: MemberProfile) => m.vehicleRegistrationPlate,
+              },
+            ]
+          : []),
+        {
+          header: this.$t('tableHeading.subscriptionStatus'),
+          value: (m) =>
+            this.$t(
+              `adminTools.subscriptionStatusString.${m.subscriptionStatus}`
+            ),
+        },
+        {
+          header: this.$t('tableHeading.status'),
+          value: (m) => this.$t(`adminTools.memberStatusString.${m.state}`),
+        },
       ];
     },
     columns() {
@@ -252,12 +202,16 @@ export default defineComponent({
           label: this.$t('tableHeading.subscriptionStatus'),
           field: 'subscriptionStatus',
           sortable: true,
+          format: (val: string) =>
+            this.$t(`adminTools.subscriptionStatusString.${val}`),
         },
         {
           name: 'status',
           label: this.$t('tableHeading.status'),
           field: 'state',
           sortable: true,
+          format: (val: string) =>
+            this.$t(`adminTools.memberStatusString.${val}`),
         },
       ];
     },
@@ -272,103 +226,13 @@ export default defineComponent({
   },
   mounted() {
     this.getMembers();
-    window.addEventListener('keydown', this.onKeydown);
-  },
-  beforeUnmount() {
-    window.removeEventListener('keydown', this.onKeydown);
   },
   methods: {
-    fuzzyFilter(rows: MemberProfile[], terms: string) {
-      return rows.filter((row) => memberMatchesQuery(row, terms));
-    },
-    // Ctrl/Cmd+F jumps to the member search instead of the browser's find bar,
-    // which can only see the current page of the table anyway. Typing in any
-    // other field still gets native find.
-    onKeydown(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
-        return;
-      }
-      // Caps Lock reports 'F' even with shift up.
-      if (event.key.toLowerCase() !== 'f') return;
-
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) {
-        return;
-      }
-
-      event.preventDefault();
-      (this.$refs.searchInput as QInput | undefined)?.focus();
-    },
-    getMembers() {
+    async getMembers() {
       this.loading = true;
-      this.$axios
-        .get('/api/admin/members/')
-        .then((response) => {
-          this.members = response.data;
-        })
-        .catch(() => {
-          this.$q.dialog({
-            title: this.$t('error.error'),
-            message: this.$t('error.requestFailed'),
-          });
-        })
-        .finally(() => {
-          this.loading = false;
-        });
-    },
-    exportCsv() {
-      console.log(this.displayMemberList);
-      stringify(
-        this.displayMemberList,
-        {
-          columns: ['name.full', 'email', 'state'],
-        },
-        (err, output) => {
-          const status = exportFile('member-export.csv', output, 'text/csv');
-
-          if (status !== true) {
-            this.$q.notify({
-              message: this.$t('error.downloadFailed'),
-              color: 'negative',
-              icon: 'warning',
-            });
-          }
-        }
-      );
-    },
-    copyEmailsToClipboard() {
-      copyToClipboard(this.memberEmails)
-        .then(() => {
-          this.$q.dialog({
-            dark: true,
-            title: this.$t(
-              'adminTools.copyEmailListSuccess',
-              this.displayMemberList.length
-            ),
-            message: this.$t(
-              'adminTools.copyEmailListSuccessDescription',
-              this.displayMemberList.length -
-                this.displayMemberList.filter(
-                  (member: MemberProfile) => !member.excludeFromEmailExport
-                ).length
-            ),
-          });
-        })
-        .catch(() => {
-          this.$q.dialog({
-            dark: true,
-            title: this.$t('error.copyToClipboard'),
-            message: this.$t('error.copyToClipboardDescription'),
-          });
-        });
+      this.members = await fetchAdminList<MemberProfile>('/api/admin/members/');
+      this.loading = false;
     },
   },
 });
 </script>
-
-<style scoped lang="scss">
-.td {
-  padding: 0;
-}
-</style>

@@ -2,6 +2,28 @@
 import { i18n } from 'boot/i18n';
 import { api } from 'boot/axios';
 
+// The admin members page's list/card choice is a per-device preference, so it
+// outlives the session. Storage can be missing or throw (private windows,
+// blocked site data); the page then just picks a default again.
+const MEMBERS_VIEW_KEY = 'mm.adminMembersView';
+
+function loadMembersView() {
+  try {
+    const stored = window.localStorage.getItem(MEMBERS_VIEW_KEY);
+    return stored === 'list' || stored === 'grid' ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveMembersView(view) {
+  try {
+    window.localStorage.setItem(MEMBERS_VIEW_KEY, view);
+  } catch {
+    // Not persisted; the choice still holds for this session.
+  }
+}
+
 export default {
   namespaced: true,
   state: {
@@ -17,10 +39,24 @@ export default {
     membersState: 'all',
     // rowsPerPage default depends on screen size, so MembersList sets it.
     membersPagination: {
-      sortBy: 'date',
-      descending: true,
+      sortBy: 'name',
+      descending: false,
       page: 1,
       rowsPerPage: null,
+    },
+    // 'members' or 'signup'; kept so the back button from a member returns
+    // to the tab it was opened from.
+    membersTab: 'members',
+    // 'list', 'grid', or null until the members page picks a default.
+    membersView: loadMembersView(),
+    signupState: 'all',
+    // { [step]: 'complete' | 'pending' | 'outstanding' }; absent means any.
+    signupStepFilters: {},
+    signupPagination: {
+      sortBy: 'registered',
+      descending: false,
+      page: 1,
+      rowsPerPage: 15,
     },
   },
   getters: {
@@ -34,6 +70,11 @@ export default {
     membersFilter: (state) => state.membersFilter,
     membersState: (state) => state.membersState,
     membersPagination: (state) => state.membersPagination,
+    membersTab: (state) => state.membersTab,
+    membersView: (state) => state.membersView,
+    signupState: (state) => state.signupState,
+    signupStepFilters: (state) => state.signupStepFilters,
+    signupPagination: (state) => state.signupPagination,
   },
   mutations: {
     setMeetings(state, payload) {
@@ -65,6 +106,22 @@ export default {
     },
     setMembersPagination(state, payload) {
       state.membersPagination = payload;
+    },
+    setMembersTab(state, payload) {
+      state.membersTab = payload;
+    },
+    setMembersView(state, payload) {
+      state.membersView = payload;
+      saveMembersView(payload);
+    },
+    setSignupState(state, payload) {
+      state.signupState = payload;
+    },
+    setSignupStepFilters(state, payload) {
+      state.signupStepFilters = payload;
+    },
+    setSignupPagination(state, payload) {
+      state.signupPagination = payload;
     },
   },
   actions: {

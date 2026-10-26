@@ -24,6 +24,10 @@
   (`SIGNUP_REQUIRE_PRIVACY_CONSENT`, `TERMS_ACCEPTANCE_CARDS`, `terms_accepted_at`).
 - `FORCE_SIGNUP_COMPLETION` redirects unfinished members; new admin **Signup
   Progress** and **Signup Preview** screens.
+- Admin **Members** and **Signup Progress** are now two tabs of one page, with a
+  shared search, a list/card view toggle (remembered per device), CSV and
+  email-list export on both, and per-step filters on Signup Progress (e.g. copy
+  the emails of everyone who has paid but not been inducted).
 
 ## Admin ManageMember overhaul
 

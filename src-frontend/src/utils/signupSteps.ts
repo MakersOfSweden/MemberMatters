@@ -141,3 +141,40 @@ export function nextSignupStep(
   });
   return next || null;
 }
+
+// The three states the admin views show for a step: ✓, 🕐 and –. Only payment
+// can be pending (invoice sent, not yet paid).
+export type SignupStepStateName = 'complete' | 'pending' | 'outstanding';
+
+export function signupStepState(
+  step: SignupStep,
+  requiredSteps: string[] | null,
+  subscriptionState: string | null | undefined
+): SignupStepStateName {
+  const status = signupStepStatus(step, requiredSteps, subscriptionState);
+  if (status.complete) return 'complete';
+  if (status.pending) return 'pending';
+  return 'outstanding';
+}
+
+// Per-step filter for the admin Signup Progress list. A step missing from the
+// map matches anything.
+export type SignupStepFilters = Partial<
+  Record<SignupStep, SignupStepStateName>
+>;
+
+// AND across steps. Filters on steps that aren't enabled are ignored, so a
+// filter remembered from before a feature was switched off can't silently
+// hide every member.
+export function matchesStepFilters(
+  features: SignupFeatures,
+  filters: SignupStepFilters,
+  requiredSteps: string[] | null,
+  subscriptionState: string | null | undefined
+): boolean {
+  return enabledSignupSteps(features).every((step) => {
+    const wanted = filters[step];
+    if (!wanted) return true;
+    return signupStepState(step, requiredSteps, subscriptionState) === wanted;
+  });
+}

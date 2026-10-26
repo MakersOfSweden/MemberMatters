@@ -79,7 +79,9 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         name: 'signupProgress',
         loggedIn: true,
         admin: true,
-        component: () => import('pages/AdminTools/SignupProgress.vue'),
+        // Now a tab of the members page; kept so old links still land on it.
+        hiddenMenu: true,
+        component: () => import('pages/AdminTools/Members.vue'),
       },
       {
         icon: icons.members,
