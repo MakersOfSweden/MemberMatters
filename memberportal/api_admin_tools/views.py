@@ -913,6 +913,28 @@ class MemberEnsureStripeCustomer(StripeAPIView):
             )
 
 
+class MemberEmailExport(APIView):
+    """
+    post: Opt a member out of, or back in to, the admin email export.
+
+    Body: {"excludeFromEmailExport": true|false}. Only that flag is written,
+    so the toggle neither needs nor saves the rest of the profile form.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = get_object_or_404(User, id=member_id)
+        exclude = request.data.get("excludeFromEmailExport")
+        if not isinstance(exclude, bool):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        member.profile.exclude_from_email_export = exclude
+        member.profile.save(update_fields=["exclude_from_email_export"])
+
+        return Response({"success": True})
+
+
 class MemberProfile(APIView):
     """
     put: This method updates a member's profile.
@@ -973,7 +995,6 @@ class MemberProfile(APIView):
         member.profile.phone = phone
         member.profile.screen_name = screen_name
         member.profile.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
-        member.profile.exclude_from_email_export = body.get("excludeFromEmailExport")
 
         try:
             with transaction.atomic():
