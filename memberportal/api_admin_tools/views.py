@@ -30,6 +30,7 @@ from sentry_sdk import capture_message
 from access import models
 from access.models import DoorLog, InterlockLog
 from api_general.models import DashboardCard
+from api_billing.stripe_customer import update_stripe_customer_on_commit
 from api_billing.stripe_utils import invoice_subscription_id
 from api_billing.views import (
     ensure_stripe_customer,
@@ -49,7 +50,13 @@ from profile.models import (
     UserEventLog,
     welcome_email_cards,
 )
-from profile.phone import to_e164
+from profile.profile_changes import (
+    ADMIN,
+    ProfileConflict,
+    ProfileFieldErrors,
+    save_profile_changes,
+)
+from profile.profile_fields import HIDDEN, field_mode, setting_modes
 from services.sanitize import clean_html
 from services import sms
 from services.emails import send_email_to_admin
@@ -861,6 +868,15 @@ class MemberSendSms(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        if field_mode("phone") == HIDDEN:
+            return Response(
+                {
+                    "success": False,
+                    "message": "No SMS is sent while the phone field is hidden.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if not member.profile.phone:
             return Response(
                 {"success": False, "message": "Member does not have a phone number."},
@@ -913,6 +929,28 @@ class MemberEnsureStripeCustomer(StripeAPIView):
             )
 
 
+class MemberEmailExport(APIView):
+    """
+    post: Opt a member out of, or back in to, the admin email export.
+
+    Body: {"excludeFromEmailExport": true|false}. Only that flag is written,
+    so the toggle neither needs nor saves the rest of the profile form.
+    """
+
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request, member_id):
+        member = get_object_or_404(User, id=member_id)
+        exclude = request.data.get("excludeFromEmailExport")
+        if not isinstance(exclude, bool):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        member.profile.exclude_from_email_export = exclude
+        member.profile.save(update_fields=["exclude_from_email_export"])
+
+        return Response({"success": True})
+
+
 class MemberProfile(APIView):
     """
     put: This method updates a member's profile.
@@ -921,77 +959,44 @@ class MemberProfile(APIView):
     permission_classes = (permissions.IsAdminUser,)
 
     def put(self, request, member_id):
-        if not member_id:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-
-        body = json.loads(request.body)
         member = get_object_or_404(User, id=member_id)
+        body = request.data
 
+        # The access card isn't one of the profile fields yet: see the to-do
+        # in profile/profile_fields.py. It is only changed when it is sent.
         rfid = (body.get("rfidCard") or "").strip() or None
-        rfid_changed = member.profile.rfid != rfid
-
-        # Empty string maps to NULL so unset handles don't collide on the
-        # case-insensitive unique constraint.
-        screen_name = (body.get("screenName") or "").strip() or None
-        email = (body.get("email") or "").lower()
-
+        rfid_changed = "rfidCard" in body and member.profile.rfid != rfid
         if (
-            email
-            and User.objects.filter(email__iexact=email).exclude(pk=member.pk).exists()
+            rfid_changed
+            and rfid
+            and Profile.objects.filter(rfid=rfid).exclude(pk=member.profile.pk).exists()
         ):
             return Response(
-                {"message": "error.accountAlreadyExists"},
+                {"message": "accessCard.alreadyInUse"},
                 status=status.HTTP_409_CONFLICT,
             )
-
-        if (
-            screen_name
-            and Profile.objects.filter(screen_name__iexact=screen_name)
-            .exclude(pk=member.profile.pk)
-            .exists()
-        ):
-            return Response(
-                {"message": "error.screenNameAlreadyExists"},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # Store the phone number in E.164 format.
-        phone = (body.get("phone") or "").strip()
-        if phone:
-            try:
-                phone = to_e164(phone, config.PROFILE_DEFAULT_PHONE_REGION)
-            except ValueError:
-                return Response(
-                    {"message": "validation.invalidPhone"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        member.email = email
-        member.profile.first_name = body.get("firstName")
-        member.profile.last_name = body.get("lastName")
-        member.profile.rfid = rfid
-        member.profile.phone = phone
-        member.profile.screen_name = screen_name
-        member.profile.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
-        member.profile.exclude_from_email_export = body.get("excludeFromEmailExport")
 
         try:
             with transaction.atomic():
-                member.save()
-                member.profile.save()
-        except IntegrityError:
-            if (
-                email
-                and User.objects.filter(email__iexact=email)
-                .exclude(pk=member.pk)
-                .exists()
-            ):
-                return Response(
-                    {"message": "error.accountAlreadyExists"},
-                    status=status.HTTP_409_CONFLICT,
-                )
+                # Each field follows its PROFILE_FIELD_* setting: an admin can
+                # change any field that isn't hidden, but can't leave a
+                # required one blank.
+                changed = save_profile_changes(member.profile, body, ADMIN)
+                if rfid_changed:
+                    member.profile.rfid = rfid
+                    member.profile.save(update_fields=["rfid"])
+                update_stripe_customer_on_commit(member.profile, changed)
+        except ProfileFieldErrors as error:
+            return Response(error.errors, status=status.HTTP_400_BAD_REQUEST)
+        except ProfileConflict as conflict:
             return Response(
-                {"message": "error.screenNameAlreadyExists"},
+                {"message": conflict.message}, status=status.HTTP_409_CONFLICT
+            )
+        except IntegrityError:
+            # The profile fields handle their own races, so only the access
+            # card can be taken between the check above and the write.
+            return Response(
+                {"message": "accessCard.alreadyInUse"},
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -1368,6 +1373,15 @@ class ManageSettings(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
         body = request.data
+
+        # Choice settings aren't checked by constance outside its admin form,
+        # so check the profile field ones here.
+        modes = setting_modes(setting_key)
+        if modes is not None and body.get("value") not in modes:
+            return Response(
+                {"message": "error.invalidValue"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             setting = ConstanceSetting.objects.get(key=setting_key)

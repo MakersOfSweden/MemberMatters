@@ -93,13 +93,26 @@ def stripe_event(monkeypatch):
     return _set
 
 
+class StripeObject(dict):
+    """A dict that also reads as attributes, like the stripe library's objects."""
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+
 class StripeAPIRecorder:
-    """Records stripe.Invoice.* / stripe.Subscription.* calls made by handlers."""
+    """Records stripe.Invoice.* / stripe.Subscription.* / stripe.Customer.*
+    calls made by handlers."""
 
     def __init__(self):
         self.calls = []
         self.open_invoices = []
         self.invoices = {}
+        # Customer.retrieve answers from here, by ID.
+        self.customers = {}
         self.raise_on = {}
 
     def _record(self, name):
@@ -117,11 +130,16 @@ class StripeAPIRecorder:
 
         return _call
 
-    def _result(self, name, *args, **kwargs):
-        if name == "Invoice.list":
+    def _result(self, method, /, *args, **kwargs):
+        # Positional-only: Customer.create/modify take a `name` keyword.
+        if method == "Invoice.list":
             return _InvoiceList(self.open_invoices)
-        if name == "Invoice.retrieve":
+        if method == "Invoice.retrieve":
             return self.invoices.get(args[0], {})
+        if method == "Customer.retrieve":
+            return StripeObject(self.customers.get(args[0], {"id": args[0]}))
+        if method == "Customer.create":
+            return StripeObject({"id": "cus_created", **kwargs})
         return {}
 
     def names(self):
@@ -150,6 +168,9 @@ def stripe_api(monkeypatch):
         "Invoice.finalize_invoice",
         "Subscription.retrieve",
         "Subscription.delete",
+        "Customer.retrieve",
+        "Customer.create",
+        "Customer.modify",
     ):
         cls, method = target.split(".")
         monkeypatch.setattr(

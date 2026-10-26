@@ -8,8 +8,10 @@ from profile.models import (
     SignupTriggeredBy,
     CancelTriggeredBy,
 )
+from profile.profile_changes import stored_values
 from api_admin_tools.models import *
 from .models import ProcessedStripeEvent
+from .stripe_customer import customer_details
 from .webhook_handlers import (
     HANDLERS,
     EventScope,
@@ -65,9 +67,7 @@ def ensure_stripe_customer(user):
         try:
             user.log_event("Attempting to create stripe customer.", "stripe")
             customer = stripe.Customer.create(
-                email=user.email,
-                name=profile.get_full_name(),
-                phone=profile.phone,
+                **customer_details(stored_values(profile))
             )
             profile.stripe_customer_id = customer.id
             profile.save(update_fields=["stripe_customer_id"])

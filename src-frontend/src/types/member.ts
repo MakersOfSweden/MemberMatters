@@ -19,7 +19,8 @@ export const MemberProfileSchema = z.object({
   excludeFromEmailExport: z.boolean(),
   registrationDate: z.string(),
   lastUpdatedProfile: z.string(),
-  screenName: z.string(),
+  // Blank screen names are stored as null.
+  screenName: z.string().nullable(),
   name: z.object({
     first: z.string(),
     last: z.string(),
@@ -27,7 +28,9 @@ export const MemberProfileSchema = z.object({
   }),
   phone: z.string(),
   state: MemberStateSchema,
-  vehicleRegistrationPlate: z.string(),
+  vehicleRegistrationPlate: z.string().nullable(),
+  // Only the parts that are filled in; {} for none. See utils/profileFields.ts.
+  address: z.record(z.string(), z.string()),
   rfid: z.string(),
   memberBucks: z.object({
     balance: z.number(),

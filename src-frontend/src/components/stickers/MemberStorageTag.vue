@@ -7,7 +7,10 @@
       <div class="column q-pl-xl q-py-lg">
         <h2 class="q-mt-none q-mb-md"><b>Name:</b> {{ profile.fullName }}</h2>
 
-        <p class="text-h3"><b>Screen Name:</b> {{ profile.screenName }}</p>
+        <!-- Left out when there is none, or the screen name field is hidden. -->
+        <p v-if="profile.screenName" class="text-h3">
+          <b>Screen Name:</b> {{ profile.screenName }}
+        </p>
 
         <p class="text-h3"><b>Issued:</b> {{ date }}</p>
 

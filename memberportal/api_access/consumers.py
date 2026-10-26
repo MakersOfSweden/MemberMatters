@@ -598,8 +598,12 @@ class MemberbucksConsumer(AccessDeviceConsumer):
 
                     description = f"{product.name} purchased from {self.device.name} ({product.external_id_name})."
 
+                    screen_name = profile.get_visible_screen_name()
+                    name = profile.get_full_name() + (
+                        f" ({screen_name})" if screen_name else ""
+                    )
                     post_purchase_to_discord(
-                        f"{profile.get_full_name()} ({profile.screen_name}) just bought something from {self.device.name}."
+                        f"{name} just bought something from {self.device.name}."
                     )
 
                 transaction = MemberBucks()

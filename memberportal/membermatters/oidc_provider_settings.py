@@ -4,6 +4,8 @@ from django.utils.translation import gettext_lazy as _
 from oidc_provider.lib.claims import ScopeClaims
 from constance import config
 
+from profile.profile_fields import HIDDEN, field_mode
+
 logger = logging.getLogger("oidc_provider")
 
 
@@ -12,11 +14,14 @@ def userinfo(claims, user):
     claims["name"] = user.get_full_name() or "NO_NAME"
     claims["given_name"] = user.profile.first_name or "NO_FIRSTNAME"
     claims["family_name"] = user.profile.last_name or "NO_LASTNAME"
-    claims["nickname"] = user.profile.screen_name or "NO_SCREENNAME"
-    claims["preferred_username"] = user.profile.screen_name or "NO_SCREENNAME"
+    # The screen name where there is one to show, else the full name.
+    claims["nickname"] = user.profile.get_display_name().strip() or "NO_SCREENNAME"
+    claims["preferred_username"] = claims["nickname"]
     claims["email"] = user.email
     claims["email_verified"] = user.email_verified
-    claims["phone_number"] = user.profile.phone or "NO_PHONENUMBER"
+    # A hidden phone number isn't passed on, as members don't see it either.
+    phone = user.profile.phone if field_mode("phone") != HIDDEN else ""
+    claims["phone_number"] = phone or "NO_PHONENUMBER"
     claims["phone_number_verified"] = False
     claims["updated_at"] = user.profile.modified.isoformat()
 

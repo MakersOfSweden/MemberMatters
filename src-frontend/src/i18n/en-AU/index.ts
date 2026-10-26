@@ -72,7 +72,6 @@ export default {
       "Couldn't load the CAPTCHA — check your connection and try again.",
     accountAlreadyExists: 'Sorry, that email address has already been used.',
     screenNameAlreadyExists: 'Sorry, that screen name has already been used.',
-    screenNameRequired: 'Please enter a screen name.',
     registrationClosed: 'Registrations are currently closed.',
     downloadFailed: 'Failed to download the file.',
     requestFailed:
@@ -97,6 +96,12 @@ export default {
     mobileTooLong: 'Your mobile number must be 16 characters or fewer.',
     vehiclePlateTooLong:
       'Your vehicle registration plate must be 30 characters or fewer.',
+    fieldLocked:
+      'Some of your details can only be changed by an admin. Please contact us if you need to update them.',
+    invalidValue: "Sorry, one of the values entered isn't valid.",
+    addressTooLong: 'One of the address lines is too long.',
+    addressIncomplete:
+      'Please fill in the street address, postal code, city and country, or leave the address blank.',
     pageNotFound: 'Page not found',
     noValue: 'No Value',
     noData: 'No records found',
@@ -222,6 +227,8 @@ export default {
     cannotBeEmpty: 'This field cannot be empty.',
     futureDate: 'Date must be today or in the future.',
     tooMany: 'Sorry, the maximum is {number}.',
+    maxLength: 'Must be {max} characters or fewer.',
+    invalidCountry: 'Please choose a country from the list.',
   },
   tableHeading: {
     id: 'ID',
@@ -278,10 +285,6 @@ export default {
       'Edit any of the fields below and they will be automatically saved.',
     noResults: 'No Results',
     allFieldsRequired: 'All fields marked * are required.',
-    basicDetailsLocked:
-      'Your email, name, and phone number cannot be changed here. Please contact an admin if you need to update these.',
-    emailChangeContactAdmin:
-      'Your email address cannot be changed here. Please contact an admin if you need to update it.',
     featured: 'Featured?',
     email: 'Email',
     rfidCard: 'RFID Card',
@@ -314,6 +317,17 @@ export default {
     vehicleRegistrationNote:
       'Please enter your vehicle registration plate if you have any. Separate multiple with a space. We use this to help manage parking.',
     excludeFromEmailExport: 'Excluded from email exports',
+    address: 'Address',
+    addressLine1: 'Street address',
+    addressLine2: 'Address line 2',
+    postalCode: 'Postal code',
+    city: 'City',
+    country: 'Country',
+    onlyAdminsEdit: 'Only an admin can change this.',
+    fillInOnce:
+      'You can fill this in once. After that, only an admin can change it.',
+    storedButHidden:
+      "No longer collected. Shown because there's a value stored.",
   },
   digitalId: {
     title: 'Digital ID',

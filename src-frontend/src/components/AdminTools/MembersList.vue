@@ -150,6 +150,7 @@ import { stringify } from 'csv-stringify';
 import { mapGetters } from 'vuex';
 import { MemberProfile } from 'types/member';
 import { memberMatchesQuery } from '../../utils/fuzzySearch';
+import { fieldMode } from '../../utils/profileFields';
 import { defineComponent } from 'vue';
 import type { QInput } from 'quasar';
 
@@ -236,8 +237,12 @@ export default defineComponent({
           field: 'email',
           sortable: true,
         },
-        // this is weird syntax, but cleanest way to do it
-        ...(this.features?.signup?.collectVehicleRegistrationPlate
+        // this is weird syntax, but cleanest way to do it. Shown while the
+        // plate is collected, or while any member still has one stored.
+        ...(fieldMode(this.features, 'vehicleRegistrationPlate') !== 'hidden' ||
+        this.members.some(
+          (member: MemberProfile) => member.vehicleRegistrationPlate
+        )
           ? [
               {
                 name: 'vehicleRegistration',

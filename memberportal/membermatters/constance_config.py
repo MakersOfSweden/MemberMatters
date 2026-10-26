@@ -1,5 +1,13 @@
 from collections import OrderedDict
 
+from profile.profile_fields import (
+    ALL_MODES,
+    HIDDEN,
+    IDENTITY_MODES,
+    REQUIRED,
+    mode_choices,
+)
+
 # Languages member emails can be written in. The codes match the frontend's
 # locales. Each one other than English needs a catalog under memberportal/locale/.
 EMAIL_LANGUAGES = (("en-AU", "English"), ("sv-SE", "Svenska"))
@@ -9,7 +17,32 @@ CONSTANCE_ADDITIONAL_FIELDS = {
         "django.forms.fields.ChoiceField",
         {"widget": "django.forms.Select", "choices": EMAIL_LANGUAGES},
     ],
+    # The PROFILE_FIELD_* settings; the values are explained in
+    # profile/profile_fields.py.
+    "profile_identity_field_mode": [
+        "django.forms.fields.ChoiceField",
+        {"widget": "django.forms.Select", "choices": mode_choices(IDENTITY_MODES)},
+    ],
+    "profile_field_mode": [
+        "django.forms.fields.ChoiceField",
+        {"widget": "django.forms.Select", "choices": mode_choices(ALL_MODES)},
+    ],
 }
+
+# Help text shared by the PROFILE_FIELD_* settings.
+_IDENTITY_FIELD_MODES_HELP = (
+    " Required: members must fill it in and can change it, but not clear it. "
+    "Required, only admins edit: members fill it in at signup; after that only "
+    "admins can change it."
+)
+_FIELD_MODES_HELP = (
+    " Hidden: not asked for; anything already stored is kept and shown only to "
+    "admins. Optional: members may leave it blank and can change it. Optional, "
+    "only admins edit: members may fill it in once while it is empty; after "
+    "that only admins can change it. Required: members must fill it in and can "
+    "change it, but not clear it. Required, only admins edit: members must fill "
+    "it in once; after that only admins can change it."
+)
 
 CONSTANCE_CONFIG = {
     # General site info
@@ -372,14 +405,6 @@ CONSTANCE_CONFIG = {
         True,
         "If true, members can enter their own RFID card during signup. If false, they will be prompted to contact an admin (displayed during signup if REQUIRE_ACCESS_CARD == True).",
     ),
-    "COLLECT_VEHICLE_REGISTRATION_PLATE": (
-        False,
-        "Display a field that collects the member's vehicle registration plate on signup & in the profile page.",
-    ),
-    "REQUIRE_SCREEN_NAME": (
-        True,
-        "If true, members must enter a screen name / nickname during signup. If false, the field is optional.",
-    ),
     "FORCE_SIGNUP_COMPLETION": (
         True,
         "Redirect new members to the membership plan screen until they finish signing up. "
@@ -396,13 +421,43 @@ CONSTANCE_CONFIG = {
         "",
         "Message shown on the registration page (and as a popup from the login page) when ENABLE_REGISTRATION is false.",
     ),
-    "MEMBER_CAN_EDIT_BASIC_DETAILS": (
-        True,
-        "If true, members can edit their own email, first/last name, and phone number on the profile page. If false, those fields become read-only and members must contact an admin to change them. Useful as a safeguard against unintentional edits.",
+    "PROFILE_FIELD_EMAIL": (
+        REQUIRED,
+        "How members' email addresses are handled. The email is the login, so it "
+        "is always required." + _IDENTITY_FIELD_MODES_HELP,
+        "profile_identity_field_mode",
     ),
-    "MEMBER_CAN_EDIT_EMAIL": (
-        True,
-        "If true, members can change their own email address on the profile page (subject to MEMBER_CAN_EDIT_BASIC_DETAILS also being true). If false, the email field is locked and members must contact an admin to change it. Name and phone editing are unaffected by this setting.",
+    "PROFILE_FIELD_NAME": (
+        REQUIRED,
+        "How members' first and last names are handled. Names are always "
+        "required." + _IDENTITY_FIELD_MODES_HELP,
+        "profile_identity_field_mode",
+    ),
+    "PROFILE_FIELD_PHONE": (
+        REQUIRED,
+        "How members' phone numbers are handled. No SMS is sent while this is "
+        "hidden." + _FIELD_MODES_HELP,
+        "profile_field_mode",
+    ),
+    "PROFILE_FIELD_SCREEN_NAME": (
+        REQUIRED,
+        "How members' screen names (nicknames) are handled. Where there is no "
+        "screen name to show, the first and last name are used instead, for "
+        "example as the username in Discourse and other services members sign "
+        "in to through the portal." + _FIELD_MODES_HELP,
+        "profile_field_mode",
+    ),
+    "PROFILE_FIELD_VEHICLE_PLATE": (
+        HIDDEN,
+        "How members' vehicle registration plates are handled." + _FIELD_MODES_HELP,
+        "profile_field_mode",
+    ),
+    "PROFILE_FIELD_ADDRESS": (
+        HIDDEN,
+        "How members' postal addresses are handled. An address has a street, an "
+        "optional second line, a postal code, a city and a country."
+        + _FIELD_MODES_HELP,
+        "profile_field_mode",
     ),
     "PROFILE_DEFAULT_PHONE_REGION": (
         "AU",
@@ -578,8 +633,6 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "MIN_INDUCTION_SCORE",
                 "REQUIRE_ACCESS_CARD",
                 "MEMBER_CAN_ENTER_ACCESS_CARD",
-                "COLLECT_VEHICLE_REGISTRATION_PLATE",
-                "REQUIRE_SCREEN_NAME",
                 "SIGNUP_REQUIRE_PRIVACY_CONSENT",
                 "SIGNUP_PRIVACY_POLICY_URL",
                 "SIGNUP_PRIVACY_POLICY_TEXT",
@@ -591,8 +644,12 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
         (
             "Member Profile",
             (
-                "MEMBER_CAN_EDIT_BASIC_DETAILS",
-                "MEMBER_CAN_EDIT_EMAIL",
+                "PROFILE_FIELD_EMAIL",
+                "PROFILE_FIELD_NAME",
+                "PROFILE_FIELD_PHONE",
+                "PROFILE_FIELD_SCREEN_NAME",
+                "PROFILE_FIELD_VEHICLE_PLATE",
+                "PROFILE_FIELD_ADDRESS",
                 "PROFILE_DEFAULT_PHONE_REGION",
             ),
         ),

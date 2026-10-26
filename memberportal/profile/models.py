@@ -27,6 +27,7 @@ from services.email_i18n import (
 from services import sms
 from sentry_sdk import capture_exception
 from membermatters.fields import Char32UUIDField
+from profile.profile_fields import FIELDS, HIDDEN, field_mode
 from django_prometheus.models import ExportModelOperationsMixin
 
 logger = logging.getLogger("profile")
@@ -499,6 +500,9 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     phone = models.CharField(validators=[phone_regex], max_length=16, blank=True)
     state = models.CharField(max_length=11, default="noob", choices=STATES)
     vehicle_registration_plate = models.CharField(max_length=30, blank=True, null=True)
+    # {"line1", "line2", "postal_code", "city", "country"}, only the parts that
+    # are filled in; {} for none. See ADDRESS_PARTS in profile_fields.py.
+    address = models.JSONField("Address", default=dict, blank=True)
 
     membership_plan = models.ForeignKey(
         PaymentPlan,
@@ -1050,6 +1054,24 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     def get_full_name(self):
         return self.first_name + " " + self.last_name
 
+    def get_visible_screen_name(self, field_hidden=None):
+        """The screen name, or None while the screen name field is hidden.
+
+        For anywhere members or other services see it. Admin pages show the
+        stored value whatever the setting. A caller listing many members
+        passes `field_hidden`, read once, as each read of the setting is a
+        database query.
+        """
+        if field_hidden is None:
+            field_hidden = field_mode("screenName") == HIDDEN
+        if field_hidden:
+            return None
+        return self.screen_name or None
+
+    def get_display_name(self):
+        """The screen name where there is one to show, else the full name."""
+        return self.get_visible_screen_name() or self.get_full_name()
+
     def get_short_name(self):
         return self.first_name
 
@@ -1116,6 +1138,7 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
             "phone": self.phone,
             "state": self.state,
             "vehicleRegistrationPlate": self.vehicle_registration_plate,
+            "address": self.address,
             "rfid": self.rfid,
             "memberBucks": {
                 "balance": self.memberbucks_balance,

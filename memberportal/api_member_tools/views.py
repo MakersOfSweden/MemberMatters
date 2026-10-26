@@ -1,5 +1,6 @@
 from access.models import DoorLog, InterlockLog
 from profile.models import Profile
+from profile.profile_fields import HIDDEN, field_mode
 from api_meeting.models import Meeting
 from constance import config
 from services.emails import send_email_to_admin
@@ -353,11 +354,14 @@ class Members(APIView):
     """
 
     def get(self, request):
+        # Read once for the whole list rather than once per member.
+        screen_name_hidden = field_mode("screenName") == HIDDEN
+
         def get_member(member):
             return {
                 "id": member.id,
                 "name": member.get_full_name(),
-                "screenName": member.screen_name,
+                "screenName": member.get_visible_screen_name(screen_name_hidden),
             }
 
         members = list(map(get_member, Profile.objects.filter(state="active")))

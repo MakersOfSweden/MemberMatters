@@ -105,7 +105,9 @@ However, as noted below, currencies will use a hardcoded value set by a configur
   * "MEMBER_CAN_ENTER_ACCESS_CARD" - Allow members to enter their own RFID card number during signup. Set to `False`
     to require an admin to assign the card (members will see a "Contact Us" button instead). Only applies if
     "REQUIRE_ACCESS_CARD" is `True`.
-  * "COLLECT_VEHICLE_REGISTRATION_PLATE" - Allow the portal to collect vehicle registration plate number(s).
+  * "PROFILE_FIELD_VEHICLE_PLATE" (under "Member Profile") - Whether the portal collects members' vehicle registration
+    plate, and who can change it. The other "PROFILE_FIELD_*" settings do the same for email, name, phone and screen
+    name.
   * "SIGNUP_REQUIRE_PRIVACY_CONSENT" - When `True`, the signup page shows a checkbox that the user must tick before
     registering, confirming that they consent to their personal data being stored. Useful for GDPR / privacy-law
     compliance.

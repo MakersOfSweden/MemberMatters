@@ -3,6 +3,8 @@ from constance import config
 import json
 import logging
 
+from profile.profile_fields import HIDDEN, field_mode
+
 logger = logging.getLogger("sms")
 
 
@@ -84,6 +86,26 @@ class SMS:
 
         return True
 
+    def _send_unless_hidden(
+        self, to_number, body, portal_user_sender=None, portal_user_recipient=None
+    ):
+        """Sends, unless the phone field is hidden.
+
+        A hidden field's stored data is kept but not used, so no SMS goes to a
+        number stored before the field was hidden.
+        """
+        if field_mode("phone") == HIDDEN:
+            logger.info("Skipping SMS sending because the phone field is hidden.")
+            if portal_user_recipient:
+                portal_user_recipient.log_event(
+                    description="Skipped sending SMS because the phone field is hidden",
+                    event_type="sms",
+                    data=body,
+                )
+            return False
+
+        return self._send(to_number, body, portal_user_sender, portal_user_recipient)
+
     def send_inactive_swipe_alert(
         self, to_number, portal_user_sender=None, portal_user_recipient=None
     ):
@@ -93,7 +115,9 @@ class SMS:
             "Hi! Your swipe was just declined."
             " Please contact us if you need assistance.",
         )
-        self._send(to_number, message, portal_user_sender, portal_user_recipient)
+        self._send_unless_hidden(
+            to_number, message, portal_user_sender, portal_user_recipient
+        )
 
     def send_locked_out_swipe_alert(
         self, to_number, portal_user_sender=None, portal_user_recipient=None
@@ -104,7 +128,9 @@ class SMS:
             "Hi! Your swipe was just declined due to a temporary maintenance lockout."
             " Please contact us if you need assistance.",
         )
-        self._send(to_number, message, portal_user_sender, portal_user_recipient)
+        self._send_unless_hidden(
+            to_number, message, portal_user_sender, portal_user_recipient
+        )
 
     def send_deactivated_access(
         self, to_number, portal_user_sender=None, portal_user_recipient=None
@@ -114,7 +140,9 @@ class SMS:
             "Hi! Your site access was just turned off. Please check your email and "
             "contact us if you need assistance.",
         )
-        self._send(to_number, message, portal_user_sender, portal_user_recipient)
+        self._send_unless_hidden(
+            to_number, message, portal_user_sender, portal_user_recipient
+        )
 
     def send_activated_access(
         self, to_number, portal_user_sender=None, portal_user_recipient=None
@@ -124,9 +152,13 @@ class SMS:
             "Hi! Your site access was just turned on. Please make sure you stay up to date"
             " with our policies and rules by visiting our website.",
         )
-        self._send(to_number, message, portal_user_sender, portal_user_recipient)
+        self._send_unless_hidden(
+            to_number, message, portal_user_sender, portal_user_recipient
+        )
 
     def send_custom_notification(
         self, to_number, message, portal_user_sender=None, portal_user_recipient=None
     ):
-        self._send(to_number, message, portal_user_sender, portal_user_recipient)
+        self._send_unless_hidden(
+            to_number, message, portal_user_sender, portal_user_recipient
+        )

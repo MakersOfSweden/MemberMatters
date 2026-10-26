@@ -14,7 +14,23 @@ from django.utils import timezone
 from django.utils.translation import gettext
 import datetime
 from profile.models import User, Profile
-from profile.phone import to_e164
+from api_billing.stripe_customer import update_stripe_customer_on_commit
+from profile.profile_changes import (
+    MEMBER,
+    SIGNUP,
+    ProfileConflict,
+    ProfileFieldErrors,
+    check_profile_changes,
+    check_unique,
+    columns,
+    save_profile_changes,
+)
+from profile.profile_fields import (
+    FIELDS,
+    HIDDEN,
+    field_mode,
+    profile_fields_config,
+)
 
 from rest_framework import status, permissions, generics, serializers
 from rest_framework.response import Response
@@ -73,19 +89,16 @@ class GetConfig(APIView):
                 "requireAccessCard": config.REQUIRE_ACCESS_CARD,
                 "memberCanEnterAccessCard": config.MEMBER_CAN_ENTER_ACCESS_CARD,
                 "postInductionUrl": config.POST_INDUCTION_URL,
-                "collectVehicleRegistrationPlate": config.COLLECT_VEHICLE_REGISTRATION_PLATE,
                 "requirePrivacyConsent": config.SIGNUP_REQUIRE_PRIVACY_CONSENT,
                 "privacyPolicyUrl": config.SIGNUP_PRIVACY_POLICY_URL,
                 "privacyPolicyText": config.SIGNUP_PRIVACY_POLICY_TEXT,
                 "termsAcceptanceCards": _parse_terms_acceptance_cards(),
-                "requireScreenName": config.REQUIRE_SCREEN_NAME,
                 "defaultPhoneRegion": config.PROFILE_DEFAULT_PHONE_REGION,
                 "enableMembershipApplicationEmail": config.ENABLE_MEMBERSHIP_APPLICATION_USER_EMAIL,
             },
-            "profile": {
-                "canEditBasicDetails": config.MEMBER_CAN_EDIT_BASIC_DETAILS,
-                "canEditEmail": config.MEMBER_CAN_EDIT_EMAIL,
-            },
+            # Each profile field's PROFILE_FIELD_* value, and the parts of an
+            # address. See profile/profile_fields.py.
+            **profile_fields_config(),
             "enableWebcams": config.ENABLE_WEBCAMS,
             "siteBanner": config.SITE_BANNER,
             "enableSiteSignIn": config.ENABLE_PORTAL_SITE_SIGN_IN,
@@ -210,7 +223,7 @@ class Login(APIView):
                     "nonce": discourse_nonce,
                     "email": request.user.email,
                     "external_id": request.user.id,
-                    "username": request.user.profile.screen_name,
+                    "username": request.user.profile.get_display_name(),
                     "name": request.user.profile.get_full_name(),
                 }
                 payload = base64.b64encode(urlencode(payload).encode("utf-8"))
@@ -256,7 +269,7 @@ class Login(APIView):
                         "nonce": discourse_nonce,
                         "email": user.email,
                         "external_id": user.id,
-                        "username": user.profile.screen_name,
+                        "username": user.profile.get_display_name(),
                         "name": user.profile.get_full_name(),
                     }
                     payload = base64.b64encode(urlencode(payload).encode("utf-8"))
@@ -495,6 +508,7 @@ class ProfileDetail(generics.GenericAPIView):
             "signupStage": p.signup_stage,
             "adminDisabledAccess": p.admin_disabled_access,
             "vehicleRegistrationPlate": p.vehicle_registration_plate,
+            "address": p.address,
             "lastInduction": p.last_induction,
             "lastSeen": p.last_seen,
             "firstJoined": p.created,
@@ -522,100 +536,27 @@ class ProfileDetail(generics.GenericAPIView):
             "permissions": {"staff": user.is_staff},
         }
 
+        # A member only sees the fields that aren't hidden, even where data
+        # stored before the field was hidden is kept.
+        for field in FIELDS:
+            if field_mode(field.key) == HIDDEN:
+                response.pop(field.key, None)
+
         return Response(response)
 
     def put(self, request):
-        p = request.user.profile
-        body = json.loads(request.body)
-        can_edit_basic = config.MEMBER_CAN_EDIT_BASIC_DETAILS
-        can_edit_email = can_edit_basic and config.MEMBER_CAN_EDIT_EMAIL
-        # Empty string maps to NULL so unset handles don't collide on the
-        # case-insensitive unique constraint.
-        screen_name = (body.get("screenName") or "").strip() or None
-        email = None
-
-        if can_edit_email:
-            email = (body.get("email") or "").lower()
-
-            # check if email is specified
-            if not email:
-                return Response(status=status.HTTP_400_BAD_REQUEST)
-
-            # check if email is already in use (case-insensitive, excluding self)
-            if (
-                User.objects.filter(email__iexact=email)
-                .exclude(pk=request.user.pk)
-                .exists()
-            ):
-                return Response(
-                    {"message": "error.accountAlreadyExists"},
-                    status=status.HTTP_409_CONFLICT,
-                )
-
-        # check if screen name is already in use (case-insensitive, excluding self)
-        if (
-            screen_name
-            and Profile.objects.filter(screen_name__iexact=screen_name)
-            .exclude(pk=p.pk)
-            .exists()
-        ):
-            return Response(
-                {"message": "error.screenNameAlreadyExists"},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # Normalise the phone number to E.164 (only editable when
-        # can_edit_basic, so only validated then).
-        phone = ""
-        if can_edit_basic:
-            phone = (body.get("phone") or "").strip()
-            if phone:
-                try:
-                    phone = to_e164(phone, config.PROFILE_DEFAULT_PHONE_REGION)
-                except ValueError:
-                    return Response(
-                        {"message": "validation.invalidPhone"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
+        # Each field follows its PROFILE_FIELD_* setting: see
+        # profile/profile_changes.py for what a member may change.
         try:
-            with transaction.atomic():
-                p.screen_name = screen_name
-                p.vehicle_registration_plate = body.get("vehicleRegistrationPlate")
-                profile_fields = ["screen_name", "vehicle_registration_plate"]
-
-                if can_edit_basic:
-                    p.first_name = body.get("firstName")
-                    p.last_name = body.get("lastName")
-                    p.phone = phone
-                    profile_fields += ["first_name", "last_name", "phone"]
-                    if can_edit_email:
-                        request.user.email = email
-                        request.user.save(update_fields=["email"])
-
-                # update_fields restricts UPDATE to columns this view
-                # owns — concurrent writes elsewhere on the row (Stripe
-                # webhook, admin, access events) aren't reverted by a
-                # stale full-row save. Profile.save() rides `modified`
-                # along automatically.
-                p.save(update_fields=profile_fields)
-        except IntegrityError:
-            # Race with a concurrent register/update: pre-checks passed
-            # but a unique constraint tripped on insert. Re-check to
-            # identify which collision occurred.
-            if can_edit_email and (
-                User.objects.filter(email__iexact=email)
-                .exclude(pk=request.user.pk)
-                .exists()
-            ):
-                return Response(
-                    {"message": "error.accountAlreadyExists"},
-                    status=status.HTTP_409_CONFLICT,
-                )
+            changed = save_profile_changes(request.user.profile, request.data, MEMBER)
+        except ProfileFieldErrors as error:
+            return Response(error.errors, status=status.HTTP_400_BAD_REQUEST)
+        except ProfileConflict as conflict:
             return Response(
-                {"message": "error.screenNameAlreadyExists"},
-                status=status.HTTP_409_CONFLICT,
+                {"message": conflict.message}, status=status.HTTP_409_CONFLICT
             )
+
+        update_stripe_customer_on_commit(request.user.profile, changed)
 
         return Response({"success": True})
 
@@ -809,24 +750,15 @@ PASSWORD_VALIDATION_ERROR_KEYS = {
     "password_compromised": "error.passwordCompromised",
 }
 
-REQUIRE_MOBILE = True  # TODO: migrate to a constance flag
-
 
 class RegisterSerializer(serializers.Serializer):
+    """The password on a signup. The profile fields are checked by
+    check_profile_changes(); the view passes their cleaned values in as
+    context["profile"] for the password similarity check."""
+
     # Every error message is an i18n key resolved by the frontend, not
     # English text. Keep these in sync with the `error` block in
     # src-frontend/src/i18n/*/index.ts.
-    email = serializers.EmailField(
-        required=True,
-        max_length=255,
-        error_messages={
-            "required": "error.fieldRequired",
-            "null": "error.fieldRequired",
-            "blank": "error.fieldRequired",
-            "invalid": "validation.invalidEmail",
-            "max_length": "error.emailTooLong",
-        },
-    )
     password = serializers.CharField(
         required=True,
         write_only=True,
@@ -840,88 +772,9 @@ class RegisterSerializer(serializers.Serializer):
             "max_length": "error.passwordTooLong",
         },
     )
-    firstName = serializers.CharField(
-        required=True,
-        max_length=30,
-        allow_blank=False,
-        error_messages={
-            "required": "error.fieldRequired",
-            "null": "error.fieldRequired",
-            "blank": "error.fieldRequired",
-            "max_length": "error.firstNameTooLong",
-        },
-    )
-    lastName = serializers.CharField(
-        required=True,
-        max_length=30,
-        allow_blank=False,
-        error_messages={
-            "required": "error.fieldRequired",
-            "null": "error.fieldRequired",
-            "blank": "error.fieldRequired",
-            "max_length": "error.lastNameTooLong",
-        },
-    )
-    screenName = serializers.CharField(
-        required=False,
-        max_length=30,
-        allow_blank=True,
-        allow_null=True,
-        default=None,
-        error_messages={"max_length": "error.screenNameTooLong"},
-    )
-    # allow_null: the form posts null for fields it isn't collecting;
-    # validate() normalises that to "".
-    mobile = serializers.CharField(
-        required=False,
-        max_length=16,
-        allow_blank=True,
-        allow_null=True,
-        default="",
-        error_messages={"max_length": "error.mobileTooLong"},
-    )
-    vehicleRegistrationPlate = serializers.CharField(
-        required=False,
-        max_length=30,
-        allow_blank=True,
-        allow_null=True,
-        default="",
-        error_messages={"max_length": "error.vehiclePlateTooLong"},
-    )
-
-    def validate_email(self, value):
-        return value.lower()
-
-    def validate_screenName(self, value):
-        return (value or "").strip() or None
 
     def validate(self, attrs):
-        # A null mobile / vehicle plate (see allow_null above) becomes ""
-        # so the Profile row always gets a string, not None. The plate is
-        # also dropped entirely unless the site collects it.
-        attrs["mobile"] = (attrs.get("mobile") or "").strip()
-        attrs["vehicleRegistrationPlate"] = (
-            (attrs.get("vehicleRegistrationPlate") or "").strip()
-            if config.COLLECT_VEHICLE_REGISTRATION_PLATE
-            else ""
-        )
-
-        if REQUIRE_MOBILE and not attrs["mobile"]:
-            raise serializers.ValidationError({"mobile": "error.fieldRequired"})
-
-        # Store the phone number in E.164 format.
-        if attrs["mobile"]:
-            try:
-                attrs["mobile"] = to_e164(
-                    attrs["mobile"], config.PROFILE_DEFAULT_PHONE_REGION
-                )
-            except ValueError:
-                raise serializers.ValidationError({"mobile": "validation.invalidPhone"})
-
-        if not attrs.get("screenName") and config.REQUIRE_SCREEN_NAME:
-            raise serializers.ValidationError(
-                {"screenName": "error.screenNameRequired"}
-            )
+        profile = self.context.get("profile", {})
 
         # Run Django's AUTH_PASSWORD_VALIDATORS — min-length is already
         # covered by the field's min_length=8, but this also picks up
@@ -931,9 +784,9 @@ class RegisterSerializer(serializers.Serializer):
         # User fields (they live on Profile), but the similarity
         # validator just getattrs them, so setting them on an unsaved
         # User instance is enough.
-        pseudo_user = User(email=attrs["email"])
-        pseudo_user.first_name = attrs["firstName"]
-        pseudo_user.last_name = attrs["lastName"]
+        pseudo_user = User(email=profile.get("email", ""))
+        pseudo_user.first_name = profile.get("firstName", "")
+        pseudo_user.last_name = profile.get("lastName", "")
         try:
             validate_password(attrs["password"], user=pseudo_user)
         except DjangoValidationError as e:
@@ -950,6 +803,19 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({"password": keys})
 
         return attrs
+
+
+def _signup_profile_data(data):
+    """The submitted profile fields of a signup.
+
+    Signup forms from before the PROFILE_FIELD_* settings post the phone as
+    "mobile". It is still accepted, for one release, so a tab left open during
+    an upgrade can sign up.
+    """
+    data = dict(data.items())
+    if "phone" not in data and "mobile" in data:
+        data["phone"] = data["mobile"]
+    return data
 
 
 def _send_register_emails(new_user, profile, verification_token):
@@ -1090,10 +956,23 @@ class Register(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        serializer = RegisterSerializer(data=request.data)
+        # The profile fields follow their PROFILE_FIELD_* settings; hidden
+        # ones are dropped. Both checks run so every error comes back at once.
+        errors = {}
+        values = {}
+        try:
+            values = check_profile_changes(
+                {}, _signup_profile_data(request.data), SIGNUP
+            )
+        except ProfileFieldErrors as error:
+            errors.update(error.errors)
+
+        serializer = RegisterSerializer(data=request.data, context={"profile": values})
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        data = serializer.validated_data
+            errors.update(serializer.errors)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        password = serializer.validated_data["password"]
 
         # Pre-flight uniqueness checks. The DB constraint (User.email
         # already unique; Profile.screen_name unique after the M32
@@ -1102,38 +981,24 @@ class Register(APIView):
         # deliberate UX trade-off (account-existence enumeration); the
         # alternative — silently emailing "you already have an account" —
         # was considered worse for the typical signup mistake.
-        # __iexact rather than = catches any mixed-case rows already in
-        # the DB (Postgres email column is case-sensitive by default).
-        if User.objects.filter(email__iexact=data["email"]).exists():
+        try:
+            check_unique(values)
+        except ProfileConflict as conflict:
             return Response(
-                {"message": "error.accountAlreadyExists"},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if (
-            data["screenName"]
-            and Profile.objects.filter(screen_name__iexact=data["screenName"]).exists()
-        ):
-            return Response(
-                {"message": "error.screenNameAlreadyExists"},
-                status=status.HTTP_409_CONFLICT,
+                {"message": conflict.message}, status=status.HTTP_409_CONFLICT
             )
 
         try:
             with transaction.atomic():
                 new_user = User.objects.create(
-                    email=data["email"],
+                    email=values["email"],
                     email_verified=False,
                 )
-                new_user.set_password(data["password"])
+                new_user.set_password(password)
                 new_user.save(update_fields=["password"])
 
                 profile = Profile.objects.create(
-                    user=new_user,
-                    first_name=data["firstName"],
-                    last_name=data["lastName"],
-                    screen_name=data["screenName"],
-                    phone=data["mobile"],
-                    vehicle_registration_plate=data["vehicleRegistrationPlate"],
+                    user=new_user, **columns(values, "profile")
                 )
 
                 verification_token = EmailVerificationToken.objects.create(
@@ -1146,10 +1011,11 @@ class Register(APIView):
             # Race with another concurrent register: pre-checks passed but
             # a unique constraint tripped on insert. Re-check to identify
             # which collision occurred.
-            if User.objects.filter(email__iexact=data["email"]).exists():
+            try:
+                check_unique(values)
+            except ProfileConflict as conflict:
                 return Response(
-                    {"message": "error.accountAlreadyExists"},
-                    status=status.HTTP_409_CONFLICT,
+                    {"message": conflict.message}, status=status.HTTP_409_CONFLICT
                 )
             return Response(
                 {"message": "error.screenNameAlreadyExists"},

@@ -20,89 +20,13 @@
 
         <q-form @submit="onSubmit" @reset="onReset">
           <div class="row q-pb-sm q-col-gutter-sm">
-            <q-input
-              v-model="form.email"
-              class="col-12"
+            <profile-fields
+              v-model="profileFields"
+              actor="signup"
+              layout="grid"
+              filled
               autofocus
-              filled
-              type="email"
-              :label="requiredLabel($t('form.email'))"
-              lazy-rules
-              :rules="[
-                (val) => validateEmail(val) || $t('validation.invalidEmail'),
-              ]"
             />
-
-            <q-input
-              v-model="form.firstName"
-              class="col-12 col-sm-6"
-              filled
-              :label="requiredLabel($t('form.firstName'))"
-              lazy-rules
-              :rules="[
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-              ]"
-            />
-            <q-input
-              v-model="form.lastName"
-              class="col-12 col-sm-6"
-              filled
-              :label="requiredLabel($t('form.lastName'))"
-              lazy-rules
-              :rules="[
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-              ]"
-            />
-
-            <q-input
-              v-model="form.screenName"
-              class="col-12 col-sm-6"
-              filled
-              :label="
-                requiredLabel(
-                  $t('form.screenName'),
-                  features?.signup?.requireScreenName !== false
-                )
-              "
-              lazy-rules
-              :rules="
-                features?.signup?.requireScreenName !== false
-                  ? [
-                      (val) =>
-                        validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-                    ]
-                  : []
-              "
-            />
-            <q-input
-              v-model="form.mobile"
-              class="col-12 col-sm-6"
-              filled
-              type="tel"
-              :label="requiredLabel($t('form.mobile'))"
-              lazy-rules
-              :rules="[
-                (val) =>
-                  validateNotEmpty(val) || $t('validation.cannotBeEmpty'),
-                (val) =>
-                  validatePhone(val, phoneRegion) ||
-                  $t('validation.invalidPhone'),
-              ]"
-            />
-
-            <q-input
-              v-if="features?.signup?.collectVehicleRegistrationPlate"
-              class="col-12 q-mb-lg"
-              v-model="form.vehicleRegistrationPlate"
-              :label="$t('form.vehicleRegistrationPlate')"
-              :hint="$t('form.vehicleRegistrationNote')"
-              filled
-              type="text"
-              lazy-rules
-              :rules="[(val) => validateMax30(val) || $t('validation.max30')]"
-            ></q-input>
 
             <q-input
               class="col-12"
@@ -244,15 +168,13 @@ import formMixin from '../../mixins/formMixin';
 import icons from '../../icons';
 import { defineComponent } from 'vue';
 import { i18n } from '../../boot/i18n';
-import {
-  parsePhoneNumberFromString,
-  type CountryCode,
-} from 'libphonenumber-js';
 import CaptchaWidget from '../CaptchaWidget.vue';
+import ProfileFields from '../ProfileFields.vue';
+import { emptyProfileFields } from '../../utils/profileFields';
 
 export default defineComponent({
   name: 'RegistrationCard',
-  components: { CaptchaWidget },
+  components: { CaptchaWidget, ProfileFields },
   mixins: [formMixin],
   data() {
     return {
@@ -265,14 +187,9 @@ export default defineComponent({
       captchaToken: '',
       isPwd: true,
       showPrivacyPolicy: false,
+      profileFields: emptyProfileFields(),
       form: {
-        firstName: null,
-        lastName: null,
-        email: null,
-        screenName: null,
-        mobile: null,
         password: null,
-        vehicleRegistrationPlate: null,
         privacyConsent: false,
       },
     };
@@ -286,14 +203,10 @@ export default defineComponent({
     icons() {
       return icons;
     },
-    // Match backend: parse national-format with PROFILE_DEFAULT_PHONE_REGION.
-    phoneRegion(): string {
-      return this.features?.signup?.defaultPhoneRegion || 'AU';
-    },
   },
   methods: {
     onReset() {
-      this.form.email = null;
+      this.profileFields.email = '';
       this.form.password = null;
     },
     onSubmit() {
@@ -308,23 +221,12 @@ export default defineComponent({
       this.validationErrors = [];
       this.buttonLoading = true;
 
-      // Normalise to E.164 before posting; the backend re-validates.
-      const mobile = this.form.mobile
-        ? (parsePhoneNumberFromString(
-            this.form.mobile,
-            this.phoneRegion as CountryCode
-          )?.format('E.164') ?? this.form.mobile)
-        : this.form.mobile;
-
+      // The backend stores the phone number in E.164 and drops the fields
+      // the site doesn't collect.
       this.$axios
         .post('/api/register/', {
-          firstName: this.form.firstName,
-          lastName: this.form.lastName,
-          email: this.form.email,
-          screenName: this.form.screenName,
-          mobile,
+          ...this.profileFields,
           password: this.form.password,
-          vehicleRegistrationPlate: this.form.vehicleRegistrationPlate,
           captchaToken: this.captchaToken,
         })
         .then(() => {

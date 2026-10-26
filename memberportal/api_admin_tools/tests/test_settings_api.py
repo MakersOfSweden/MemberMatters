@@ -53,3 +53,43 @@ def test_an_unknown_setting_is_not_found(admin_client):
 
 def test_members_cannot_use_it(authed_client):
     assert authed_client.get(reverse("ManageSettings")).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("PROFILE_FIELD_PHONE", "nonsense"),
+        ("PROFILE_FIELD_PHONE", None),
+        # Email and name offer only the two required values.
+        ("PROFILE_FIELD_EMAIL", "hidden"),
+        ("PROFILE_FIELD_NAME", "optional"),
+    ],
+)
+def test_a_profile_field_setting_refuses_a_value_the_field_does_not_allow(
+    admin_client, key, value
+):
+    setattr(config, key, "required")
+
+    response = admin_client.put(setting_url(key), {"value": value}, format="json")
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "error.invalidValue"}
+    assert getattr(config, key) == "required"
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("PROFILE_FIELD_PHONE", "optional_admin_edits"),
+        ("PROFILE_FIELD_EMAIL", "required_admin_edits"),
+    ],
+)
+def test_a_profile_field_setting_takes_a_value_the_field_allows(
+    admin_client, key, value
+):
+    setattr(config, key, "required")
+
+    response = admin_client.put(setting_url(key), {"value": value}, format="json")
+
+    assert response.json() == {"key": key, "value": value}
+    assert getattr(config, key) == value

@@ -121,6 +121,36 @@
 - CI also fails on formatting: Black pinned to the version in
   `requirements.txt`, and ESLint/Prettier including fixable errors.
 
+## Member profile fields
+
+- Each basic profile field has a `PROFILE_FIELD_*` setting under Member
+  Profile: email, name, phone, screen name, vehicle plate and a new postal
+  address. The choices are hidden, optional, optional with only admins
+  editing, required, and required with only admins editing; email and name
+  are always required. They replace `MEMBER_CAN_EDIT_BASIC_DETAILS`,
+  `MEMBER_CAN_EDIT_EMAIL`, `REQUIRE_SCREEN_NAME`,
+  `COLLECT_VEHICLE_REGISTRATION_PLATE` and the hardcoded phone requirement,
+  and a migration carries existing values over.
+- The server applies the settings to signup, the member's own edit and the
+  admin edit alike (`profile/profile_fields.py`, `profile/profile_changes.py`).
+  A member may fill in an "only admins edit" field once, while it is empty.
+  Admins can't leave a required field blank.
+- Hidden fields keep their stored data, shown only to admins. Members,
+  Discourse, OIDC and the Discord purchase posts don't get them, and no SMS is
+  sent while the phone is hidden. Where there is no screen name to show, the
+  first and last name stand in.
+- The address is one JSON column using Stripe's part names (`line1`, `line2`,
+  `postal_code`, `city`, `country`).
+- After a profile edit, the member's Stripe customer gets the new email, name,
+  phone and address, but only where Stripe still has what the portal had
+  before. A detail changed in Stripe directly is left alone and emailed to the
+  admin. New customers are created from the same fields.
+- The signup, profile and admin forms render their fields with one
+  `ProfileFields.vue` component.
+- The admin "Send SMS" item is no longer disabled for members who have a
+  phone number, and the email-export toggle has its own endpoint instead of
+  re-saving the profile form.
+
 # Smaller edits
 
 - **Phone numbers → E.164**: client-side validation/formatting via
@@ -130,8 +160,8 @@
   email, atomic user writes, throttling on Register/ResetPassword, atomic
   verify-email token, `ENABLE_REGISTRATION` kill-switch.
 - **Configurability**: new toggles to hide/disable features — recent-swipes page,
-  last-seen page, report-issue card, member email/basic-detail editing, optional
-  screen name, member-entered access cards.
+  last-seen page, report-issue card, member-entered access cards. The profile
+  field settings are described under Member profile fields.
 - **UX polish**: responsive dashboard/quick-card grids, mobile-friendly metrics
   charts, profile form switched from auto-save to explicit submit, per-route
   `allowedStates` route guards.
