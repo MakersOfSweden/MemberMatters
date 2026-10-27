@@ -4,6 +4,8 @@ from import_export.admin import ImportExportModelAdmin
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from django.utils import timezone
+from subscriptions import records
+from subscriptions.admin import SubscriptionInline
 
 
 class UserResource(resources.ModelResource):
@@ -112,7 +114,16 @@ class AdminLogAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     readonly_fields = ("created", "subscription_first_created")
-    pass
+    inlines = [SubscriptionInline]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # The billing check sends admins here to correct the billing columns.
+        # That edit bypasses the subscription writer, so bring the member's
+        # subscription rows in line with what was entered.
+        if set(form.changed_data) & set(records.MIRRORED_FIELDS):
+            locked = Profile.objects.select_for_update().get(pk=obj.pk)
+            records.adopt_profile_columns(locked)
 
 
 @admin.register(UserEventLog)

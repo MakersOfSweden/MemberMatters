@@ -217,6 +217,8 @@ You cannot currently enable specific events, you either get "all or nothing".
   * "ENABLE_INVOICE_BILLING" - enable the "Pay by Invoice" option during membership signup so members can receive a Stripe invoice instead of paying by card. See the [Pay by Invoice setup](#pay-by-invoice-setup) section below — there is required Stripe Dashboard configuration, without which members can get stuck in the `pending` state indefinitely.
   * "INVOICE_DAYS_UNTIL_DUE" - number of days before a Stripe invoice for invoice-billed membership becomes due.
   * "INVOICE_BILLING_NOTE" - optional free-text note shown to members when they pick invoice billing (e.g. bank transfer details).
+  * "BILLING_AUDIT_ENABLED" - run the nightly check that compares membership subscriptions with Stripe. See [Billing integrity check](#billing-integrity-check). Defaults to `True`.
+  * "BILLING_AUDIT_MAX_RPS" - the most Stripe requests per second that check may make. Defaults to `5`.
 
 #### Stripe Restricted Secret Key Permissions
 The following permissions are needed for all Member Matters payment features to work correctly.
@@ -229,6 +231,10 @@ The following permissions are needed for all Member Matters payment features to 
 * PaymentMethods - Write
 * Payment Intents - Write
 * Invoices - Write (required for "Pay by Invoice" billing)
+* Webhook Endpoints - Read (lets the billing integrity check confirm the webhook endpoint)
+* Events - Read (lets the billing integrity check find events Stripe couldn't deliver)
+
+Without the last two, the billing integrity check skips those two checks and runs the rest.
 
 #### Pay by Invoice setup
 
@@ -246,6 +252,40 @@ After the invoice goes past due, configure Stripe to **cancel the subscription**
 You do **not** need to configure "Mark invoice as uncollectible" or any other invoice-handling option in Stripe. When MemberMatters receives `customer.subscription.deleted`, it voids any invoices still open against that subscription so nothing lingers in the customer's Stripe portal.
 
 When testing this locally, make sure the `stripe listen` command in the backend README includes `customer.subscription.updated` and `customer.subscription.deleted` (it does by default) so overdue reminders and subscription cancellations are forwarded to your dev server.
+
+#### Billing integrity check
+
+Every night at 03:15 in the site's time zone (`MM_TIME_ZONE`), MemberMatters compares each membership subscription with Stripe and lists every disagreement under Admin Tools → Billing Integrity. It only reports: it never changes a member or anything in Stripe. Fix an issue in Stripe or on the member, and the next run resolves it.
+
+It runs when `ENABLE_STRIPE_MEMBERSHIP_PAYMENTS` and `BILLING_AUDIT_ENABLED` are on and `STRIPE_SECRET_KEY` is set. It looks for:
+
+* subscriptions that ended, were cancelled or changed in Stripe without MemberMatters hearing about it, usually because a webhook was missed;
+* live subscriptions in Stripe that no member tracks, which may bill someone twice or for nothing;
+* plans whose Stripe price is missing, archived or differs from the plan;
+* a webhook endpoint for this site that is missing, disabled or lacks one of the four events listed under `STRIPE_WEBHOOK_SECRET`, and billing events Stripe couldn't deliver in the last 7 days;
+* members whose row in the subscription table disagrees with the billing fields on their profile, which should only happen after going back to an older version (see [Upgrading](/docs/UPGRADING.md)).
+
+Each issue shows what MemberMatters and Stripe each say, the likely cause and what to do next. A member's issues also show on their Billing tab, with a button to re-check just that member.
+
+**Email.** `EMAIL_ADMIN` gets one email when a run finds critical issues it hasn't reported before, a summary after the very first run, and one email when runs start failing and another when they work again. Every Monday at 08:15 a digest lists the open warnings and critical issues. Acknowledging an issue on the page stops the emails about it. Members are never emailed.
+
+**Stripe requests.** A run lists subscriptions 100 at a time, so it makes about one request per 100 members plus one per plan. It makes at most `BILLING_AUDIT_MAX_RPS` requests a second, backs off when Stripe asks it to, and stops at 1,000.
+
+**Without Celery.** The check runs on the Celery worker and beat. If you don't run them, run it daily from cron instead, for example at 03:15:
+
+```bash
+15 3 * * * docker exec membermatters python3 manage.py check_stripe_drift
+```
+
+Under docker compose, use `docker compose exec mm-webapp` in place of `docker exec membermatters`. `--member <user ID>` checks one member, `--dry-run` prints what it finds without recording or emailing it, and `--no-email` records it without emailing.
+
+**Monitoring.** A task can't report that it didn't run, so the portal's Prometheus metrics include the time of the last complete run. Alert when it's more than 36 hours old:
+
+```
+time() - mm_billing_integrity_last_complete_timestamp_seconds > 129600
+```
+
+`mm_billing_integrity_open_issues`, labelled by `severity` and `source`, counts the open issues nobody has acknowledged.
 
 ### Trello Integration
   * "ENABLE_TRELLO_INTEGRATION" - [Deprecated]

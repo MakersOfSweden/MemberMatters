@@ -77,6 +77,18 @@ If the new version doesn't work for you, go back to the image you kept in step 3
 
 ## Upgrading from 4.0
 
+### Subscriptions get a table of their own
+
+Each member's subscriptions are now recorded in a table of their own, beside the billing fields on the member's profile, which work as before. A migration fills the table from those fields when the new version first starts. Nothing changes for members or in Stripe.
+
+If you go back to the previous version without restoring your backup, it keeps writing only the profile fields. After you move to the new version again, bring the table up to date once:
+
+```bash
+docker exec membermatters python3 manage.py adopt_billing_columns
+```
+
+Under docker compose, use `docker compose exec mm-webapp` in place of `docker exec membermatters`. `--dry-run` counts the members it would change and changes nothing. Until you run it, the [billing integrity check](/docs/POST_INSTALL_STEPS.md#billing-integrity-check) reports each such member as "Subscription table disagrees with the billing columns".
+
 ### Check the key the portal signs sign-ins with (django-oidc-provider 0.9)
 
 If other services, such as Moodle or a wiki, let members sign in with their MemberMatters account, the portal signs those sign-ins with an RSA key stored under OpenID Connect Provider → RSA Keys in the Django admin. This release reads those keys with a stricter library. Two kinds of key used to work and now stop every such sign-in until they are removed: a key pasted in the OpenSSH format that `ssh-keygen` writes by default (it starts with `-----BEGIN OPENSSH PRIVATE KEY-----`), and a public key stored next to a working private one.

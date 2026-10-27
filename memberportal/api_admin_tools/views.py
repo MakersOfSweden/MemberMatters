@@ -54,6 +54,7 @@ from services.sanitize import clean_html
 from services import sms
 from services.emails import send_email_to_admin
 from services.email_i18n import member_email_translation
+from subscriptions import records
 from .models import MemberTier, PaymentPlan
 
 
@@ -247,8 +248,7 @@ class MemberCancelMembership(StripeAPIView):
                 if not modified.cancel_at_period_end:
                     failed = True
                 else:
-                    locked.subscription_status = "cancelling"
-                    locked.save(update_fields=["subscription_status"])
+                    records.mark_cancelling(locked)
 
                     locked.user.log_event(
                         f"Admin scheduled membership cancellation at "
@@ -330,16 +330,7 @@ class MemberCancelMembership(StripeAPIView):
             except stripe.error.StripeError as e:
                 capture_exception(e)
 
-            locked.membership_plan = None
-            locked.stripe_subscription_id = None
-            locked.subscription_status = "inactive"
-            locked.save(
-                update_fields=[
-                    "membership_plan",
-                    "stripe_subscription_id",
-                    "subscription_status",
-                ]
-            )
+            records.end(locked)
 
             if period_end_dt:
                 remaining = period_end_dt - timezone.now()

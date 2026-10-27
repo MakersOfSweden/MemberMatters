@@ -1,0 +1,219 @@
+{% load i18n email_extras %}<!DOCTYPE html>
+{% get_current_language as LANGUAGE_CODE %}<html lang="{{ LANGUAGE_CODE }}">
+<head>
+<title></title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<style type="text/css">
+    /* FONTS */
+    @media screen {
+        @font-face {
+          font-family: 'Lato';
+          font-style: normal;
+          font-weight: 400;
+          src: local('Lato Regular'), local('Lato-Regular'), url(https://fonts.gstatic.com/s/lato/v11/qIIYRU-oROkIk8vfvxw6QvesZW2xOQ-xsNqO47m55DA.woff) format('woff');
+        }
+
+        @font-face {
+          font-family: 'Lato';
+          font-style: normal;
+          font-weight: 700;
+          src: local('Lato Bold'), local('Lato-Bold'), url(https://fonts.gstatic.com/s/lato/v11/qdgUG4U09HnJwhYI-uK18wLUuEpTyoUstqEm5AMlJo4.woff) format('woff');
+        }
+
+        @font-face {
+          font-family: 'Lato';
+          font-style: italic;
+          font-weight: 400;
+          src: local('Lato Italic'), local('Lato-Italic'), url(https://fonts.gstatic.com/s/lato/v11/RYyZNoeFgb0l7W3Vu1aSWOvvDin1pK8aKteLpeZ5c0A.woff) format('woff');
+        }
+
+        @font-face {
+          font-family: 'Lato';
+          font-style: italic;
+          font-weight: 700;
+          src: local('Lato Bold Italic'), local('Lato-BoldItalic'), url(https://fonts.gstatic.com/s/lato/v11/HkF_qI1x_noxlxhrhMQYELO3LdcAZYWl9Si6vvxL-qU.woff) format('woff');
+        }
+    }
+
+    /* CLIENT-SPECIFIC STYLES */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; }
+
+    /* RESET STYLES */
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    table { border-collapse: collapse !important; }
+    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+    /* iOS BLUE LINKS */
+    a[x-apple-data-detectors] {
+        color: inherit !important;
+        text-decoration: none !important;
+        font-size: inherit !important;
+        font-family: inherit !important;
+        font-weight: inherit !important;
+        line-height: inherit !important;
+    }
+
+    /* MOBILE STYLES */
+    @media screen and (max-width:600px){
+        h1 {
+            font-size: 32px !important;
+            line-height: 32px !important;
+        }
+    }
+
+    /* ANDROID CENTER FIX */
+    div[style*="margin: 16px 0;"] { margin: 0 !important; }
+</style>
+</head>
+<body style="background-color: #f4f4f4; margin: 0 !important; padding: 0 !important;">
+
+<!-- HIDDEN PREHEADER TEXT -->
+<div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: 'Lato', Helvetica, Arial, sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+    {{ email.preheader }}
+</div>
+
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <!-- LOGO -->
+    <tr>
+        <td bgcolor="#333333" align="center">
+            <!--[if (gte mso 9)|(IE)]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+            <tr>
+            <td align="center" valign="top" width="600">
+            <![endif]-->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" >
+                <tr>
+                    <td align="center" valign="top" style="padding: 40px 10px 40px 10px;">
+                        <a href="{{ config.SITE_URL }}" target="_blank">
+                            <img alt="Logo" src="{{ config.SITE_FAVICON }}" width="60" height="60" style="display: block; width: 60px; max-width: 60px; min-width: 60px; font-family: 'Lato', Helvetica, Arial, sans-serif; color: #ffffff; font-size: 18px;" border="0">
+                        </a>
+                    </td>
+                </tr>
+            </table>
+            <!--[if (gte mso 9)|(IE)]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+        </td>
+    </tr>
+    <!-- HERO -->
+    <tr>
+        <td bgcolor="#333333" align="center" style="padding: 0px 10px 0px 10px;">
+            <!--[if (gte mso 9)|(IE)]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+            <tr>
+            <td align="center" valign="top" width="600">
+            <![endif]-->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" >
+                <tr>
+                    <td bgcolor="#ffffff" align="center" valign="top" style="padding: 40px 20px 20px 20px; border-radius: 4px 4px 0px 0px; color: #111111; font-family: 'Lato', Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 400; letter-spacing: 1px; line-height: 38px;">
+                      <h1 style="font-size: 32px; font-weight: 400; margin: 0;">{{ email.title }}</h1>
+                    </td>
+                </tr>
+            </table>
+            <!--[if (gte mso 9)|(IE)]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+        </td>
+    </tr>
+    <!-- COPY BLOCK -->
+    <tr>
+        <td bgcolor="#f4f4f4" align="center" style="padding: 0px 10px 0px 10px;">
+            <!--[if (gte mso 9)|(IE)]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+            <tr>
+            <td align="center" valign="top" width="600">
+            <![endif]-->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" >
+              <!-- INTRO -->
+              <tr>
+                <td bgcolor="#ffffff" align="left" style="padding: 20px 30px 20px 30px; color: #666666; font-family: 'Lato', Helvetica, Arial, sans-serif; font-size: 17px; font-weight: 400; line-height: 25px;" >
+                  <p style="margin: 0;">{{ email.intro }}</p>
+                </td>
+              </tr>
+              <!-- ISSUES -->
+              {% for issue in email.issues %}
+              <tr>
+                <td bgcolor="#ffffff" align="left" style="padding: 0px 30px 16px 30px; color: #666666; font-family: 'Lato', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 400; line-height: 22px;" >
+                  <div style="border-left: 4px solid {% if issue.critical %}#c10015{% else %}#f2c037{% endif %}; padding: 2px 0px 2px 12px;">
+                    <p style="margin: 0; color: #111111;"><strong>{{ forloop.counter }}. {{ issue.name }}</strong> – {{ issue.message }} <span style="color: #666666;">({{ issue.severity }})</span></p>
+                    {% if issue.mm or issue.stripe %}<p style="margin: 4px 0 0 0;">MemberMatters: {{ issue.mm|default:"–" }} · Stripe: {{ issue.stripe|default:"–" }}</p>{% endif %}
+                    {% if issue.cause %}<p style="margin: 4px 0 0 0;">Likely cause: {{ issue.cause }}</p>{% endif %}
+                    {% if issue.action %}<p style="margin: 4px 0 0 0;">Next step: {{ issue.action }}</p>{% endif %}
+                    {% if issue.member_url or issue.stripe_url %}<p style="margin: 4px 0 0 0;">{% if issue.member_url %}<a href="{{ issue.member_url }}" target="_blank" style="color: #4b9ab9;">Open member</a>{% endif %}{% if issue.member_url and issue.stripe_url %} · {% endif %}{% if issue.stripe_url %}<a href="{{ issue.stripe_url }}" target="_blank" style="color: #4b9ab9;">Open in Stripe</a>{% endif %}</p>{% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if email.summary %}
+              <!-- SUMMARY -->
+              <tr>
+                <td bgcolor="#ffffff" align="left" style="padding: 4px 30px 0px 30px; color: #666666; font-family: 'Lato', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 400; line-height: 22px;" >
+                  <p style="margin: 0;">{{ email.summary }}</p>
+                </td>
+              </tr>
+              {% endif %}
+              <!-- BULLETPROOF BUTTON -->
+              <tr>
+                <td bgcolor="#ffffff" align="left">
+                  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td bgcolor="#ffffff" align="center" style="padding: 30px 30px 40px 30px; border-radius: 0px 0px 4px 4px;">
+                        <table border="0" cellspacing="0" cellpadding="0">
+                          <tr>
+                              <td align="center" style="border-radius: 3px;" bgcolor="#4b9ab9"><a href="{{ email.link }}" target="_blank" style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 15px 25px; border-radius: 3px; border: 0px solid #333333; display: inline-block;">{{ email.btn_text }}</a></td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+            <!--[if (gte mso 9)|(IE)]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+        </td>
+    </tr>
+    <!-- FOOTER -->
+    <tr>
+        <td bgcolor="#f4f4f4" align="center" style="padding: 0px 10px 0px 10px;">
+            <!--[if (gte mso 9)|(IE)]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+            <tr>
+            <td align="center" valign="top" width="600">
+            <![endif]-->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" >
+
+              <!-- UNSUBSCRIBE -->
+              <tr>
+                <td style="padding: 0px 30px 30px 30px;;" >
+                </td>
+              </tr>
+              <!-- ADDRESS -->
+              <tr>
+                <td bgcolor="#f4f4f4" align="left" style="padding: 0px 30px 30px 30px; color: #666666; font-family: 'Lato', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 18px;" >
+                  <p style="margin: 0;">{% site_link as site_link %}{% blocktranslate trimmed with site_owner=config.SITE_OWNER site_address=config.SITE_MAIL_ADDRESS %}Sent by {{ site_link }} on behalf of {{ site_owner }} at {{ site_address }}.{% endblocktranslate %}</p>
+                </td>
+              </tr>
+            </table>
+            <!--[if (gte mso 9)|(IE)]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

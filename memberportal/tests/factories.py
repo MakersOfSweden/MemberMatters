@@ -60,6 +60,8 @@ class ProfileFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = Profile
+        # The adoption hook below saves what it changes itself.
+        skip_postgeneration_save = True
 
     user = factory.SubFactory(UserFactory)
 
@@ -91,6 +93,17 @@ class ProfileFactory(factory.django.DjangoModelFactory):
 
         # RFID tags are numeric strings; keep them inside the 20-char column.
         with_rfid = factory.Trait(rfid=factory.Sequence(lambda n: str(1000000 + n)))
+
+    @factory.post_generation
+    def adopt_billing_columns(obj, create, extracted, **kwargs):
+        """Give a member created with billing columns the Subscription row a
+        production member got from the data migration.
+        ProfileFactory(adopt_billing_columns=False) leaves the rows out, as for
+        a member written by code from before the table."""
+        if create and extracted is not False:
+            from subscriptions.records import adopt_profile_columns
+
+            adopt_profile_columns(obj)
 
 
 class DoorFactory(factory.django.DjangoModelFactory):

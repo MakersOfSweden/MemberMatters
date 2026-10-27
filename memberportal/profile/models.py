@@ -543,6 +543,17 @@ class Profile(ExportModelOperationsMixin("profile"), models.Model):
     subscription_first_created = models.DateTimeField(
         default=None, blank=True, null=True, editable=False
     )
+    # The subscription that membership_plan, stripe_subscription_id and
+    # subscription_status mirror. Written only by subscriptions/records.py,
+    # together with those columns.
+    current_subscription = models.OneToOneField(
+        "subscriptions.Subscription",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        editable=False,
+        related_name="+",
+    )
 
     BILLING_METHODS = (
         ("card", "Card"),

@@ -14,6 +14,36 @@
   `customer.subscription.updated` webhook event). Untracked-subscription and
   locked-member payments alert an admin; billing emails reworded.
 
+## Billing integrity check
+
+- A nightly check compares every membership subscription with Stripe and
+  records each disagreement as an issue: subscriptions ended or changed in
+  Stripe without a webhook, live subscriptions no member tracks, plan prices
+  that differ from Stripe, and a missing or incomplete webhook endpoint. It
+  only reports; it never changes a member or anything in Stripe.
+- **Billing Integrity** admin screen with acknowledge, run now and filters; a
+  member's issues also show on their Billing tab, with a re-check button.
+- `EMAIL_ADMIN` gets new critical issues, a first-run summary, failure and
+  recovery notices and a weekly digest. New settings `BILLING_AUDIT_ENABLED`
+  and `BILLING_AUDIT_MAX_RPS` (5 requests a second by default). Installs
+  without Celery can run `manage.py check_stripe_drift` from cron, and
+  Prometheus gauges report staleness and open issues.
+
+## Subscription table
+
+- Each subscription a member takes out is now a row in its own table
+  (`subscriptions` app), kept as history once it ends. The billing columns on
+  Profile (`stripe_subscription_id`, `subscription_status`, `membership_plan`)
+  stay as a mirror of the current row with one writer,
+  `subscriptions/records.py`, so everything reading them works unchanged. This
+  is the first step of the subscription rework and changes no behaviour.
+- A data migration fills the table from the columns; `manage.py
+  adopt_billing_columns` catches up after going back to an older version
+  without restoring the database. Subscriptions show read-only in the Django
+  admin, and editing a member's billing columns there updates their rows.
+- The billing integrity check reads the table as a second source and reports
+  where it disagrees with the columns or with itself.
+
 ## Membership signup & lifecycle rework
 
 - New derived `signupStage` field on `/api/profile/`; frontend screens

@@ -29,6 +29,7 @@ export default {
     devices: 'Devices',
     kiosks: 'Kiosks',
     pendingInvoices: 'Pending Invoices',
+    billingIntegrity: 'Billing Integrity',
     signupPreview: 'Signup Preview',
     manageDashboard: 'Dashboard Cards',
 

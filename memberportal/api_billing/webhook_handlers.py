@@ -23,6 +23,7 @@ from sentry_sdk import capture_exception
 from profile.models import CancelTriggeredBy, SignupTriggeredBy
 from services.email_i18n import ADMIN_EMAIL_LANGUAGE, member_email_translation
 from services.emails import send_email_to_admin
+from subscriptions import records
 
 from .stripe_utils import (
     format_invoice_amount,
@@ -182,21 +183,16 @@ def handle_invoice_paid(ctx):
     # subscription_status, and an admin reconciles the payment.
     holding = profile.state_locked and profile.state != "active"
 
-    updates = []
     if profile.subscription_first_created is None:
         profile.subscription_first_created = timezone.now()
-        updates.append("subscription_first_created")
+        profile.save(update_fields=["subscription_first_created"])
 
     # Re-asserted on every payment so a status that has drifted out of step
     # with Stripe is repaired by the next one. "cancelling" is excluded: a
     # member who cancelled at period end can still have their final invoice
     # settle afterwards, and that must not read as renewing.
     if not holding and profile.subscription_status not in ("active", "cancelling"):
-        profile.subscription_status = "active"
-        updates.append("subscription_status")
-
-    if updates:
-        profile.save(update_fields=updates)
+        records.mark_active(profile)
 
     if holding:
         with translation.override(ADMIN_EMAIL_LANGUAGE):
@@ -516,16 +512,7 @@ def handle_subscription_deleted(ctx):
     deleted_subscription_id = ctx.data["id"]
     full_name = profile.get_full_name()
 
-    profile.membership_plan = None
-    profile.stripe_subscription_id = None
-    profile.subscription_status = "inactive"
-    profile.save(
-        update_fields=[
-            "membership_plan",
-            "stripe_subscription_id",
-            "subscription_status",
-        ]
-    )
+    records.end(profile)
 
     # Void open invoices — Stripe doesn't auto-void on cancel.
     # On on_commit so the Stripe call can't extend the row lock.

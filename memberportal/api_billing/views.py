@@ -9,6 +9,7 @@ from profile.models import (
     CancelTriggeredBy,
 )
 from api_admin_tools.models import *
+from subscriptions import records
 from .models import ProcessedStripeEvent
 from .webhook_handlers import (
     HANDLERS,
@@ -491,21 +492,17 @@ class PaymentPlanSignup(StripeAPIView):
                 return error_response
 
             if new_subscription.status == "active":
-                locked_profile.stripe_subscription_id = new_subscription.id
-                locked_profile.membership_plan = new_plan
-                locked_profile.subscription_status = (
-                    "pending" if billing_method == "invoice" else "active"
-                )
                 locked_profile.billing_method = billing_method
                 locked_profile.pending_signup_email_sent = False
                 locked_profile.save(
-                    update_fields=[
-                        "stripe_subscription_id",
-                        "membership_plan",
-                        "subscription_status",
-                        "billing_method",
-                        "pending_signup_email_sent",
-                    ]
+                    update_fields=["billing_method", "pending_signup_email_sent"]
+                )
+                records.start(
+                    locked_profile,
+                    external_ref=new_subscription.id,
+                    plan=new_plan,
+                    billing_method=billing_method,
+                    status="pending" if billing_method == "invoice" else "active",
                 )
 
                 request.user.log_event(
@@ -1011,17 +1008,14 @@ class PaymentPlanResume(StripeAPIView):
                 return error_response
 
             if new_subscription.status == "active":
-                locked_profile.stripe_subscription_id = new_subscription.id
-                locked_profile.subscription_status = (
-                    "pending" if billing_method == "invoice" else "active"
-                )
                 locked_profile.pending_signup_email_sent = False
-                locked_profile.save(
-                    update_fields=[
-                        "stripe_subscription_id",
-                        "subscription_status",
-                        "pending_signup_email_sent",
-                    ]
+                locked_profile.save(update_fields=["pending_signup_email_sent"])
+                records.start(
+                    locked_profile,
+                    external_ref=new_subscription.id,
+                    plan=locked_profile.membership_plan,
+                    billing_method=billing_method,
+                    status="pending" if billing_method == "invoice" else "active",
                 )
 
                 request.user.log_event(
@@ -1088,8 +1082,7 @@ class PaymentPlanResume(StripeAPIView):
                 if modified_subscription.cancel_at_period_end:
                     failed = True
                 else:
-                    locked_profile.subscription_status = "active"
-                    locked_profile.save(update_fields=["subscription_status"])
+                    records.mark_active(locked_profile)
 
                     subject = f"{request.user.get_full_name()} resumed their cancelling membership plan."
                     request.user.log_event(subject, "stripe")
@@ -1171,19 +1164,10 @@ class PaymentPlanCancel(StripeAPIView):
 
             subscription_id = locked_profile.stripe_subscription_id
 
-            locked_profile.membership_plan = None
-            locked_profile.stripe_subscription_id = None
-            locked_profile.subscription_status = "inactive"
             # billing_method is intentionally preserved — keeping the
             # member's prior preference simplifies a future flow that
             # lets them switch billing method directly.
-            locked_profile.save(
-                update_fields=[
-                    "membership_plan",
-                    "stripe_subscription_id",
-                    "subscription_status",
-                ]
-            )
+            records.end(locked_profile)
 
             cancelled_subject = (
                 f"{request.user.get_full_name()} cancelled their pending "
@@ -1334,8 +1318,7 @@ class PaymentPlanCancel(StripeAPIView):
                 if not modified_subscription.cancel_at_period_end:
                     failed = True
                 else:
-                    locked_profile.subscription_status = "cancelling"
-                    locked_profile.save(update_fields=["subscription_status"])
+                    records.mark_cancelling(locked_profile)
 
                     cancel_subject = (
                         f"{request.user.get_full_name()} requested to cancel "
