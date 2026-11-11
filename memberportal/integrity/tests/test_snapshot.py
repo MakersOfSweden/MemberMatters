@@ -75,7 +75,7 @@ class TestBuildSnapshot:
         assert snapshot.has(SUBSCRIPTIONS)
 
     def test_a_failed_part_skips_only_that_part(self, fake_stripe):
-        fake_stripe.errors["Event.list"] = stripe.error.APIError("down")
+        fake_stripe.errors["Event.list"] = stripe.APIError("down")
 
         snapshot = build_snapshot(fast_reader(), [], [], NOW)
 

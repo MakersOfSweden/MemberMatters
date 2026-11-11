@@ -113,13 +113,13 @@ def parse_event(data):
 
 def is_missing(error):
     return (
-        isinstance(error, stripe.error.InvalidRequestError)
+        isinstance(error, stripe.InvalidRequestError)
         and getattr(error, "code", None) == "resource_missing"
     )
 
 
 def describe_error(error):
-    if isinstance(error, stripe.error.AuthenticationError):
+    if isinstance(error, stripe.AuthenticationError):
         return "Stripe refused the secret key"
     message = getattr(error, "user_message", None) or str(error) or type(error).__name__
     return f"Stripe error: {message}"
@@ -141,12 +141,12 @@ def _fetch_part(snapshot, part, fetch, optional=False):
     except StripeBudgetExceeded as error:
         snapshot.budget_exhausted = True
         snapshot.skipped[part] = SkippedPart(str(error))
-    except stripe.error.PermissionError as error:
+    except stripe.PermissionError as error:
         snapshot.skipped[part] = SkippedPart(
             f"the Stripe key may not read {part.replace('_', ' ')}",
             incomplete=not optional,
         )
-    except stripe.error.StripeError as error:
+    except stripe.StripeError as error:
         snapshot.skipped[part] = SkippedPart(describe_error(error))
 
 
@@ -181,7 +181,7 @@ def build_snapshot(
                     subscription_id,
                     expand=["latest_invoice"],
                 )
-            except stripe.error.InvalidRequestError as error:
+            except stripe.InvalidRequestError as error:
                 if is_missing(error):
                     snapshot.missing_subscriptions.add(subscription_id)
                 else:
@@ -195,7 +195,7 @@ def build_snapshot(
         for price_id in sorted(set(price_ids)):
             try:
                 data = reader.call(stripe.Price.retrieve, price_id)
-            except stripe.error.InvalidRequestError as error:
+            except stripe.InvalidRequestError as error:
                 if not is_missing(error):
                     raise
                 snapshot.missing_prices.add(price_id)

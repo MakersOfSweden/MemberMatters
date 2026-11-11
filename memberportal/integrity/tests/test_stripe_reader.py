@@ -53,7 +53,7 @@ class TestThrottle:
 class TestCall:
     def test_backs_off_on_429_and_retries(self):
         clock = FakeClock()
-        responses = [stripe.error.RateLimitError("slow down")] * 2 + ["ok"]
+        responses = [stripe.RateLimitError("slow down")] * 2 + ["ok"]
 
         def method():
             response = responses.pop(0)
@@ -71,9 +71,9 @@ class TestCall:
         clock = FakeClock()
 
         def method():
-            raise stripe.error.RateLimitError("slow down")
+            raise stripe.RateLimitError("slow down")
 
-        with pytest.raises(stripe.error.RateLimitError):
+        with pytest.raises(stripe.RateLimitError):
             reader(clock, rate=1000).call(method)
         assert [s for s in clock.sleeps if s >= 1] == [1, 2, 4, 8]
 
@@ -82,9 +82,9 @@ class TestCall:
 
         def method():
             calls.append(1)
-            raise stripe.error.AuthenticationError("bad key")
+            raise stripe.AuthenticationError("bad key")
 
-        with pytest.raises(stripe.error.AuthenticationError):
+        with pytest.raises(stripe.AuthenticationError):
             reader(FakeClock()).call(method)
         assert len(calls) == 1
 

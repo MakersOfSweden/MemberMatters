@@ -145,7 +145,7 @@ def confirm_criticals(ctx, results, source, reader):
                     expand=["latest_invoice"],
                 )
                 fetched[subscription_id] = parse_subscription(data)
-            except (StripeBudgetExceeded, stripe.error.StripeError) as error:
+            except (StripeBudgetExceeded, stripe.StripeError) as error:
                 if is_missing(error):
                     fetched[subscription_id] = None
                 else:

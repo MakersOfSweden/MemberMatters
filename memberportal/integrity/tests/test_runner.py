@@ -206,7 +206,7 @@ class TestRun:
         fake_stripe.subscriptions["sub_anna"]["status"] = "unpaid"
         run()
         fake_stripe.subscriptions["sub_anna"]["status"] = "active"
-        fake_stripe.errors["Subscription.list"] = stripe.error.APIError("down")
+        fake_stripe.errors["Subscription.list"] = stripe.APIError("down")
 
         result = run()
 
@@ -217,7 +217,7 @@ class TestRun:
     def test_a_restricted_key_without_webhook_access_still_completes(
         self, in_sync, fake_stripe
     ):
-        fake_stripe.errors["WebhookEndpoint.list"] = stripe.error.PermissionError(
+        fake_stripe.errors["WebhookEndpoint.list"] = stripe.PermissionError(
             "no permission"
         )
 
@@ -229,7 +229,7 @@ class TestRun:
         ]
 
     def test_a_failed_price_fetch_makes_the_run_incomplete(self, in_sync, fake_stripe):
-        fake_stripe.errors["Price.retrieve"] = stripe.error.APIError("down")
+        fake_stripe.errors["Price.retrieve"] = stripe.APIError("down")
 
         result = run()
 
@@ -387,7 +387,7 @@ class TestConfirmation:
     ):
         profile = member(subscription_status="cancelling")
         fake_stripe.add("sub_anna", "cus_anna", profile.membership_plan.stripe_id)
-        fake_stripe.errors["Subscription.retrieve"] = stripe.error.APIError("down")
+        fake_stripe.errors["Subscription.retrieve"] = stripe.APIError("down")
 
         result = run()
 
@@ -660,9 +660,7 @@ class TestEmails:
     ):
         run()
         outbox.clear()
-        fake_stripe.errors["Subscription.list"] = stripe.error.AuthenticationError(
-            "bad key"
-        )
+        fake_stripe.errors["Subscription.list"] = stripe.AuthenticationError("bad key")
 
         run()
         run()

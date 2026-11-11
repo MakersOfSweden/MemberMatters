@@ -125,7 +125,7 @@ class TestCommand:
     def test_a_failed_run_exits_with_an_error(self, billing_on, fake_stripe):
         import stripe
 
-        fake_stripe.errors["Subscription.list"] = stripe.error.APIError("down")
+        fake_stripe.errors["Subscription.list"] = stripe.APIError("down")
 
         with pytest.raises(CommandError, match="failed"):
             call_command("check_stripe_drift", "--no-email")

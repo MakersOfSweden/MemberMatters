@@ -72,7 +72,7 @@ def stripe_subscription(
 
 
 def _missing(kind, object_id):
-    return stripe.error.InvalidRequestError(
+    return stripe.InvalidRequestError(
         f"No such {kind}: '{object_id}'", "id", code="resource_missing"
     )
 

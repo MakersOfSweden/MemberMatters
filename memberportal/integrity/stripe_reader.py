@@ -75,7 +75,7 @@ class StripeReader:
             self.requests += 1
             try:
                 return method(*args, **kwargs)
-            except (stripe.error.RateLimitError, stripe.error.APIConnectionError):
+            except (stripe.RateLimitError, stripe.APIConnectionError):
                 if attempt >= self.max_retries:
                     raise
                 self.sleep(2**attempt + self.jitter() / 2)
