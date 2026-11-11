@@ -29,7 +29,7 @@ export default {
     devices: 'Enheter',
     kiosks: 'Kiosks',
     pendingInvoices: 'Väntande fakturor',
-    billingIntegrity: 'Faktureringskontroll',
+    billingIntegrity: 'Betalningskontroll',
     signupPreview: 'Signup Preview',
     manageDashboard: 'Dashboard Cards',
 
