@@ -39,9 +39,11 @@ UNDELIVERED_EVENTS_WINDOW = timedelta(days=7)
 
 
 def _id(value):
-    if isinstance(value, dict):
-        return value.get("id")
-    return value or None
+    # Tested for a string rather than a dict, so an expanded object that isn't
+    # a dict fails loudly instead of being taken as the id.
+    if value is None or isinstance(value, str):
+        return value or None
+    return value.get("id")
 
 
 def _when(value):
@@ -56,7 +58,7 @@ def parse_subscription(data):
 
     latest_invoice = None
     invoice = data.get("latest_invoice")
-    if isinstance(invoice, dict):
+    if invoice is not None and not isinstance(invoice, str):
         transitions = invoice.get("status_transitions") or {}
         latest_invoice = StripeInvoice(
             id=invoice.get("id"),
