@@ -48,6 +48,7 @@ urlpatterns = [
     path("", include("api_member_bucks.urls")),
     path("", include("api_billing.urls")),
     path("", include("api_admin_tools.urls")),
+    path("", include("integrity.urls")),
     path("api/", include("django_prometheus.urls")),
     path("admin/", admin.site.urls),
 ]

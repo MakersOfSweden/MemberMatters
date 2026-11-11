@@ -169,6 +169,20 @@ CONSTANCE_CONFIG = {
         "Use this for additional payment instructions, bank details, or other information. "
         "Leave empty to hide.",
     ),
+    "BILLING_AUDIT_ENABLED": (
+        True,
+        "Run the nightly billing check, which compares every membership "
+        "subscription with Stripe and emails EMAIL_ADMIN about any drift. It "
+        "only reports: it never changes a member or anything in Stripe. Runs "
+        "only when ENABLE_STRIPE_MEMBERSHIP_PAYMENTS is on and needs Celery, "
+        "or a cron job running manage.py check_stripe_drift.",
+    ),
+    "BILLING_AUDIT_MAX_RPS": (
+        5,
+        "The most Stripe requests per second the billing check may make. "
+        "Stripe allows 100 in live mode and 25 in test mode, shared with "
+        "everything else the site does.",
+    ),
     # ==== Membership Status Card ====
     "ENABLE_MEMBERSHIP_STATUS_CARD": (
         True,
@@ -638,6 +652,8 @@ CONSTANCE_CONFIG_FIELDSETS = OrderedDict(
                 "ENABLE_INVOICE_BILLING",
                 "INVOICE_DAYS_UNTIL_DUE",
                 "INVOICE_BILLING_NOTE",
+                "BILLING_AUDIT_ENABLED",
+                "BILLING_AUDIT_MAX_RPS",
             ),
         ),
         (

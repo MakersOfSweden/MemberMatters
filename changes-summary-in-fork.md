@@ -21,6 +21,21 @@
   `customer.subscription.updated` webhook event). Untracked-subscription and
   locked-member payments alert an admin; billing emails reworded.
 
+## Billing integrity check
+
+- A nightly check compares every membership subscription with Stripe and
+  records each disagreement as an issue: subscriptions ended or changed in
+  Stripe without a webhook, live subscriptions no member tracks, plan prices
+  that differ from Stripe, and a missing or incomplete webhook endpoint. It
+  only reports; it never changes a member or anything in Stripe.
+- **Billing Integrity** admin screen with acknowledge, run now and filters; a
+  member's issues also show on their Billing tab, with a re-check button.
+- `EMAIL_ADMIN` gets new critical issues, a first-run summary, failure and
+  recovery notices and a weekly digest. New settings `BILLING_AUDIT_ENABLED`
+  and `BILLING_AUDIT_MAX_RPS` (5 requests a second by default). Installs
+  without Celery can run `manage.py check_stripe_drift` from cron, and
+  Prometheus gauges report staleness and open issues.
+
 ## Membership signup & lifecycle rework
 
 - New derived `signupStage` field on `/api/profile/`; frontend screens

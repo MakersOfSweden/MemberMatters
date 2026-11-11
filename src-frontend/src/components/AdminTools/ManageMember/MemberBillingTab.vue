@@ -1,5 +1,45 @@
 <template>
   <div class="column flex content-start items-start q-gutter-y-lg">
+    <q-banner
+      v-if="integrityIssues.length"
+      :class="integrityBannerClass"
+      class="rounded-borders full-width"
+    >
+      <template v-slot:avatar>
+        <q-icon :name="icons.billingIntegrity" />
+      </template>
+      <div class="text-subtitle2">
+        {{ integrityIssues.length }} billing
+        {{ integrityIssues.length === 1 ? 'issue' : 'issues' }}: MemberMatters
+        and Stripe disagree
+      </div>
+      <ul class="q-my-xs q-pl-md">
+        <li v-for="issue in integrityIssues" :key="issue.id">
+          {{ issue.message }}
+          <span class="text-caption">
+            — MemberMatters says: {{ issue.mm || '—' }} · Stripe says:
+            {{ issue.stripe || '—' }}
+          </span>
+          <span v-if="issue.acknowledged" class="text-caption">
+            (acknowledged)
+          </span>
+        </li>
+      </ul>
+      <template v-slot:action>
+        <q-btn
+          flat
+          label="Re-check"
+          :loading="recheckingIntegrity"
+          @click="recheckIntegrity"
+        />
+        <q-btn
+          flat
+          label="All billing issues"
+          :to="{ name: 'billingIntegrity' }"
+        />
+      </template>
+    </q-banner>
+
     <div class="column q-gutter-y-sm full-width">
       <div class="text-h6">
         {{ $t('adminTools.subscriptionInfo') }}
@@ -432,7 +472,9 @@ import icons from '@icons';
 import { mapGetters } from 'vuex';
 import { MemberBillingInfo } from 'types/member';
 import { MemberSubscription } from 'types/subscriptions';
+import type { IntegrityIssue } from 'types/billingIntegrity';
 import { defineComponent } from 'vue';
+import { apiMessage, compareIssues } from '../../../utils/billingIntegrity';
 
 export default defineComponent({
   name: 'MemberBillingTab',
@@ -452,6 +494,8 @@ export default defineComponent({
       filter: '',
       loading: true,
       loadingSubscription: true,
+      integrityIssues: [] as IntegrityIssue[],
+      recheckingIntegrity: false,
       pagination: {
         sortBy: 'date',
         descending: true,
@@ -464,6 +508,12 @@ export default defineComponent({
     icons() {
       return icons;
     },
+    integrityBannerClass(): string {
+      const critical = this.integrityIssues.some(
+        (issue) => issue.severity === 'critical' && !issue.acknowledged
+      );
+      return critical ? 'bg-negative text-white' : 'bg-warning text-dark';
+    },
     paymentMethodLabel(): string {
       return this.subscription?.billingMethod === 'invoice'
         ? this.$t('paymentPlans.paymentMethodInvoice')
@@ -474,12 +524,14 @@ export default defineComponent({
     memberId() {
       this.getMemberBilling();
       this.getMemberSubscription();
+      this.getMemberIntegrity();
     },
   },
   mounted() {
     if (this.memberId) {
       this.getMemberBilling();
       this.getMemberSubscription();
+      this.getMemberIntegrity();
     } else {
       this.loading = false;
       this.loadingSubscription = false;
@@ -519,6 +571,50 @@ export default defineComponent({
         })
         .finally(() => {
           this.loadingSubscription = false;
+        });
+    },
+    integrityUrl(): string {
+      return `/api/admin/members/${this.memberId}/billing-integrity/`;
+    },
+    showIntegrity(data: { enabled: boolean; issues: IntegrityIssue[] }) {
+      this.integrityIssues = data.enabled
+        ? [...data.issues].sort(compareIssues)
+        : [];
+    },
+    getMemberIntegrity() {
+      // The banner is a hint: if the check can't be read, the tab works
+      // without it.
+      this.$axios
+        .get(this.integrityUrl())
+        .then((res) => this.showIntegrity(res.data))
+        .catch(() => {
+          this.integrityIssues = [];
+        });
+    },
+    recheckIntegrity() {
+      this.recheckingIntegrity = true;
+      this.$axios
+        .post(this.integrityUrl())
+        .then((res) => {
+          this.showIntegrity(res.data);
+          this.$q.notify({
+            type: 'positive',
+            message: this.integrityIssues.length
+              ? 'Re-checked against Stripe.'
+              : 'Re-checked: MemberMatters and Stripe agree about this member.',
+          });
+        })
+        .catch((error) => {
+          this.$q.notify({
+            type: 'negative',
+            message: apiMessage(
+              error.response?.data?.message,
+              "Couldn't re-check this member."
+            ),
+          });
+        })
+        .finally(() => {
+          this.recheckingIntegrity = false;
         });
     },
   },

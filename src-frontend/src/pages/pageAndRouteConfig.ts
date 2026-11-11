@@ -136,6 +136,14 @@ const PageAndRouteConfig: PageAndRouteConfigType[] = [
         component: () => import('pages/AdminTools/PendingInvoices.vue'),
       },
       {
+        icon: icons.billingIntegrity,
+        to: '/manage/billing-integrity',
+        name: 'billingIntegrity',
+        loggedIn: true,
+        admin: true,
+        component: () => import('pages/AdminTools/BillingIntegrity.vue'),
+      },
+      {
         icon: icons.email,
         to: '/manage/signup-preview',
         name: 'signupPreview',
