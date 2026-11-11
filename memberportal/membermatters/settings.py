@@ -362,6 +362,10 @@ LOGGING = {
             "propagate": False,
         },
         "daphne": {"handlers": ["console", "file"], "level": "WARNING"},
+        # Named only so disable_existing_loggers leaves Celery's own loggers on:
+        # a worker that fails to start reports why through them, and otherwise
+        # exits without a word. The worker gives them its handler and level.
+        "celery": {},
     },
 }
 
