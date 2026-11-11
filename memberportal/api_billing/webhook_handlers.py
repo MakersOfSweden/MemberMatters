@@ -544,7 +544,7 @@ def handle_subscription_deleted(ctx):
             for invoice in open_invoices.auto_paging_iter():
                 try:
                     stripe.Invoice.void_invoice(invoice.id)
-                except stripe.error.StripeError as e:
+                except stripe.StripeError as e:
                     capture_exception(e)
                     user.log_event(
                         f"Failed to void open invoice "
@@ -577,7 +577,7 @@ def handle_subscription_deleted(ctx):
                         )
                     except Exception as email_err:
                         capture_exception(email_err)
-        except stripe.error.StripeError as e:
+        except stripe.StripeError as e:
             # Couldn't even list invoices — don't know which
             # are open, so ask admin to audit the cancelled
             # sub.

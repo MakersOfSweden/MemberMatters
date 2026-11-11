@@ -11,6 +11,7 @@ api.stripe.com, instead of hanging or, worse, silently passing.
 
 import pytest
 from constance.test import override_config
+from django.conf import settings
 
 from tests.factories import PaymentPlanFactory, ProfileFactory
 
@@ -196,11 +197,24 @@ def build_invoice(
     return data
 
 
-def build_event(event_type, obj, event_id="evt_test123", previous_attributes=None):
+def build_event(
+    event_type,
+    obj,
+    event_id="evt_test123",
+    previous_attributes=None,
+    api_version=None,
+):
+    """A webhook event, in the API version MemberMatters itself is pinned to
+    unless `api_version` says otherwise."""
     data = {"object": obj}
     if previous_attributes is not None:
         data["previous_attributes"] = previous_attributes
-    return {"id": event_id, "type": event_type, "data": data}
+    return {
+        "id": event_id,
+        "type": event_type,
+        "api_version": api_version or settings.STRIPE_API_VERSION,
+        "data": data,
+    }
 
 
 @pytest.fixture

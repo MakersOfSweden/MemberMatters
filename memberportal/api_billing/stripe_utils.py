@@ -27,6 +27,27 @@ def invoice_subscription_id(invoice_data):
     return invoice_data.get("subscription")
 
 
+def api_version_major(api_version):
+    """The major release a Stripe API version belongs to: "clover" for
+    "2025-10-29.clover". None for versions from before Stripe named its
+    major releases, such as "2024-04-10"."""
+    if not api_version or "." not in api_version:
+        return None
+    return api_version.rsplit(".", 1)[1]
+
+
+def subscription_period_end(subscription_data):
+    # Stripe API 2025-03-31.basil moved current_period_end from the
+    # subscription to each of its items. A membership subscription has a
+    # single item, so its period is the subscription's. Older payloads still
+    # carry it on the subscription itself.
+    items = (subscription_data.get("items") or {}).get("data") or []
+    for item in items:
+        if item.get("current_period_end") is not None:
+            return item["current_period_end"]
+    return subscription_data.get("current_period_end")
+
+
 def invoice_billing_reason(invoice_data):
     return invoice_data.get("billing_reason")
 

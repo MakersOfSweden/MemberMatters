@@ -2,6 +2,13 @@
 
 ## Billing / Stripe hardening & invoicing
 
+- **Stripe API versions**: requests use API version 2025-09-30.clover
+  (`STRIPE_API_VERSION`, stripe-python 14.4), and webhook events are only
+  accepted in the clover and dahlia releases (`STRIPE_WEBHOOK_API_MAJORS`).
+  Other versions are rejected with a 400, an error in the log and Sentry, and
+  an email to the admin. Existing installs must move their webhook endpoint to
+  a supported version first (docs/UPGRADING.md). New subscriptions are still
+  created in classic billing mode, which clover no longer defaults to.
 - New **"Pay by Invoice"** billing method (`ENABLE_INVOICE_BILLING`, due-days,
   notes) plus a **Pending Invoices** admin screen with mark-as-paid.
 - Extensive webhook hardening: idempotency, race/lock-contention fixes, scoping

@@ -77,6 +77,18 @@ If the new version doesn't work for you, go back to the image you kept in step 3
 
 ## Upgrading from 4.0
 
+### Move your Stripe webhook endpoint to a supported API version
+
+This release only accepts Stripe webhook events in Stripe's clover and dahlia releases: API versions ending in `.clover` or `.dahlia`. Events in any other version are rejected, so payments, renewals and cancellations from Stripe stop being processed, and the portal emails `EMAIL_ADMIN` about it. Its own requests to Stripe now use API version 2025-09-30.clover.
+
+If you take payments through Stripe, check the API version on your webhook endpoint's page in the Stripe dashboard. If it ends in `.clover` or `.dahlia`, there is nothing to do. Otherwise, do this on 4.0, before you upgrade. 4.0 already reads events in these versions, so no payment is missed while you switch:
+
+1. Create a new endpoint in version 2025-09-30.clover, as described in [Webhook endpoint API version](/docs/POST_INSTALL_STEPS.md#webhook-endpoint-api-version).
+2. Put the new endpoint's signing secret in `STRIPE_WEBHOOK_SECRET`, under Constance → Config in the Django admin.
+3. Delete the old endpoint in the Stripe dashboard. Until then Stripe sends every event to both, and the old endpoint's deliveries fail the signature check.
+
+An endpoint's version can't be changed, which is why this takes a new endpoint with a new signing secret.
+
 ### Check the key the portal signs sign-ins with (django-oidc-provider 0.9)
 
 If other services, such as Moodle or a wiki, let members sign in with their MemberMatters account, the portal signs those sign-ins with an RSA key stored under OpenID Connect Provider → RSA Keys in the Django admin. This release reads those keys with a stricter library. Two kinds of key used to work and now stop every such sign-in until they are removed: a key pasted in the OpenSSH format that `ssh-keygen` writes by default (it starts with `-----BEGIN OPENSSH PRIVATE KEY-----`), and a public key stored next to a working private one.

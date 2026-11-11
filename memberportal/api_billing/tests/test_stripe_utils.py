@@ -13,7 +13,29 @@ from api_billing.stripe_utils import (
     invoice_billing_reason,
     invoice_subscription_id,
     is_subscription_invoice,
+    subscription_period_end,
 )
+
+
+class TestSubscriptionPeriodEnd:
+    def test_it_reads_the_item_level_field_from_basil_on(self):
+        payload = {"items": {"data": [{"current_period_end": 1790000000}]}}
+
+        assert subscription_period_end(payload) == 1790000000
+
+    def test_it_reads_the_legacy_subscription_level_field(self):
+        assert subscription_period_end({"current_period_end": 1790000000}) == 1790000000
+
+    def test_the_item_wins_over_a_stale_subscription_level_field(self):
+        payload = {
+            "current_period_end": 1700000000,
+            "items": {"data": [{"current_period_end": 1790000000}]},
+        }
+
+        assert subscription_period_end(payload) == 1790000000
+
+    def test_no_period_end_anywhere_is_none(self):
+        assert subscription_period_end({"items": {"data": []}}) is None
 
 
 class TestInvoiceSubscriptionId:

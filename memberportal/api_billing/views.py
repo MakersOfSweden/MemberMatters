@@ -10,6 +10,7 @@ from profile.models import (
 )
 from api_admin_tools.models import *
 from .models import ProcessedStripeEvent
+from .stripe_utils import api_version_major, subscription_period_end
 from .webhook_handlers import (
     HANDLERS,
     EventScope,
@@ -37,7 +38,9 @@ from django.db import transaction, IntegrityError
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext
-from sentry_sdk import capture_exception
+from sentry_sdk import capture_exception, capture_message
+from django.conf import settings
+from django.core.cache import cache
 from membermatters.dates import from_unix
 
 logger = logging.getLogger("billing")
@@ -58,7 +61,7 @@ def ensure_stripe_customer(user):
                 if not customer.get("deleted"):
                     user.profile.stripe_customer_id = profile.stripe_customer_id
                     return True, None
-            except stripe.error.InvalidRequestError:
+            except stripe.InvalidRequestError:
                 profile.stripe_customer_id = None
                 profile.save(update_fields=["stripe_customer_id"])
 
@@ -78,7 +81,7 @@ def ensure_stripe_customer(user):
                 "stripe",
             )
             return True, None
-        except stripe.error.StripeError as e:
+        except stripe.StripeError as e:
             capture_exception(e)
             user.log_event("Error while creating stripe customer.", "stripe", str(e))
             return False, "billing.stripeError"
@@ -114,7 +117,7 @@ class MemberBucksAddCard(StripeAPIView):
             intent = stripe.SetupIntent.create(
                 customer=request.user.profile.stripe_customer_id
             )
-        except stripe.error.StripeError as e:
+        except stripe.StripeError as e:
             capture_exception(e)
             request.user.log_event(
                 "Stripe error while creating SetupIntent.", "stripe", str(e)
@@ -147,7 +150,7 @@ class MemberBucksAddCard(StripeAPIView):
                     profile.stripe_customer_id,
                     invoice_settings={"default_payment_method": payment_method_id},
                 )
-            except stripe.error.StripeError as e:
+            except stripe.StripeError as e:
                 capture_exception(e)
                 request.user.log_event(
                     "Stripe error while attaching payment method.",
@@ -211,10 +214,10 @@ class MemberBucksAddCard(StripeAPIView):
             if profile.stripe_payment_method_id:
                 try:
                     stripe.PaymentMethod.detach(profile.stripe_payment_method_id)
-                except stripe.error.InvalidRequestError:
+                except stripe.InvalidRequestError:
                     # Already detached / unknown — fall through to DB cleanup.
                     pass
-                except stripe.error.StripeError as e:
+                except stripe.StripeError as e:
                     capture_exception(e)
                     request.user.log_event(
                         "Stripe error while detaching payment method.",
@@ -309,6 +312,11 @@ class PaymentPlanSignup(StripeAPIView):
             subscription_params = {
                 "customer": request.user.profile.stripe_customer_id,
                 "items": [{"price": new_plan.stripe_id}],
+                # From 2025-09-30.clover Stripe creates subscriptions in
+                # flexible billing mode unless told otherwise. Subscriptions
+                # created before that are classic, so new ones are too, and
+                # every member is billed the same way.
+                "billing_mode": {"type": "classic"},
             }
             if billing_method == "invoice":
                 subscription_params["collection_method"] = "send_invoice"
@@ -340,7 +348,7 @@ class PaymentPlanSignup(StripeAPIView):
                 )
                 try:
                     stripe.Invoice.finalize_invoice(latest_invoice_id)
-                except stripe.error.StripeError as e:
+                except stripe.StripeError as e:
                     capture_exception(e)
                     request.user.log_event(
                         "Failed to finalize invoice immediately; "
@@ -351,7 +359,7 @@ class PaymentPlanSignup(StripeAPIView):
 
             return subscription, None
 
-        except stripe.error.InvalidRequestError as e:
+        except stripe.InvalidRequestError as e:
             capture_exception(e)
             error = (e.json_body or {}).get("error") or {}
             error_code = error.get("code", "")
@@ -815,7 +823,7 @@ class SubscriptionInfo(StripeAPIView):
                     request.user.profile.stripe_subscription_id,
                     expand=["latest_invoice"],
                 )
-            except stripe.error.StripeError as e:
+            except stripe.StripeError as e:
                 # Degrade gracefully rather than 500 when Stripe is slow/down.
                 capture_exception(e)
                 return Response({"success": False, "unavailable": True})
@@ -827,7 +835,7 @@ class SubscriptionInfo(StripeAPIView):
 
                 subscription = {
                     "billingCycleAnchor": from_unix(s.billing_cycle_anchor),
-                    "currentPeriodEnd": from_unix(s.current_period_end),
+                    "currentPeriodEnd": from_unix(subscription_period_end(s)),
                     "cancelAt": from_unix(s.cancel_at),
                     "cancelAtPeriodEnd": s.cancel_at_period_end,
                     "startDate": from_unix(s.start_date),
@@ -885,7 +893,7 @@ def _cancel_failed_subscription(user, subscription_id):
     Stripe failure, alerts admin to delete it manually."""
     try:
         stripe.Subscription.delete(subscription_id, invoice_now=False, prorate=False)
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         capture_exception(e)
         user.log_event(
             f"Failed to cancel orphaned subscription {subscription_id}.",
@@ -1076,7 +1084,7 @@ class PaymentPlanResume(StripeAPIView):
                     locked_profile.stripe_subscription_id,
                     cancel_at_period_end=False,
                 )
-            except stripe.error.StripeError as e:
+            except stripe.StripeError as e:
                 capture_exception(e)
                 request.user.log_event(
                     "Stripe error while resuming cancelling subscription.",
@@ -1237,7 +1245,7 @@ class PaymentPlanCancel(StripeAPIView):
                         for invoice in open_invoices.auto_paging_iter():
                             try:
                                 stripe.Invoice.void_invoice(invoice.id)
-                            except stripe.error.StripeError as e:
+                            except stripe.StripeError as e:
                                 capture_exception(e)
                                 user.log_event(
                                     f"Failed to void open invoice "
@@ -1248,7 +1256,7 @@ class PaymentPlanCancel(StripeAPIView):
                         stripe.Subscription.delete(
                             subscription_id, invoice_now=False, prorate=False
                         )
-                    except stripe.error.StripeError as e:
+                    except stripe.StripeError as e:
                         capture_exception(e)
                         user.log_event(
                             f"Failed to delete pending subscription "
@@ -1322,7 +1330,7 @@ class PaymentPlanCancel(StripeAPIView):
                     locked_profile.stripe_subscription_id,
                     cancel_at_period_end=True,
                 )
-            except stripe.error.StripeError as e:
+            except stripe.StripeError as e:
                 capture_exception(e)
                 request.user.log_event(
                     "Stripe error while scheduling cancel-at-period-end.",
@@ -1391,6 +1399,63 @@ class PaymentPlanCancel(StripeAPIView):
         return Response({"success": False})
 
 
+# How long one admin alert covers a rejected API version. The cache is per
+# process, so a site running several workers can get one alert from each.
+API_VERSION_ALERT_SECONDS = 24 * 60 * 60
+
+
+def _reject_unsupported_api_version(event):
+    """A 400 response for an event in an API version MemberMatters doesn't
+    accept, or None to carry on.
+
+    Rejected rather than acknowledged, so the failure shows on the endpoint
+    in Stripe's dashboard and Stripe warns the account owner, instead of the
+    event disappearing as if it had been handled. Stripe also retries it for
+    up to three days, in case MemberMatters is updated to accept the version.
+    """
+    version = event.get("api_version")
+    if api_version_major(version) in settings.STRIPE_WEBHOOK_API_MAJORS:
+        return None
+
+    accepted = " and ".join(settings.STRIPE_WEBHOOK_API_MAJORS)
+    message = (
+        f"Rejected Stripe webhook {event['id']} ({event['type']}): it is in "
+        f"API version {version}, but MemberMatters only accepts the {accepted} "
+        "releases."
+    )
+    logger.error(message)
+    capture_message(message, level="error")
+
+    if cache.add(
+        f"stripe-webhook-api-version-alert:{version}", True, API_VERSION_ALERT_SECONDS
+    ):
+        subject = f"Action Required: Stripe webhooks rejected (API version {version})"
+        try:
+            send_email_to_admin(
+                subject=subject,
+                template_vars={
+                    "title": subject,
+                    "message": (
+                        f"Stripe sent a webhook in API version {version}, "
+                        "which MemberMatters doesn't accept. Until the webhook "
+                        "endpoint in Stripe is changed, payments, renewals and "
+                        "cancellations are not processed. MemberMatters accepts "
+                        f"the {accepted} releases. An endpoint's version can't "
+                        "be changed, so create a new endpoint in one of those "
+                        "versions, put its signing secret in "
+                        "STRIPE_WEBHOOK_SECRET and delete the old endpoint. "
+                        "Events from before the new endpoint existed aren't "
+                        "sent to it, so check the failed ones in the Stripe "
+                        "dashboard and update those members by hand."
+                    ),
+                },
+            )
+        except Exception as e:
+            capture_exception(e)
+
+    return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class StripeWebhook(StripeAPIView):
     """
     post: processes a Stripe webhook event.
@@ -1436,6 +1501,12 @@ class StripeWebhook(StripeAPIView):
         handler = HANDLERS.get(event_type)
         if handler is None:
             return Response()
+
+        # Only after the signature check, so a forged request can't set off
+        # the alerts below.
+        rejection = _reject_unsupported_api_version(event)
+        if rejection is not None:
+            return rejection
 
         # Atomic wraps dedup row + DB writes; on raise, rollback releases
         # the event id for Stripe's retry. External I/O (emails, SMS,

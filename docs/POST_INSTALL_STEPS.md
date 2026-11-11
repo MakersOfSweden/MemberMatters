@@ -210,7 +210,7 @@ You cannot currently enable specific events, you either get "all or nothing".
 ### "Stripe Integration"
   * "STRIPE_PUBLISHABLE_KEY" - the publishable Stripe key.
   * "STRIPE_SECRET_KEY" - the secret Stripe key. You should create a restricted key - see info below on what permissions you need.
-  * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe. Point the Stripe webhook endpoint at `/api/billing/stripe-webhook/` and select these events: `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated` and `customer.subscription.deleted`.
+  * "STRIPE_WEBHOOK_SECRET" - the webhook secret to authenticate webhook requests are really from Stripe. Point the Stripe webhook endpoint at `/api/billing/stripe-webhook/` and select these events: `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated` and `customer.subscription.deleted`. The endpoint must use a supported API version, see [Webhook endpoint API version](#webhook-endpoint-api-version).
   * "ENABLE_STRIPE_MEMBERSHIP_PAYMENTS" - enable the "Membership Plan" menu page on the front end so members can sign up with the Stripe billing integration. NOTE: make sure you configure these first from the "Admin Tools" > "Membership Plans" page.
   * "ENABLE_NEW_SUBSCRIPTIONS" - allow members without an existing subscription to start a new one. When `False`, `POST /api/billing/signup/<plan>/` returns 503 and the membership-plan page shows a "new subscriptions closed" banner. **Renewals (Stripe `invoice.paid` webhook), pending invoices being paid, and `PaymentPlanResume` for cancelling members are NOT affected** — existing members keep working normally. Use this for capacity freezes / scheduled outages without breaking renewals. Defaults to `True`.
   * "STRIPE_MEMBERBUCKS_TOPUP_OPTIONS" - the options a member can see when on the MemberBucks top up page (in cents).
@@ -229,6 +229,27 @@ The following permissions are needed for all Member Matters payment features to 
 * PaymentMethods - Write
 * Payment Intents - Write
 * Invoices - Write (required for "Pay by Invoice" billing)
+
+#### Webhook endpoint API version
+
+Stripe sends webhook events in the API version set on the webhook endpoint when it was created, and it can't be changed afterwards. MemberMatters only accepts events from Stripe's **clover** and **dahlia** releases, the versions ending in `.clover` (from 2025-09-30) or `.dahlia` (from 2026-03-25). It rejects events in any other version: Stripe shows the delivery as failed, the event is not processed, and MemberMatters logs an error and emails `EMAIL_ADMIN` about it, at most once a day per version.
+
+The endpoint's page in the Stripe dashboard shows its API version. To create an endpoint in a version of your choice, use Stripe's API with a secret key that may create webhook endpoints, such as your account's standard secret key:
+
+```bash
+curl https://api.stripe.com/v1/webhook_endpoints \
+  -u "sk_live_...:" \
+  -d url="https://portal.example.org/api/billing/stripe-webhook/" \
+  -d "enabled_events[]=invoice.paid" \
+  -d "enabled_events[]=invoice.payment_failed" \
+  -d "enabled_events[]=customer.subscription.updated" \
+  -d "enabled_events[]=customer.subscription.deleted" \
+  -d api_version=2025-09-30.clover
+```
+
+Use your own address in `url`. The response includes the endpoint's signing secret (`"secret": "whsec_..."`), which Stripe only shows this once: put it in `STRIPE_WEBHOOK_SECRET`.
+
+MemberMatters sends its own requests to Stripe in API version `STRIPE_API_VERSION`, set in `settings.py`, whatever version the endpoint or your Stripe account uses.
 
 #### Pay by Invoice setup
 

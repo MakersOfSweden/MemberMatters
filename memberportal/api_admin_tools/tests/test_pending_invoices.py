@@ -211,7 +211,7 @@ class TestPendingInvoices:
         self, admin_client, stripe_invoices
     ):
         invoice_member(state="active", subscription_status="active")
-        stripe_invoices.list_error = stripe.error.APIConnectionError("down")
+        stripe_invoices.list_error = stripe.APIConnectionError("down")
 
         response = admin_client.get(reverse("PendingInvoices"))
 

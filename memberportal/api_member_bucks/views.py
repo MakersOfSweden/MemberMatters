@@ -92,7 +92,7 @@ class MemberBucksAddFunds(StripeAPIView):
                 off_session=True,
                 confirm=True,
             )
-        except stripe.error.CardError as e:
+        except stripe.CardError as e:
             err = e.error
             # Error code will be authentication_required if authentication is needed
             if err.code == "authentication_required":
