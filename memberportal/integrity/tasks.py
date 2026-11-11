@@ -16,16 +16,18 @@ logger = logging.getLogger("celery:integrity")
 @app.on_after_finalize.connect
 def setup_periodic_tasks(sender, **kwargs):
     site_time = site_time_zone()
+    # expire_seconds rather than Celery's expires: django-celery-beat's
+    # DatabaseScheduler silently drops expires.
     sender.add_periodic_task(
         TzAwareCrontab(**DAILY_CHECK, tz=site_time),
         run_integrity_checks.s(),
-        expires=3600,
+        expire_seconds=3600,
         name="integrity_daily_checks",
     )
     sender.add_periodic_task(
         TzAwareCrontab(**WEEKLY_DIGEST, tz=site_time),
         send_integrity_digest.s(),
-        expires=3600,
+        expire_seconds=3600,
         name="integrity_weekly_digest",
     )
 

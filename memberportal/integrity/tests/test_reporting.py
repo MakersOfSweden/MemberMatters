@@ -7,11 +7,14 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.core.management import CommandError, call_command
 from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
+from django_celery_beat.schedulers import DatabaseScheduler, ModelEntry
 from prometheus_client import CollectorRegistry
 
 from integrity import emails, schedule, store, tasks
 from integrity.metrics import LAST_COMPLETE, OPEN_ISSUES, IntegrityCollector
 from integrity.models import IntegrityIssue, IntegrityRun, Severity, Source
+from membermatters.celeryapp import app
 from tests.factories import PaymentPlanFactory, ProfileFactory
 
 from .conftest import admin_mail
@@ -143,6 +146,16 @@ class TestTasks:
         assert daily.tz == ZoneInfo(settings.TIME_ZONE)
         weekly = scheduled["integrity_weekly_digest"]
         assert weekly.day_of_week == {1}
+
+    def test_a_run_or_digest_not_started_within_an_hour_is_dropped(self):
+        # Through the scheduler beat runs with, which keeps only some of the
+        # options a periodic task is registered with.
+        tasks.setup_periodic_tasks(app)
+        DatabaseScheduler(app=app)
+
+        for name in ("integrity_daily_checks", "integrity_weekly_digest"):
+            entry = ModelEntry(PeriodicTask.objects.get(name=name), app=app)
+            assert entry.options["expires"] == 3600
 
     def test_does_nothing_while_the_check_is_off(self, db, fake_stripe):
         tasks.run_integrity_checks()
